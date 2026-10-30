@@ -10,15 +10,14 @@ body {
     border: 1px solid #ccc;
 }
 
-#section1 {
-    background-color: #b3d9ff;
-    border-radius: 15px;
+#header {
+    background-color: #54585c;
 }
 
 #section2 {
-    background-color: #ffe6e6;
+    background-color: #54585c;
 }
 
 #section3 {
-    background-color: #e6ffe6;
+    background-color: #54585c
 }
