@@ -62,6 +62,12 @@ document.getElementById("section2").addEventListener('click', (event) => {
     document.getElementById("clickCount").innerHTML = clickCount;
 });
 
+document.getElementById("resetClickCount").addEventListener('click', (event) => {
+    event.stopPropagation();
+    clickCount = 0;
+    localStorage.setItem('clickCount', '0');
+    document.getElementById("clickCount").textContent = '0';
+});
 
 
 document.getElementById("section3").addEventListener('mouseenter', (event) => {
