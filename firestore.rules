@@ -1,0 +1,35 @@
+// Prototype rules for the two public aggregate counters used by this site.
+// Collection: siteStats
+// Documents: clicks and visits
+// Fields: count (required number, non-negative integer)
+// These documents contain no personal data.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function validCounterId(counterId) {
+      return counterId == 'clicks' || counterId == 'visits';
+    }
+
+    function validCount(value) {
+      return value is int && value >= 0 && value <= 1000000000000;
+    }
+
+    match /siteStats/{counterId} {
+      allow read: if validCounterId(counterId);
+      allow create: if validCounterId(counterId)
+        && request.resource.data.keys().hasOnly(['count'])
+        && validCount(request.resource.data.count)
+        && request.resource.data.count == 1;
+      allow update: if validCounterId(counterId)
+        && request.resource.data.keys().hasOnly(['count'])
+        && validCount(resource.data.count)
+        && validCount(request.resource.data.count)
+        && request.resource.data.count == resource.data.count + 1;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -9,27 +9,28 @@
 </head>
 
 <body>
-    <section id="header" class="page-section">
+    <section id="header" class="page-section" data-analytics-id="headerClick" data-analytics-section="header">
         <h1>Welcome to Demir's Website</h1>
         <p>Hello! I'm Demir and this is my website.</p>
     </section>
 
-    <section id="section2" class="page-section">
+    <section id="section2" class="page-section" data-analytics-id="counterIncrement" data-analytics-section="clickCounter">
         <h1>Click Me!</h1>
         <p>Count: <span id="clickCount">-</span></p>
-        <button type="button" id="resetClickCount">Reset Click Count</button>
+        <button type="button" id="resetClickCount" data-analytics-id="counterReset">Reset Click Count</button>
     </section>
 
-    <section id="section3" class="page-section">
+    <section id="section3" class="page-section" data-analytics-id="gameStart" data-analytics-section="game">
         <h1>START GAME</h1>
         <p>Starts the game</p>
     </section>
 
-    <section id="counter" class="page-section">
+    <section id="counter" class="page-section" data-analytics-section="visitCounter">
         <h1>Counter</h1>
         <p>Count: <span id="count">0</span></p>
 </body>
 
-<script defer src="scripts/main.js"></script>
+<script type="module" src="scripts/analytics.js"></script>
+<script type="module" src="scripts/main.js"></script>
 
 </html>

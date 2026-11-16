@@ -5,6 +5,39 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/events",
+        "function": {
+          "functionId": "collectAnalytics",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/analytics",
+        "function": {
+          "functionId": "readAnalytics",
+          "region": "us-central1"
+        }
+      }
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "ignore": ["node_modules", "*.test.js", "*.log"]
+  },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 9099 },
+    "functions": { "host": "127.0.0.1", "port": 5001 },
+    "firestore": { "host": "127.0.0.1", "port": 8080 },
+    "hosting": { "host": "127.0.0.1", "port": 5050 },
+    "ui": { "enabled": true, "host": "127.0.0.1", "port": 4000 },
+    "singleProjectMode": true
   }
 }

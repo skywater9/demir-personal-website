@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Website analytics</title>
+    <link rel="stylesheet" href="analytics.css">
+</head>
+<body>
+    <header class="toolbar">
+        <div><h1>Website analytics</h1><span id="environmentLabel" class="muted">Private dashboard</span></div>
+        <div class="account"><span id="accountLabel"></span><button id="signOutButton" hidden>Sign out</button></div>
+    </header>
+    <main>
+        <p id="status" role="status" aria-live="polite">Loading sign-in…</p>
+        <p id="error" role="alert" hidden></p>
+        <section id="signInPanel" class="panel" aria-labelledby="signInTitle" hidden>
+            <h2 id="signInTitle">Owner sign-in</h2>
+            <p>Sign in to view website sessions and interactions.</p>
+            <button id="googleSignInButton" hidden>Sign in with Google</button>
+            <form id="localSignInForm" hidden>
+                <p class="muted">Local verification account. Use the test credentials from the README.</p>
+                <label for="localEmail">Email</label>
+                <input id="localEmail" type="email" value="owner@example.test" autocomplete="username" required>
+                <label for="localPassword">Password</label>
+                <input id="localPassword" type="password" autocomplete="current-password" required>
+                <button id="localSignInButton" type="submit">Sign in locally</button>
+            </form>
+        </section>
+        <div id="dashboard" class="workspace" hidden>
+            <section class="panel sessions" aria-labelledby="sessionsTitle">
+                <div class="panel-toolbar"><h2 id="sessionsTitle">Sessions</h2><button id="refreshButton">Refresh</button></div>
+                <p class="muted">Newest first. Observed duration ends at the last recorded event.</p>
+                <div class="table-scroll">
+                    <table>
+                        <caption class="visually-hidden">Recorded website sessions</caption>
+                        <thead><tr><th scope="col">Session / started</th><th scope="col">Observed</th><th scope="col">Visible</th><th scope="col">Engaged</th><th scope="col">Events</th></tr></thead>
+                        <tbody id="sessionRows"></tbody>
+                    </table>
+                </div>
+                <p id="sessionCount" class="muted"></p>
+                <button id="moreSessionsButton" hidden>Load more sessions</button>
+            </section>
+            <section class="panel details" aria-labelledby="detailsTitle">
+                <h2 id="detailsTitle">Session detail</h2>
+                <p id="selectionPrompt" class="muted">Select a session to inspect its action timeline.</p>
+                <div id="sessionDetail" hidden>
+                    <p id="selectedSessionId" class="session-id"></p>
+                    <dl id="sessionMetrics" class="metrics"></dl>
+                    <h3>Section visibility</h3>
+                    <ul id="sectionDurations" class="section-durations"></ul>
+                    <h3>Action timeline</h3>
+                    <label class="checkbox"><input id="includeSystemEvents" type="checkbox"> Include raw clicks and system events</label>
+                    <p id="timelineCount" class="muted"></p>
+                    <div class="table-scroll">
+                        <table>
+                            <caption class="visually-hidden">Actions within the selected session</caption>
+                            <thead><tr><th scope="col">Elapsed</th><th scope="col">Action</th><th scope="col">Details</th></tr></thead>
+                            <tbody id="timelineRows"></tbody>
+                        </table>
+                    </div>
+                    <button id="moreTimelineButton" hidden>Load more events</button>
+                    <p class="muted">Events are ordered by recorded time. More events may arrive while a session is active.</p>
+                </div>
+            </section>
+        </div>
+        <section id="heatmapPanel" class="panel heatmap" aria-labelledby="heatmapTitle" hidden>
+            <h2 id="heatmapTitle">Homepage click heatmap</h2>
+            <form id="heatmapForm" class="heatmap-filters">
+                <div><label for="heatmapFrom">Upload date from (UTC)</label><input id="heatmapFrom" type="date" required></div>
+                <div><label for="heatmapTo">Upload date to (UTC)</label><input id="heatmapTo" type="date" required></div>
+                <div><label for="heatmapLayout">Layout version</label><input id="heatmapLayout" value="homepage-v1" pattern="homepage-v[1-9][0-9]{0,3}" required></div>
+                <button id="heatmapLoadButton" type="submit">Load heatmap</button>
+            </form>
+            <p id="heatmapStatus" class="muted" role="status" aria-live="polite"></p>
+            <button id="heatmapMoreButton" type="button" hidden>Load more batches</button>
+            <label for="heatmapViewport">Recorded viewport and page size</label>
+            <select id="heatmapViewport" disabled></select>
+            <p id="heatmapLegend" class="muted"></p>
+            <div id="heatmapPreview" class="heatmap-preview"></div>
+            <p id="heatmapPreviewNote" class="muted" role="status"></p>
+            <h3>Element click counts for the selected geometry</h3>
+            <div class="table-scroll">
+                <table class="heatmap-counts">
+                    <caption class="visually-hidden">Click counts for each tracked element</caption>
+                    <thead><tr><th scope="col">Element</th><th scope="col">Clicks</th></tr></thead>
+                    <tbody id="heatmapElementRows"></tbody>
+                </table>
+            </div>
+        </section>
+        <p class="muted footnote">Engaged time estimates recent activity while the page is visible. It does not measure boredom. Multiple sections can be visible at once.</p>
+    </main>
+    <script type="module" src="scripts/analyticsDashboard.js"></script>
+</body>
+</html>

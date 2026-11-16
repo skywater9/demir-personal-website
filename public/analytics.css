@@ -1,0 +1,81 @@
+:root {
+    color-scheme: dark;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    background: #141719;
+    color: #e5e9ec;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+h1 { margin: 0; font-size: 20px; font-weight: 600; }
+h2 { margin: 0; font-size: 16px; }
+h3 { margin: 20px 0 10px; font-size: 14px; }
+p { line-height: 1.5; }
+button, input, select { font: inherit; }
+button {
+    padding: 7px 10px;
+    border: 1px solid #65717b;
+    border-radius: 0;
+    background: #252d33;
+    color: #f2f5f7;
+    cursor: pointer;
+}
+button:hover { background: #35434d; }
+button:disabled { opacity: 0.5; cursor: wait; }
+:focus-visible { outline: 2px solid #8bceff; outline-offset: 3px; }
+input, select {
+    padding: 8px;
+    border: 1px solid #65717b;
+    border-radius: 0;
+    background: #141719;
+    color: #e5e9ec;
+}
+.toolbar, .panel-toolbar, .account { display: flex; align-items: center; gap: 16px; }
+.toolbar, .panel-toolbar { justify-content: space-between; }
+.toolbar { padding: 16px 24px; border-bottom: 1px solid #414b53; }
+.account { flex-wrap: wrap; }
+main { padding: 0 24px 24px; }
+.muted { color: #b1bcc4; font-size: 13px; }
+#error { padding: 10px; border: 1px solid #d07b7b; color: #ffc5c5; }
+.panel { padding: 16px; border: 1px solid #414b53; background: #1b2024; min-width: 0; }
+#signInPanel { max-width: 440px; }
+#localSignInForm { display: grid; gap: 10px; }
+.workspace { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(480px, 1.25fr); gap: 16px; align-items: start; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 8px; border-bottom: 1px solid #414b53; text-align: left; vertical-align: top; }
+th { color: #b1bcc4; font-weight: 500; white-space: nowrap; }
+td { font-variant-numeric: tabular-nums; }
+tbody tr[aria-current="true"] { background: #263a48; }
+.session-button { border: 0; padding: 0; color: #9dd5ff; background: transparent; text-decoration: underline; }
+.session-start { display: block; margin-top: 5px; color: #b1bcc4; font-size: 12px; white-space: nowrap; }
+.session-id { overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 12px; }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.metrics dt { color: #b1bcc4; font-size: 12px; }
+.metrics dd { margin: 4px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.section-durations { display: flex; gap: 8px 20px; flex-wrap: wrap; padding: 0; list-style: none; }
+.checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.checkbox input { accent-color: #9dd5ff; }
+#timelineRows td:last-child { overflow-wrap: anywhere; }
+#moreTimelineButton, #moreSessionsButton { margin-top: 12px; }
+.footnote { margin-top: 20px; max-width: 900px; }
+.heatmap { margin-top: 16px; }
+.heatmap-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.heatmap-filters label { display: block; margin-bottom: 6px; }
+.heatmap-filters input { max-width: 220px; }
+#heatmapViewport { display: block; max-width: 100%; margin-top: 8px; }
+#heatmapMoreButton { margin-bottom: 16px; }
+.heatmap-preview { overflow: auto; max-height: 75vh; background: #fff; }
+.heatmap-preview:empty { display: none; }
+.heatmap-preview iframe { display: block; border: 0; }
+.heatmap-counts { max-width: 600px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 1100px) {
+    .workspace { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+    .toolbar { align-items: flex-start; padding: 12px; flex-wrap: wrap; }
+    main { padding: 0 12px 12px; }
+    .panel { padding: 12px; }
+}
