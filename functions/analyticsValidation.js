@@ -84,6 +84,19 @@ function validateProperties(event) {
             requireChoice(properties.sectionId, sectionIds, true);
             requireChoice(properties.inputType, ['keyboard', 'pointer']);
             break;
+        case 'gameLifecycle':
+            requireKeys(properties, ['action', 'runId', 'routeIndex', 'deliveries', 'fuel', 'gameplaySeconds']);
+            requireChoice(properties.action, ['started', 'continued', 'left', 'suspended', 'landed',
+                'delivered', 'won', 'lost', 'abandoned']);
+            if (typeof properties.runId !== 'string' || !uuidPattern.test(properties.runId)
+                || !Number.isInteger(properties.routeIndex) || !Number.isInteger(properties.deliveries)) {
+                throw new Error('Invalid gameplay identifiers or counts.');
+            }
+            requireNumber(properties.routeIndex, 0, 9);
+            requireNumber(properties.deliveries, 0, 10);
+            requireNumber(properties.fuel, 0, 100);
+            requireNumber(properties.gameplaySeconds, 0, 31536000);
+            break;
         case 'sessionCheckpoint':
             requireKeys(properties, ['visibleMs', 'engagedMs']);
             requireNumber(properties.visibleMs, 0, maxSessionMs);
@@ -125,7 +138,7 @@ function validateBatch(batch, now = Date.now()) {
         requireKeys(event, ['eventName', 'sessionId', 'pagePath', 'layoutVersion',
             'recordedAt', 'elapsedMs', 'sequence', 'properties']);
         if (event.sessionId !== batch.session.sessionId || !['/', '/index.html'].includes(event.pagePath)
-            || !['homepage-v1', 'homepage-v2'].includes(event.layoutVersion) || !Number.isSafeInteger(event.sequence)
+            || !['homepage-v1', 'homepage-v2', 'homepage-v3'].includes(event.layoutVersion) || !Number.isSafeInteger(event.sequence)
             || event.sequence <= previousSequence || event.sequence > 1000000) {
             throw new Error('Invalid analytics event context.');
         }

@@ -3,8 +3,8 @@ import {
     getAuth, connectAuthEmulator, onAuthStateChanged, setPersistence, browserSessionPersistence,
     signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, signOut
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js';
-import { createAnalyticsHeatmap } from './analyticsHeatmap.js';
+import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js?v=20261116-spark';
+import { createAnalyticsHeatmap } from './analyticsHeatmap.js?v=20261116-spark';
 
 const app = initializeApp(useFirebaseEmulators
     ? { ...firebaseConfig, projectId: 'demo-website-analytics' } : firebaseConfig);
@@ -40,7 +40,7 @@ const sectionLabels = {
     header: 'Header', clickCounter: 'Click counter', game: 'Game', visitCounter: 'Visit counter',
     menu: 'Menu', cockpit: 'Cockpit', history: 'Run history', results: 'Results'
 };
-const meaningfulEvents = new Set(['pageView', 'pageRestore', 'interaction', 'sectionView', 'scrollMilestone']);
+const meaningfulEvents = new Set(['pageView', 'pageRestore', 'interaction', 'sectionView', 'scrollMilestone', 'gameLifecycle']);
 const heatmap = createAnalyticsHeatmap({ elements, readAnalytics, showError, clearError });
 
 elements.environmentLabel.textContent = useFirebaseEmulators ? 'Local verification' : 'Private dashboard';
@@ -123,7 +123,15 @@ async function readAnalytics(query) {
             signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)])
         });
         if (version !== authVersion) throw new DOMException('Account changed.', 'AbortError');
-        const result = await response.json();
+        if (response.status === 404) {
+            throw new Error('The analytics backend is not deployed (/api/analytics returned 404). Complete Firebase billing and Functions setup, then deploy the backend.');
+        }
+        let result;
+        try {
+            result = await response.json();
+        } catch {
+            throw new Error('The analytics API returned an unexpected response. Check that the Firebase Functions backend and Hosting API rewrite are deployed.');
+        }
         if (!response.ok) {
             if (response.status === 401) await signOut(auth);
             throw new Error(result.error || 'Analytics could not be loaded.');
@@ -204,6 +212,15 @@ function describeEvent(event) {
     const properties = event.properties;
     const section = sectionLabels[properties.sectionId] || properties.sectionId || '';
     switch (event.eventName) {
+        case 'gameLifecycle': {
+            const labels = {
+                started: 'Flight started', continued: 'Flight continued', left: 'Flight left for menu',
+                suspended: 'Flight suspended', landed: 'Landed and refueled', delivered: 'Payload delivered',
+                won: 'Journey won', lost: 'Flight lost', abandoned: 'Flight abandoned'
+            };
+            return [labels[properties.action] || properties.action,
+                `Run ${properties.runId} · stop ${properties.routeIndex + 1}/10 · deliveries ${properties.deliveries}/10 · fuel ${properties.fuel.toFixed(1)}% · gameplay ${formatDuration(properties.gameplaySeconds * 1000)}`];
+        }
         case 'interaction': return [actionLabels[properties.elementId] || properties.elementId, `${properties.inputType} · ${event.pagePath}`];
         case 'pageView': return ['Page opened', event.pagePath];
         case 'pageRestore': return ['Page restored', event.pagePath];
@@ -368,4 +385,14 @@ elements.refreshButton.addEventListener('click', () => loadSessions(true));
 elements.moreSessionsButton.addEventListener('click', () => loadSessions());
 elements.moreTimelineButton.addEventListener('click', loadTimeline);
 elements.includeSystemEvents.addEventListener('change', renderTimeline);
-onAuthStateChanged(auth, handleAuthState, showError);
+if (useFirebaseEmulators || document.body?.dataset?.customAnalytics !== 'disabled') {
+    elements.sparkOverview.hidden = true;
+    onAuthStateChanged(auth, handleAuthState, showError);
+} else {
+    clearDashboard();
+    elements.signInPanel.hidden = true;
+    elements.signOutButton.hidden = true;
+    elements.sparkOverview.hidden = false;
+    elements.environmentLabel.textContent = 'Spark plan overview';
+    elements.status.textContent = 'Custom session collection and click heatmap are inactive. Use Google Analytics for available production activity.';
+}

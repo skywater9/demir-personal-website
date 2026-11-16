@@ -1,4 +1,4 @@
-import { bodies, route, tuning } from './rocketPhysics.mjs';
+import { bodies, route, tuning } from './rocketPhysics.mjs?v=20261116-spark';
 
 export const saveKey = 'orbitalFreight.v1';
 const statuses = ['active', 'won', 'lost', 'abandoned'];

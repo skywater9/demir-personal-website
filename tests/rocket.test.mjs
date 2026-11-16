@@ -120,6 +120,19 @@ test('station hull, solar panels, and antenna cause excessive-speed collisions',
     }
 });
 
+test('station contact below 20 m/s bounces, while a faster hit fails', () => {
+    const station = stationFor(routeBody(0));
+    for (const speed of [10, 19.9, 20.1]) {
+        const run = createRun();
+        Object.assign(run, { x: station.x - 62.01, y: station.y, vx: speed, vy: 0, landedOn: null });
+        stepRun(run);
+        if (speed < 20) {
+            assert.equal(run.status, 'active');
+            assert.ok(run.vx < 0, 'The rocket must bounce away from the receiver.');
+        } else assert.equal(run.status, 'lost');
+    }
+});
+
 test('swept collisions catch fast station crossings and glancing planetary contacts', () => {
     const station = stationFor(routeBody(0));
     const crossing = createRun();

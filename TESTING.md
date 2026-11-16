@@ -96,3 +96,29 @@ Verified on November 15, 2026, with Node.js 26 and Java 21:
 - Static HTTP checks verified the homepage, linked assets, and JavaScript module
   MIME types. HTML tag nesting, JavaScript syntax, and Git whitespace checks passed.
 - No in-app browser connection was available; no visual browser pass is claimed.
+
+November 16 playtest changes: all 30 game tests passed after adding the 20 m/s
+station crash threshold, non-fatal station bounces, failure animation timing,
+clearer upright docking cues, and larger pulsing navigation indicators. Failure
+animation frames do not add gameplay time. Visual appearance still needs browser
+playtesting.
+
+The subsequent proximity-checklist change passed 31 game tests and 27 analytics
+tests (2 emulator-only tests skipped). The checklist test verifies automatic
+appearance within 200 m, live unmet/met requirements, continued flight, and closure
+after delivery. Analytics uses layout v3 and accepts historical v1/v2 batches.
+
+Cache-consistency follow-up: 32 game tests passed, including a combined app and
+real-renderer test for checklist proximity and multiple explosion frames before
+results. Game entry points, transitive game module imports, and the stylesheet
+share a version token to prevent mixing earlier cached modules with new UI code.
+This verifies the render calls, not actual browser pixels; a browser connection
+was still unavailable.
+
+Spark publication verification: 32 game tests and 36 analytics tests passed;
+2 backend emulator-only tests were skipped. The free production overview makes
+no custom backend requests. GA event tests verify allowed event names, bounded
+statistics, no identity fields, no local-development collection, and graceful
+failure when the SDK is blocked. The Hosting release excludes Function rewrites;
+production custom collection remains disabled. The deployed Firestore counter
+rules were verified as already matching the tracked rules.

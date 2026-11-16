@@ -2,7 +2,29 @@
 
 A buildless, pixel art rocket game with continuous 2D flight, changing planetary
 gravity, payload deliveries, and a limited fuel supply. The game is the homepage;
-the existing private analytics dashboard remains at `/analytics.html`.
+the available analytics overview is at `/analytics.html`.
+
+## Published Spark setup
+
+- Game: <https://demir-personal-website.web.app/>
+- Available analytics: <https://demir-personal-website.web.app/analytics.html>
+- Google Analytics property: <https://analytics.google.com/analytics/web/#/p561590091/realtime/overview>
+- The Firebase project stays on the no-cost Spark plan. No Cloud Functions or
+  other billing-required features are deployed. The production analytics page
+  shows the free overview and hides inactive custom session/heatmap controls.
+- Google Analytics records normal page analytics plus `game_started`,
+  `game_continued`, `game_left`, `game_suspended`, `game_landed`, `game_delivered`,
+  `game_won`, `game_lost`, and `game_abandoned`. Parameters include route index,
+  delivery count, fuel, and gameplay time; no run ID or email is sent. Localhost
+  is excluded from Google Analytics. Tracking blockers can prevent collection.
+- The Firestore visit counter and browser-local flight recorder remain available.
+  Previous local flights are not uploaded or backfilled.
+- `firebase.json` retains the backend/emulator configuration for later use.
+  Publish the free static setup with:
+
+```sh
+firebase deploy --only hosting --config firebase.spark.json --project demir-personal-website
+```
 
 ## Play locally
 
@@ -12,6 +34,10 @@ python3 -m http.server 8000 --directory public
 
 Open `http://localhost:8000/`, read the pre-flight briefing, and choose **Start
 Flight**. No build or dependency installation is needed for the game.
+
+Reload after source changes. The stylesheet and game modules use matching cache
+version tokens so a new page does not combine old physics or renderer code with
+updated UI. Update those tokens together when releasing further game changes.
 
 | Control | Action |
 | --- | --- |
@@ -33,7 +59,18 @@ impact speed or an empty tank ends the run; Retry starts over on Earth.
 
 Use the amber target indicator and navigation map. Land within ±12° upright and
 at ≤ 8 m/s. Dock within 32 m of the bay marker, at ≤ 5 m/s and ±12° upright. Your
-bay is on the rocket's right side. After delivery, use left RCS (J) to detach and
+rocket's nose must point up (0°) for docking. Station impacts below 20 m/s bounce;
+impacts at 20 m/s or faster end the run. Planet impacts retain the 8 m/s landing
+limit. Failed runs show a brief pixel explosion before the recorded result.
+The enlarged destination indicator pulses once per second, or stays steady with
+the browser's reduced-motion preference.
+
+A compact docking checklist appears within 200 m of a bay. It shows live distance, speed,
+and nose-up rotation requirements with checkmarks. Keep flying while it is open;
+when all three checks pass, press E or Attach & Deliver. A small camera offset leaves room
+for the checklist, which closes after delivery or when you leave the approach.
+
+Your bay is on the rocket's right side. After delivery, use left RCS (J) to detach and
 back away from the receiver before accelerating. Gas giants have floating pads and reduced atmospheric visibility;
 Jupiter also has a small lateral wind. Distances and planet sizes are arcade scale.
 
@@ -98,7 +135,7 @@ To serve locally without installing dependencies, run `python3 -m http.server 80
 - Remove the query parameter and reload to disable the custom tracker.
 
 Click events include document coordinates, viewport/page dimensions, section/control
-identifiers, and relative positions for the heatmap. `homepage-v2` identifies
+identifiers, and relative positions for the heatmap. `homepage-v3` identifies
 the rocket game layout; `homepage-v1` identifies the previous homepage. Increment
 the version when layout changes make old click positions incompatible.
 Sections count as exposed when at least half of the section is visible. Section
@@ -108,8 +145,9 @@ Local debug sends no custom analytics to a backend. The session summary uses
 `sessionStorage`; detailed events stay in memory. Storage failures fall back to
 in-memory tracking. Google Analytics and the existing Firestore visit counter run
 independently through `siteAnalytics.js`; the game runs even if their CDN is blocked.
-Analytics records control interactions rather than gameplay outcomes. Actual
-game results and leave/return events are stored separately in the local flight recorder.
+When enabled locally, the custom tracker records interactions and bounded game
+lifecycle events. Production uses the independent free Google Analytics game
+events described above. Full game records remain in the local flight recorder.
 
 ## Analytics: step 2 private ingestion
 
@@ -295,7 +333,7 @@ changes to public Firestore access.
    spot, then press other flight controls and menu buttons. Wait 15 seconds for upload.
 2. Open `http://127.0.0.1:5050/analytics.html` and sign in as the local test owner.
 3. Scroll to Homepage click heatmap. Choose upload dates covering your test and
-   leave the layout version as `homepage-v2`. Select Load heatmap.
+   leave the layout version as `homepage-v3`. Select Load heatmap.
 4. If the status says Partial data, use Load more batches until all batches in the
    range have been scanned. Loaded counts remain explicitly partial until then.
 5. Choose the recorded viewport/page size matching the browser window used in step 1.
@@ -333,7 +371,7 @@ The preview must not create visits, increment counters, or upload visitor events
   It does not add scroll offsets again. Blue-to-red colors indicate fewer-to-more
   clicks relative to the highest-count cell in the selected group. Counts are raw
   clicks, not click rates normalized by section exposure.
-- Only `homepage-v2` has a current page preview. Historical `homepage-v1` and other layout versions can show
+- Only `homepage-v3` has a current page preview. Historical `homepage-v1` and other layout versions can show
   counts but do not borrow this preview. Update the tracker version and the
   supported preview whenever layout changes make old positions incompatible;
   old page snapshots are not archived by this implementation.
@@ -351,4 +389,5 @@ The preview must not create visits, increment counters, or upload visitor events
 Automated checks cover geometry partitioning, scroll-coordinate binning, sanitizer
 operations, date validation, pagination across empty batches, owner authorization,
 and clearing the heatmap on sign-out. Actual browser rendering and visual alignment
-remain part of manual verification. Production collection and deployment remain disabled.
+remain part of manual verification. Custom production collection and Functions
+deployment remain disabled on Spark; the game and analytics overview are published.

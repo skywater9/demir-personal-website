@@ -104,15 +104,27 @@ function makeStorage() {
 }
 
 // Build the live application against the homepage fixture with a renderer that cannot start background work.
-function makeApp(storage = makeStorage(), lockManager = { request(name, action) { return action(); } }) {
+function makeApp(storage = makeStorage(), lockManager = { request(name, action) { return action(); } }, realRenderer = false) {
     const { page, nodes, controls } = makePage();
     const browserWindow = {
         localStorage: storage, handlers: new Map(), addEventListener: page.addEventListener, fire: page.fire,
         navigator: { locks: lockManager }
     };
-    const renderer = { draw() {} };
+    let renderer = { draw() {} };
+    if (realRenderer) {
+        const context = new Proxy({}, {
+            // Exercise actual render paths while keeping this test independent of a browser installation.
+            get(target, name) { return name in target ? target[name] : () => {}; },
+            // Preserve normal canvas state assignments used by the production renderer.
+            set(target, name, value) { target[name] = value; return true; }
+        });
+        for (const id of ['flightCanvas', 'mapCanvas']) {
+            Object.assign(nodes.get(id), { width: 500, height: 300, clientWidth: 1000, clientHeight: 600, getContext() { return context; } });
+        }
+        renderer = new RocketRenderer(nodes.get('flightCanvas'), nodes.get('mapCanvas'));
+    }
     const app = new FlightApp({ page, browserWindow, renderer, autoStart: false });
-    return { app, page, nodes, controls, browserWindow, storage };
+    return { app, page, nodes, controls, browserWindow, storage, renderer };
 }
 
 // Advance animation timestamps at 60 Hz rather than bypassing the application's fixed-step loop.
@@ -204,6 +216,10 @@ test('fuel failure shows persisted results and retry starts a fresh Earth run', 
     app.run.fuel = 0.001;
     nodes.get('burnButton').fire('pointerdown');
     flyFor(app, 0.1);
+    assert.equal(app.mode, 'flight');
+    const failureTime = app.run.elapsed;
+    flyFor(app, 1, 1000);
+    assert.equal(app.run.elapsed, failureTime);
     assert.equal(app.mode, 'results');
     assert.equal(app.store.getActive(), null);
     assert.equal(app.store.getHistory()[0].status, 'lost');
@@ -231,6 +247,49 @@ test('last relay attachment shows the win screen and history safely exposes life
     assert.equal(nodes.get('historyRows').children.length, 1);
     const detail = nodes.get('historyRows').children[0].children[1];
     assert.ok(detail.children[1].children.some(item => item.textContent.includes('Journey completed')));
+});
+
+test('nearby docking dialog checks distance, speed, and upright alignment without pausing flight', () => {
+    const { app, nodes } = makeApp();
+    app.newRun();
+    assert.equal(nodes.get('dockDialog').hidden, true);
+    const bay = dockingPoint(routeBody(0));
+    Object.assign(app.run, { x: bay.x - 100, y: bay.y, vx: 12, vy: 0, angle: 0.5, landedOn: null });
+    app.updateHud();
+    assert.equal(nodes.get('dockDialog').hidden, false);
+    assert.equal(app.mode, 'flight');
+    assert.match(nodes.get('dockRangeCheck').textContent, /^○.*100 m/);
+    assert.match(nodes.get('dockSpeedCheck').textContent, /^○.*12.0 m\/s/);
+    assert.match(nodes.get('dockAngleCheck').textContent, /^○.*nose straight up/);
+    Object.assign(app.run, { x: bay.x - 10, vx: 2, angle: 0 });
+    app.updateHud();
+    for (const id of ['dockRangeCheck', 'dockSpeedCheck', 'dockAngleCheck']) assert.match(nodes.get(id).textContent, /^✓/);
+    assert.equal(nodes.get('dockButton').disabled, false);
+    app.attach();
+    assert.equal(nodes.get('dockDialog').hidden, true);
+});
+
+test('animation frames drive the proximity checklist and real explosion renderer before the loss screen', () => {
+    const { app, nodes, renderer } = makeApp(makeStorage(), undefined, true);
+    const explosionFrames = [];
+    const drawExplosion = renderer.drawExplosion.bind(renderer);
+    renderer.drawExplosion = (run, progress) => {
+        explosionFrames.push(progress);
+        drawExplosion(run, progress);
+    };
+    app.newRun();
+    const bay = dockingPoint(routeBody(0));
+    Object.assign(app.run, { x: bay.x - 100, y: bay.y, landedOn: null });
+    flyFor(app, 0.2);
+    assert.equal(nodes.get('dockDialog').hidden, false);
+    app.run.fuel = 0.001;
+    nodes.get('burnButton').fire('pointerdown');
+    flyFor(app, 0.5, 1000);
+    assert.equal(app.mode, 'flight');
+    assert.ok(explosionFrames.length > 10);
+    assert.ok(explosionFrames.at(-1) > explosionFrames[0]);
+    flyFor(app, 0.6, 1500);
+    assert.equal(app.mode, 'results');
 });
 
 test('dialogs contain Tab navigation and focused engine buttons support keyboard holds', () => {
@@ -284,6 +343,8 @@ test('asynchronous persistence completes transitions and never starts a flight w
     flyFor(app, 0.1);
     assert.equal(app.resultsPending, true);
     await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.mode, 'flight');
+    flyFor(app, 1, 1000);
     assert.equal(app.mode, 'results');
     assert.equal(app.store.getHistory()[0].status, 'lost');
 });
@@ -312,5 +373,6 @@ test('renderer exercises all planet and atmosphere paths with finite canvas coor
         renderer.draw(run, { burn: true, rcsX: -1, rcsY: 1 });
     }
     renderer.draw({ ...createRun(), x: 0, y: -4000 }, {}, true);
+    for (const progress of [0, 0.4, 0.9]) renderer.draw({ ...createRun(), status: 'lost' }, {}, false, 1 / 60, progress);
     assert.ok(drawCalls > 1000);
 });

@@ -1,4 +1,4 @@
-import { bodies, route, stationFor, stationGeometry, targetFor, nearestBody, tuning } from './rocketPhysics.mjs';
+import { bodies, route, stationFor, stationGeometry, targetFor, nearestBody, tuning } from './rocketPhysics.mjs?v=20261116-spark';
 
 // Paint low-resolution procedural sprites and a camera-following world without downloaded assets.
 export class RocketRenderer {
@@ -9,6 +9,8 @@ export class RocketRenderer {
         this.mapCanvas = mapCanvas;
         this.mapContext = mapCanvas.getContext('2d', { alpha: false });
         this.camera = { x: 0, y: -420, zoom: 0.8 };
+        this.visualTime = 0;
+        this.reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches || false;
         this.stars = Array.from({ length: 200 }, (_, index) => ({
             x: this.random(index * 3 + 1), y: this.random(index * 3 + 2),
             bright: this.random(index * 3 + 3) > 0.9
@@ -184,11 +186,14 @@ export class RocketRenderer {
         const width = this.canvas.width;
         const height = this.canvas.height;
         const visible = point.x >= 25 && point.x <= width - 25 && point.y >= 30 && point.y <= height - 25;
-        ctx.strokeStyle = '#dfae68'; ctx.lineWidth = 1;
+        const highlight = this.reducedMotion || Math.sin(this.visualTime * Math.PI * 2) >= 0;
+        const color = highlight ? '#ffe0a0' : '#b78142';
+        ctx.strokeStyle = color; ctx.lineWidth = 2;
         if (visible) {
-            const size = target.type === 'station' ? 11 : 15;
+            const size = target.type === 'station' ? 15 : 19;
             ctx.strokeRect(point.x - size, point.y - size, size * 2, size * 2);
-            ctx.fillStyle = '#dfae68'; ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+            ctx.fillStyle = color; ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
+            if (target.type === 'station') this.label('↑ DOCK UPRIGHT / 0°', point.x, point.y + size + 12, color, 'center');
         } else {
             const ship = this.screen(run.x, run.y);
             const dx = point.x - ship.x;
@@ -199,8 +204,23 @@ export class RocketRenderer {
             const x = Math.round(ship.x + dx * factor);
             const y = Math.round(ship.y + dy * factor);
             ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx));
-            ctx.fillStyle = '#dfae68'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.fill(); ctx.restore();
-            this.label(target.type === 'station' ? 'RELAY' : target.body.name.toUpperCase(), Math.max(30, Math.min(width - 30, x)), y - 10, '#dfae68', 'center');
+            ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-8, 8); ctx.fill(); ctx.restore();
+            this.label(target.type === 'station' ? 'RELAY ↑ UPRIGHT' : target.body.name.toUpperCase(), Math.max(45, Math.min(width - 45, x)), y - 15, color, 'center');
+        }
+    }
+
+    // Replace the failed rocket with a short expanding pixel burst before its result dialog appears.
+    drawExplosion(run, progress) {
+        const ctx = this.context;
+        const position = this.screen(run.x, run.y);
+        const spread = this.reducedMotion ? 8 : 5 + progress * 28;
+        const colors = ['#fff2b0', '#ffc36b', '#e77d43', '#a94c36', '#5d4a45'];
+        for (let index = 0; index < 28; index += 1) {
+            const angle = this.random(index + 400) * Math.PI * 2;
+            const radius = spread * (0.3 + this.random(index + 500) * 0.7);
+            const size = Math.max(1, Math.round((1 - progress) * (3 + index % 4)));
+            ctx.fillStyle = colors[Math.min(colors.length - 1, Math.floor(progress * 4) + index % 2)];
+            ctx.fillRect(Math.round(position.x + Math.cos(angle) * radius), Math.round(position.y + Math.sin(angle) * radius), size, size);
         }
     }
 
@@ -228,22 +248,30 @@ export class RocketRenderer {
     }
 
     // Follow the rocket at surface scale, pulling back during fast flight and interplanetary coasts.
-    draw(run, input = {}, menu = false, dt = 1 / 60) {
+    draw(run, input = {}, menu = false, dt = 1 / 60, failureProgress = null) {
+        this.visualTime += dt;
         this.resize();
         const near = nearestBody(run);
         const speed = Math.hypot(run.vx, run.vy);
         const zoom = near.altitude < 550 && speed < 70 ? 0.95 : 0.62;
         const smoothing = 1 - Math.exp(-dt * 4);
         const desiredX = run.x + (menu ? -220 : run.vx * 0.8 + 40);
-        const desiredY = run.y + (menu ? -80 : run.vy * 0.6 - 90);
-        this.camera.x += (desiredX - this.camera.x) * smoothing;
-        this.camera.y += (desiredY - this.camera.y) * smoothing;
-        this.camera.zoom += (zoom - this.camera.zoom) * smoothing;
+        const target = targetFor(run);
+        const dockingApproach = !menu && run.status === 'active' && run.phase === 'station' && !run.docked
+            && Math.hypot(run.x - target.x, run.y - target.y) <= tuning.dockingAssistDistance;
+        const desiredY = dockingApproach ? run.y + this.canvas.height * 0.12 / this.camera.zoom
+            : run.y + (menu ? -80 : run.vy * 0.6 - 90);
+        if (run.status !== 'lost' || menu) {
+            this.camera.x += (desiredX - this.camera.x) * smoothing;
+            this.camera.y += (desiredY - this.camera.y) * smoothing;
+            this.camera.zoom += (zoom - this.camera.zoom) * smoothing;
+        }
         this.drawSpace();
         for (const body of bodies) this.drawBody(body, run);
         for (const body of bodies) this.drawStation(body, run);
         if (!menu) this.drawGuidance(run);
-        this.drawRocket(run, input);
+        if (run.status !== 'lost') this.drawRocket(run, input);
+        else if (!menu && failureProgress !== null) this.drawExplosion(run, failureProgress);
         if (near.body.gas && near.altitude < 200) {
             const opacity = Math.max(0, Math.min(0.46, (200 - near.altitude) / 430));
             this.context.fillStyle = `rgba(117, 135, 146, ${opacity})`;

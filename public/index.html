@@ -6,10 +6,10 @@
     <meta name="theme-color" content="#101921">
     <meta name="description" content="Orbital Freight: a pixel art rocket flight game. Launch, dock, deliver, and cross the solar system on a limited fuel supply.">
     <title>Orbital Freight — Rocket flight game</title>
-    <link rel="stylesheet" href="style.css">
-    <script type="module" src="scripts/rocketApp.mjs"></script>
-    <script type="module" src="scripts/analytics.js"></script>
-    <script type="module" src="scripts/siteAnalytics.js"></script>
+    <link rel="stylesheet" href="style.css?v=20261116-spark">
+    <script type="module" src="scripts/rocketApp.mjs?v=20261116-spark"></script>
+    <script type="module" src="scripts/analytics.js?v=20261116-spark"></script>
+    <script type="module" src="scripts/siteAnalytics.js?v=20261116-spark"></script>
 </head>
 <body>
     <header class="topbar">
@@ -29,6 +29,16 @@
             <canvas id="mapCanvas" width="268" height="55" aria-label="Solar system navigation map. Highlighted destination is the current target."></canvas>
             <div class="navigation-caption"><span class="legend-dot"></span> TARGET <span class="legend-dot ship-dot"></span> SHIP <span class="muted">L = MOON</span></div></div>
             <div class="view-bottom"><span id="environmentLabel">EARTH / SURFACE OPERATIONS</span><span>WORLD DISTANCES NOT TO SCALE</span></div>
+            <section id="dockDialog" class="docking-dialog" role="dialog" aria-modal="false" aria-labelledby="dockDialogTitle" hidden>
+                <div class="docking-dialog-header"><h2 id="dockDialogTitle">Docking checklist</h2><span id="dockState">ALIGNING</span></div>
+                <p>Right-side bay → amber marker. Nose <strong>straight up ↑</strong>.</p>
+                <ul class="docking-requirements">
+                    <li id="dockRangeCheck">○ Move within 32 m of the bay marker</li>
+                    <li id="dockSpeedCheck">○ Slow down to 5 m/s or less</li>
+                    <li id="dockAngleCheck">○ Point the nose up: 0° ±12°</li>
+                </ul>
+                <button id="dockButton" type="button" class="dock-button" data-analytics-id="gameDock">ATTACH &amp; DELIVER <kbd>E</kbd></button>
+            </section>
             <p id="flightMessage" class="flight-message" role="status" aria-live="polite"></p>
         </section>
         <aside id="instrumentPanel" class="instruments" data-analytics-section="cockpit" aria-label="Rocket instruments">
@@ -49,7 +59,7 @@
             <div class="control-group propulsion-controls"><div class="panel-heading">03 / MAIN PROPULSION</div><div class="engine-controls"><button type="button" id="burnButton" class="burn-button hold-button" data-control="burn" data-analytics-id="gameBurn">▲<span>HOLD TO BURN</span><kbd>SPACE / ↑</kbd></button><div class="throttle-control"><label for="throttleSlider">THROTTLE <output id="throttleValue" for="throttleSlider">85%</output></label><input id="throttleSlider" type="range" min="0" max="100" step="1" value="85" data-analytics-id="gameThrottle"><div class="throttle-buttons"><button type="button" id="throttleDownButton" data-analytics-id="gameThrottleDown" aria-label="Decrease throttle">− <kbd>S</kbd></button><button type="button" id="throttleUpButton" data-analytics-id="gameThrottleUp" aria-label="Increase throttle">+ <kbd>W</kbd></button></div></div></div></div>
             <div class="control-group attitude-controls"><div class="panel-heading">04 / ATTITUDE</div><div class="rotation-buttons"><button type="button" class="hold-button" data-control="rotateLeft" data-analytics-id="gameRotateLeft" aria-label="Rotate counterclockwise">↶<kbd>A / ←</kbd></button><div class="attitude-display" aria-hidden="true"><span id="attitudeNeedle">↑</span><span>UPRIGHT 0°</span></div><button type="button" class="hold-button" data-control="rotateRight" data-analytics-id="gameRotateRight" aria-label="Rotate clockwise">↷<kbd>D / →</kbd></button></div></div>
             <div class="control-group translation-controls"><div class="panel-heading">05 / TRANSLATION <span class="muted">LOW FUEL USE</span></div><div class="rcs-buttons"><button type="button" class="hold-button rcs-up" data-control="rcsUp" data-analytics-id="gameRcsUp" aria-label="Thrust upward">↑ <kbd>I</kbd></button><button type="button" class="hold-button rcs-left" data-control="rcsLeft" data-analytics-id="gameRcsLeft" aria-label="Thrust left">← <kbd>J</kbd></button><span class="rcs-center" aria-hidden="true">✛</span><button type="button" class="hold-button rcs-right" data-control="rcsRight" data-analytics-id="gameRcsRight" aria-label="Thrust right">→ <kbd>L</kbd></button><button type="button" class="hold-button rcs-down" data-control="rcsDown" data-analytics-id="gameRcsDown" aria-label="Thrust downward">↓ <kbd>K</kbd></button></div></div>
-            <div class="control-group dock-panel"><div class="readout-label">PAYLOAD BAY <span id="dockState">OUT OF RANGE</span></div><div class="dock-checks"><span id="dockRangeCheck">DIST ≤ 32 m</span><span id="dockSpeedCheck">SPD ≤ 5 m/s</span><span id="dockAngleCheck">ROT ± 12°</span></div><button id="dockButton" type="button" class="dock-button" data-analytics-id="gameDock">ATTACH &amp; DELIVER <kbd>E</kbd></button></div>
+
         </section>
         <div id="menuOverlay" class="overlay menu-overlay" data-analytics-section="menu">
             <section id="mainMenu" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="menuTitle" tabindex="-1">
@@ -60,7 +70,7 @@
                 <p class="menu-description">Carry payloads from planetary landing pads to orbital relays. Cross the solar system, adapt to changing gravity, and keep fuel in the tank.</p>
                 <div class="menu-actions"><button id="continueButton" class="primary-button" type="button" data-analytics-id="gameContinue" hidden>CONTINUE FLIGHT <span>→</span></button><button id="startButton" class="primary-button" type="button" data-analytics-id="gameStart">START FLIGHT <span>→</span></button><button id="historyButton" class="secondary-button" type="button" data-analytics-id="gameHistory">FLIGHT RECORDS <span id="historyCount">00</span></button></div>
                 <p id="savedRunNote" class="saved-note">Start on Earth with a full tank and your first payload.</p>
-                <details class="manual"><summary>PRE-FLIGHT BRIEFING / CONTROLS</summary><div><p><kbd>SPACE / ↑</kbd> Hold main engine. <kbd>W / S</kbd> Adjust throttle.<br><kbd>A / D / ← / →</kbd> Rotate. <kbd>I J K L</kbd> Small world-direction thrusters.<br><kbd>E</kbd> Attach when bay checks are green. <kbd>ESC</kbd> Save and menu.</p><p>Land upright on the next pad at ≤ 8 m/s to receive fuel and payload. Near a relay, slow to ≤ 5 m/s and align within ±12°. Your bay is on the rocket’s right side. After delivering, use left RCS (J) to back away from the receiver before accelerating.</p><p>Refueling is limited to one grant per route stop. Empty fuel or a high-speed collision ends the run. Leaving the page suspends and saves your flight.</p></div></details>
+                <details class="manual"><summary>PRE-FLIGHT BRIEFING / CONTROLS</summary><div><p><kbd>SPACE / ↑</kbd> Hold main engine. <kbd>W / S</kbd> Adjust throttle.<br><kbd>A / D / ← / →</kbd> Rotate. <kbd>I J K L</kbd> Small world-direction thrusters.<br><kbd>E</kbd> Attach when bay checks are green. <kbd>ESC</kbd> Save and menu.</p><p>Land upright on the next pad at ≤ 8 m/s to receive fuel and payload. Dock with the nose pointing UP (0°), within ±12°, and slow to ≤ 5 m/s. Station bumps below 20 m/s are survivable. Your bay is on the rocket’s right side. After delivering, use left RCS (J) to back away from the receiver before accelerating.</p><p>Refueling is limited to one grant per route stop. Empty fuel or a high-speed collision ends the run. Leaving the page suspends and saves your flight.</p></div></details>
                 <div class="menu-footer"><span>EARTH → MOON → THE OUTER PLANETS</span><span>PIXEL FLIGHT / V1.0</span></div>
             </section>
             <section id="confirmPanel" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="-1" hidden><span class="eyebrow">FLIGHT RECORDER</span><h2 id="confirmTitle">Start over on Earth?</h2><p>Your unfinished flight will be recorded as abandoned. Previous flight records will remain available.</p><div class="stack-actions"><button type="button" id="confirmNewButton" class="primary-button" data-analytics-id="gameConfirmNewRun">CONFIRM NEW FLIGHT</button><button type="button" id="cancelNewButton" class="secondary-button" data-analytics-id="gameCancelNewRun">KEEP CURRENT FLIGHT</button></div></section>

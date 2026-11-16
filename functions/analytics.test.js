@@ -27,7 +27,7 @@ function makeBatch(now = Date.now()) {
         },
         events: [{
             eventName: 'pageView', sequence: 1, sessionId, pagePath: '/',
-            layoutVersion: 'homepage-v2', recordedAt: now - 10000, elapsedMs: 0, properties: {}
+            layoutVersion: 'homepage-v3', recordedAt: now - 10000, elapsedMs: 0, properties: {}
         }]
     };
 }
@@ -75,7 +75,7 @@ test('heatmap validation rejects positions outside the page and unknown controls
     assert.throws(() => validateBatch(batch));
 });
 
-test('v2 accepts every planned game control and section while retaining v1 identifiers', () => {
+test('v3 accepts every planned game control and section while retaining v1 identifiers', () => {
     const now = Date.now();
     for (const elementId of [...gameElementIds, 'headerClick', 'counterIncrement', 'counterReset']) {
         for (const sectionId of [...gameSectionIds, 'header', 'clickCounter', 'visitCounter', null]) {
@@ -105,13 +105,15 @@ test('v2 accepts every planned game control and section while retaining v1 ident
     historical.events[0].eventName = 'interaction';
     historical.events[0].properties = { elementId: 'counterReset', sectionId: 'clickCounter', inputType: 'keyboard' };
     assert.doesNotThrow(() => validateBatch(historical, now));
+    historical.events[0].layoutVersion = 'homepage-v2';
+    assert.doesNotThrow(() => validateBatch(historical, now));
 });
 
 test('game adaptation still rejects unknown layouts, IDs, lifecycle payloads, and personal data', () => {
     const now = Date.now();
     const changes = [
-        batch => { batch.events[0].layoutVersion = 'homepage-v3'; },
-        batch => { batch.events[0].layoutVersion = 'homepage-v2?player=secret'; },
+        batch => { batch.events[0].layoutVersion = 'homepage-v4'; },
+        batch => { batch.events[0].layoutVersion = 'homepage-v3?player=secret'; },
         batch => { batch.events[0].properties.elementId = 'gameUnknown'; },
         batch => { batch.events[0].properties.sectionId = 'unknown'; },
         batch => { batch.events[0].properties.inputType = 'touch'; },
@@ -154,10 +156,16 @@ async function createBrowserHarness({ search = '', port = '5050', blockStorage =
     const timers = [];
     const storage = new Map();
     if (savedSession) storage.set('websiteAnalyticsDebugSession', JSON.stringify(savedSession));
+    const lifecycleTarget = new EventTarget();
     const window = {
+        CustomEvent,
+        dispatchEvent: event => lifecycleTarget.dispatchEvent(event),
         location: { search, pathname: '/', hostname: '127.0.0.1', port },
         innerWidth: 1000, innerHeight: 500, scrollX: 0, scrollY: 0,
-        addEventListener(name, handler) { handlers[name] = handler; },
+        addEventListener(name, handler) {
+            handlers[name] = handler;
+            lifecycleTarget.addEventListener(name, handler);
+        },
         setInterval(handler) { timers.push(handler); }
     };
     const document = {
@@ -196,7 +204,7 @@ async function createBrowserHarness({ search = '', port = '5050', blockStorage =
         modules.set(filename, module);
         await module.link((specifier, referencing) => {
             assert.ok(specifier.startsWith('./'), 'Remote SDK imports are not allowed in this harness.');
-            return loadModule(path.resolve(path.dirname(referencing.identifier), specifier));
+            return loadModule(path.resolve(path.dirname(referencing.identifier), specifier.split('?')[0]));
         });
         return module;
     }
@@ -271,7 +279,7 @@ test('keyboard activation has no heatmap coordinate and timeout batches stay ass
     assert.ok(batches.some(batch => batch.session.sessionId !== firstSessionId));
 });
 
-test('v2 game interactions, canvas clicks, and section exposure produce server-valid batches', async () => {
+test('v3 game interactions, canvas clicks, and section exposure produce server-valid batches', async () => {
     const harness = await createBrowserHarness({ search: '?analyticsCollect=1' });
     for (const [index, elementId] of gameElementIds.entries()) {
         const sectionId = gameSectionIds[index % gameSectionIds.length];
@@ -293,7 +301,7 @@ test('v2 game interactions, canvas clicks, and section exposure produce server-v
     harness.timers[0]();
     await harness.settle();
     const snapshot = harness.snapshot();
-    assert.equal(snapshot.config.layoutVersion, 'homepage-v2');
+    assert.equal(snapshot.config.layoutVersion, 'homepage-v3');
     const interactions = snapshot.events.filter(event => event.eventName === 'interaction');
     assert.deepEqual(interactions.map(event => event.properties.elementId), gameElementIds);
     assert.equal(snapshot.events.filter(event => event.eventName === 'click').length, Math.floor(gameElementIds.length / 2) + 1);
@@ -387,6 +395,7 @@ test('legacy site analytics preserves visit counts without the old DOM or a work
         let analyticsImports = 0;
         let analyticsStarts = 0;
         const context = vm.createContext({
+            window: { location: { hostname: 'example.com' }, addEventListener() {} },
             document: { getElementById: () => scenario.hasCounter ? counter : null },
             console: { warn() {} },
             localStorage: {
@@ -435,7 +444,7 @@ test('legacy site analytics preserves visit counts without the old DOM or a work
                 return modules.get('firebase-analytics.js');
             }
         });
-        await tracker.link(specifier => modules.get(specifier) || modules.get(specifier.split('/').at(-1)));
+        await tracker.link(specifier => modules.get(specifier.split('?')[0]) || modules.get(specifier.split('?')[0].split('/').at(-1)));
         await tracker.evaluate();
         for (let index = 0; index < 20; index++) await Promise.resolve();
         assert.equal(initializedConfig.projectId, scenario.emulator ? 'demo-website-analytics' : 'production-project');
@@ -528,4 +537,254 @@ test('emulators: atomic deduplication, validation, and denied public reads/write
     assert.equal(throttled.status, 429);
     assert.equal(throttled.headers.get('Retry-After'), '60');
     await deleteApp(app);
+});
+
+
+test('game lifecycle validation accepts each action and rejects extra data and unbounded numbers', () => {
+    const properties = { action: 'started', runId: randomUUID(), routeIndex: 0,
+        deliveries: 0, fuel: 100, gameplaySeconds: 0 };
+    for (const action of ['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned']) {
+        const batch = makeBatch();
+        Object.assign(batch.events[0], { eventName: 'gameLifecycle', properties: { ...properties, action } });
+        assert.doesNotThrow(() => validateBatch(batch));
+    }
+    const invalid = [
+        { action: 'unknown' }, { runId: 'player@example.com' }, { routeIndex: -1 }, { routeIndex: 10 },
+        { routeIndex: 0.5 }, { deliveries: -1 }, { deliveries: 11 }, { deliveries: 0.5 },
+        { fuel: -1 }, { fuel: 101 }, { fuel: NaN }, { fuel: Infinity },
+        { gameplaySeconds: -1 }, { gameplaySeconds: 31536001 }, { gameplaySeconds: Infinity },
+        { gameplaySeconds: NaN }, { documentX: 100 }, { playerName: 'private' }
+    ];
+    for (const change of invalid) {
+        const batch = makeBatch();
+        Object.assign(batch.events[0], { eventName: 'gameLifecycle', properties: { ...properties, ...change } });
+        assert.throws(() => validateBatch(batch));
+    }
+    for (const field of Object.keys(properties)) {
+        const batch = makeBatch();
+        const incomplete = { ...properties };
+        delete incomplete[field];
+        Object.assign(batch.events[0], { eventName: 'gameLifecycle', properties: incomplete });
+        assert.throws(() => validateBatch(batch));
+    }
+    const batch = makeBatch();
+    Object.assign(batch.events[0], { eventName: 'gameLifecycle', properties: {
+        ...properties, routeIndex: 9, deliveries: 10, fuel: 0, gameplaySeconds: 31536000
+    } });
+    assert.doesNotThrow(() => validateBatch(batch));
+});
+
+test('native gameplay events pass through the tracker without backfilling or leaking extra fields', async () => {
+    const harness = await createBrowserHarness({ search: '?analyticsCollect=1' });
+    const { FlightApp } = await import('../public/scripts/rocketApp.mjs');
+    const { createRun } = await import('../public/scripts/rocketPhysics.mjs');
+    const app = Object.create(FlightApp.prototype);
+    app.browserWindow = harness.window;
+    app.run = createRun();
+    assert.equal(harness.snapshot().events.some(event => event.eventName === 'gameLifecycle'), false);
+    for (const action of ['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned']) {
+        app.emitGameLifecycle(action);
+    }
+    const valid = harness.snapshot().events.filter(event => event.eventName === 'gameLifecycle');
+    assert.equal(valid.length, 9);
+    const properties = valid[0].properties;
+    for (const change of [{ playerName: 'private' }, { fuel: Infinity }, { routeIndex: 10 }, { action: 'unknown' }]) {
+        harness.window.dispatchEvent(new CustomEvent('rocket:gameLifecycle', { detail: { ...properties, ...change } }));
+    }
+    assert.equal(harness.snapshot().events.filter(event => event.eventName === 'gameLifecycle').length, 9);
+    await harness.settle();
+    for (const request of harness.requests) assert.doesNotThrow(() => validateBatch(JSON.parse(request.body)));
+    app.browserWindow = {};
+    assert.doesNotThrow(() => app.emitGameLifecycle('started'));
+});
+
+test('successful app transitions emit lifecycle actions once and rejected actions emit none', async () => {
+    const harness = await createBrowserHarness({ search: '?analyticsDebug=1' });
+    const { FlightApp } = await import('../public/scripts/rocketApp.mjs');
+    const { createRun, dockingPoint, routeBody, tuning } = await import('../public/scripts/rocketPhysics.mjs');
+    const app = Object.create(FlightApp.prototype);
+    let active = null;
+    let allowSave = true;
+    let archives = 0;
+    Object.assign(app, {
+        browserWindow: harness.window, page: { visibilityState: 'visible' }, busy: false,
+        store: {
+            // Model ownership and successful persistence independently from analytics.
+            transaction(action) { return action(); },
+            getActive() { return active; },
+            saveActive(run) { if (allowSave) active = run; return allowSave; },
+            archive() { archives += 1; active = null; return true; },
+            ownsActive(id) { return active?.id === id; }
+        },
+        // Keep this test focused on semantic transitions rather than rendering.
+        showScreen(mode) { this.mode = mode; }, updateHud() {}, message() {}, clearInput() {},
+        updateMenu() {}, renderResults() { this.mode = 'results'; }, ownershipLost() { this.mode = 'menu'; }
+    });
+    app.newRun();
+    app.suspend('left');
+    app.suspend('left');
+    app.continueRun();
+    app.suspend('suspended');
+    app.continueRun();
+    app.attach(); // An out-of-range attach must not report a delivery.
+    app.newRun(); // Only the replaced run emits abandoned.
+    const point = dockingPoint(routeBody(0));
+    Object.assign(app.run, { x: point.x, y: point.y, vx: 0, vy: 0, angle: 0 });
+    app.attach();
+    app.run.status = 'lost';
+    app.showResults();
+    app.showResults();
+    assert.equal(archives, 2);
+    const actions = harness.snapshot().events.filter(event => event.eventName === 'gameLifecycle').map(event => event.properties.action);
+    assert.deepEqual(actions, ['started', 'left', 'continued', 'suspended', 'continued', 'abandoned', 'started', 'delivered', 'lost']);
+    active = null;
+    allowSave = false;
+    app.newRun();
+    assert.equal(harness.snapshot().events.filter(event => event.eventName === 'gameLifecycle').length, actions.length);
+    app.run = createRun();
+    active = app.run;
+    allowSave = true;
+    const moon = routeBody(1);
+    Object.assign(app.run, { phase: 'planet', delivered: 1, payload: false, fuel: 40,
+        x: moon.x, y: moon.y - moon.radius - tuning.shipRadius + 0.01,
+        vx: 0, vy: 1, angle: 0, landedOn: null });
+    Object.assign(app, { mode: 'flight', lastFrame: 0, accumulator: 0, saveElapsed: 0,
+        hudElapsed: 0, failureElapsed: 0, messageUntil: 1000, animating: false,
+        renderer: { draw() {} }, currentInput() { return {}; }, text() {} });
+    app.frame(20);
+    app.frame(40);
+    assert.equal(app.run.routeIndex, 1);
+    assert.equal(harness.snapshot().events.filter(event => event.properties.action === 'landed').length, 1);
+    app.run.fuel = 0;
+    for (let now = 60; now < 200; now += 20) app.frame(now);
+    assert.equal(harness.snapshot().events.filter(event => event.properties.action === 'lost').length, 2);
+    app.run = createRun();
+    active = app.run;
+    Object.assign(app, { mode: 'flight', failedRunId: null });
+    Object.assign(app.run, { routeIndex: 9, delivered: 9, ...dockingPoint(routeBody(9)),
+        vx: 0, vy: 0, angle: 0, landedOn: null });
+    app.attach();
+    app.attach();
+    const finalActions = harness.snapshot().events.filter(event => event.eventName === 'gameLifecycle').map(event => event.properties.action);
+    assert.deepEqual(finalActions.slice(-2), ['delivered', 'won']);
+    assert.equal(finalActions.filter(action => action === 'won').length, 1);
+});
+
+// Exercise the production GA bridge with native events and an independently delayed SDK.
+async function createGameAnalyticsHarness({ hostname = 'example.com', supported = true, failImport = false, failLog = false } = {}) {
+    const source = await readFile(path.resolve(__dirname, '../public/scripts/siteAnalytics.js'), 'utf8');
+    const target = new EventTarget();
+    const events = [];
+    let imports = 0;
+    let visits = 0;
+    let startSdk;
+    const sdkReady = new Promise(resolve => { startSdk = resolve; });
+    const context = vm.createContext({
+        window: { location: { hostname }, addEventListener: target.addEventListener.bind(target) },
+        document: { getElementById: () => null }, console: { warn() {} },
+        localStorage: { getItem: () => '0', setItem() {} }
+    });
+    const exportsByName = {
+        'firebase-app.js': { getApps: () => [], getApp: () => ({}), initializeApp: () => ({}) },
+        'firebase-firestore.js': {
+            getFirestore: () => ({}), connectFirestoreEmulator() {}, doc: () => ({}),
+            runTransaction: async (db, update) => update({
+                get: async () => ({ exists: () => true, data: () => ({ count: 0 }) }),
+                set() { visits++; }
+            })
+        },
+        'firebaseConfig.js': { firebaseConfig: {}, useFirebaseEmulators: false },
+        'firebase-analytics.js': {
+            isSupported: async () => { await sdkReady; return supported; },
+            getAnalytics: () => ({ initialized: true }),
+            logEvent(analytics, name, parameters) {
+                if (failLog) throw new Error('GA blocked');
+                events.push({ name, parameters: JSON.parse(JSON.stringify(parameters)) });
+            }
+        }
+    };
+    const modules = new Map();
+    for (const [name, values] of Object.entries(exportsByName)) {
+        const module = new vm.SyntheticModule(Object.keys(values), function () {
+            for (const [key, value] of Object.entries(values)) this.setExport(key, value);
+        }, { context });
+        await module.link(() => { throw new Error('Unexpected dependency'); });
+        await module.evaluate();
+        modules.set(name, module);
+    }
+    const tracker = new vm.SourceTextModule(source, { context,
+        importModuleDynamically: async () => {
+            imports++;
+            if (failImport) throw new Error('SDK blocked');
+            return modules.get('firebase-analytics.js');
+        }
+    });
+    await tracker.link(specifier => modules.get(specifier.split('?')[0].split('/').at(-1)));
+    await tracker.evaluate();
+    return {
+        events, startSdk, imports: () => imports, visits: () => visits,
+        // Native CustomEvent delivery exercises the exact listener used by the game.
+        emit(detail) { target.dispatchEvent(new CustomEvent('rocket:gameLifecycle', { detail })); },
+        // Settle SDK and transaction continuations without network or timer sleeps.
+        async settle() { for (let index = 0; index < 30; index++) await Promise.resolve(); }
+    };
+}
+
+test('GA gameplay uses exact allowlisted names and parameters, with bounded pre-init buffering', async () => {
+    const harness = await createGameAnalyticsHarness();
+    const detail = { action: 'started', routeIndex: 0, deliveries: 0, fuel: 100, gameplaySeconds: 0,
+        runId: randomUUID(), email: 'private@example.com', text: 'private', query: '?secret=1' };
+    assert.equal(harness.events.length, 0); // No old runs or synthetic starts are imported.
+    for (let index = 0; index < 40; index++) harness.emit({ ...detail, gameplaySeconds: index });
+    assert.equal(harness.events.length, 0);
+    harness.startSdk();
+    await harness.settle();
+    assert.equal(harness.events.length, 32);
+    assert.equal(harness.events[0].parameters.gameplay_seconds, 8);
+    harness.events.length = 0;
+    for (const action of ['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned']) {
+        harness.emit({ ...detail, action });
+    }
+    assert.deepEqual(harness.events.map(event => event.name), [
+        'game_started', 'game_continued', 'game_left', 'game_suspended', 'game_landed',
+        'game_delivered', 'game_won', 'game_lost', 'game_abandoned'
+    ]);
+    assert.deepEqual(harness.events[0].parameters, {
+        action: 'started', route_index: 0, deliveries: 0, fuel_remaining: 100, gameplay_seconds: 0
+    });
+    for (const change of [
+        { action: 'unknown' }, { routeIndex: -1 }, { routeIndex: 10 }, { routeIndex: 1.5 },
+        { deliveries: -1 }, { deliveries: 11 }, { deliveries: 1.5 }, { fuel: -1 }, { fuel: 101 },
+        { fuel: NaN }, { fuel: Infinity }, { fuel: '50' }, { gameplaySeconds: -1 },
+        { gameplaySeconds: Infinity }, { gameplaySeconds: NaN }, { gameplaySeconds: 31536001 }
+    ]) harness.emit({ ...detail, ...change });
+    harness.emit(null);
+    harness.emit({ action: 'started' });
+    assert.equal(harness.events.length, 9);
+    assert.equal(harness.visits(), 1);
+});
+
+test('GA excludes localhost on every port and loopback hosts while preserving visit counts', async () => {
+    for (const hostname of ['localhost', 'app.localhost', '127.0.0.1', '127.0.0.2', '[::1]', '::1', '0.0.0.0']) {
+        const harness = await createGameAnalyticsHarness({ hostname });
+        harness.startSdk();
+        harness.emit({ action: 'started', routeIndex: 0, deliveries: 0, fuel: 100, gameplaySeconds: 0 });
+        await harness.settle();
+        assert.equal(harness.imports(), 0, hostname);
+        assert.equal(harness.events.length, 0, hostname);
+        assert.equal(harness.visits(), 1, hostname);
+    }
+});
+
+test('blocked, unsupported, or throwing GA leaves native gameplay and visit counts working', async () => {
+    for (const options of [{ failImport: true }, { supported: false }, { failLog: true }]) {
+        const harness = await createGameAnalyticsHarness(options);
+        const detail = { action: 'started', routeIndex: 0, deliveries: 0, fuel: 100, gameplaySeconds: 0 };
+        harness.emit(detail);
+        harness.startSdk();
+        await harness.settle();
+        assert.doesNotThrow(() => harness.emit(detail));
+        assert.equal(harness.events.length, 0);
+        assert.equal(harness.visits(), 1);
+    }
 });

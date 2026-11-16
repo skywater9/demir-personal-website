@@ -2,8 +2,8 @@ export const tuning = Object.freeze({
     maxFuel: 100, mainAcceleration: 34, rcsAcceleration: 5,
     mainFuelRate: 0.62, rcsFuelRate: 0.12, rotationFuelRate: 0.025,
     rotationRate: 1.55, shipRadius: 18, padHalfWidth: 48,
-    safeLandingSpeed: 8, safeLandingAngle: Math.PI / 15,
-    dockingDistance: 32, dockingSpeed: 5, dockingAngle: Math.PI / 15,
+    safeLandingSpeed: 8, stationCrashSpeed: 20, safeLandingAngle: Math.PI / 15,
+    dockingDistance: 32, dockingSpeed: 5, dockingAngle: Math.PI / 15, dockingAssistDistance: 200,
     influenceAltitude: 1050, fixedStep: 1 / 120
 });
 
@@ -264,7 +264,7 @@ function resolveStation(run, body, previous) {
     }
     if (!firstHit) return;
     const speed = Math.hypot(run.vx, run.vy);
-    if (speed > tuning.safeLandingSpeed) {
+    if (speed >= tuning.stationCrashSpeed) {
         finishRun(run, 'lost', `Station collision at ${speed.toFixed(1)} m/s.`);
         return;
     }

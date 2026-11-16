@@ -1,9 +1,9 @@
 import {
     createRun, route, routeBody, tuning, stepRun, targetFor, nearestBody,
     stationFor, gravityAt, dockingStatus, tryDock, recordRunEvent
-} from './rocketPhysics.mjs';
-import { RunStore, saveKey } from './rocketStorage.mjs';
-import { RocketRenderer } from './rocketRenderer.mjs';
+} from './rocketPhysics.mjs?v=20261116-spark';
+import { RunStore, saveKey } from './rocketStorage.mjs?v=20261116-spark';
+import { RocketRenderer } from './rocketRenderer.mjs?v=20261116-spark';
 
 const keyControls = Object.freeze({
     Space: 'burn', ArrowUp: 'burn', KeyA: 'rotateLeft', ArrowLeft: 'rotateLeft',
@@ -51,6 +51,8 @@ export class FlightApp {
         this.busy = false;
         this.resultsPending = false;
         this.savePending = false;
+        this.failedRunId = null;
+        this.failureElapsed = 0;
         let storage = null;
         try { storage = browserWindow.localStorage; } catch { /* The visible warning below covers denied storage access. */ }
         this.store = store || new RunStore(storage, message => this.showStorageWarning(message), {
@@ -146,7 +148,10 @@ export class FlightApp {
         this.browserWindow.addEventListener('storage', event => {
             if (event.key !== saveKey && event.key !== null) return;
             if (this.mode === 'flight' && !this.store.ownsActive(this.run.id)) this.ownershipLost();
-            else if (this.mode === 'menu') this.updateMenu();
+            else {
+                this.emitGameLifecycle(type === 'left' ? 'left' : 'suspended', departureRun);
+                if (this.mode === 'menu') this.updateMenu();
+            }
         });
     }
 
@@ -236,6 +241,7 @@ export class FlightApp {
         const panels = { menu: 'mainMenu', confirm: 'confirmPanel', history: 'historyPanel', results: 'resultPanel' };
         for (const [screen, id] of Object.entries(panels)) this.ui[id].hidden = mode !== screen;
         this.ui.menuOverlay.hidden = mode === 'flight';
+        if (mode !== 'flight') this.ui.dockDialog.hidden = true;
         this.ui.instrumentPanel.inert = mode !== 'flight';
         this.ui.controlPanel.inert = mode !== 'flight';
         this.ui.menuButton.inert = mode !== 'flight';
@@ -263,6 +269,18 @@ export class FlightApp {
             : 'Start on Earth with a full tank and your first payload.');
     }
 
+    // Dispatch only semantic metadata after transitions; missing browser APIs must not interrupt flight.
+    emitGameLifecycle(action, run = this.run) {
+        if (typeof this.browserWindow.CustomEvent !== 'function'
+            || typeof this.browserWindow.dispatchEvent !== 'function') return;
+        try {
+            this.browserWindow.dispatchEvent(new this.browserWindow.CustomEvent('rocket:gameLifecycle', {
+                detail: { action, runId: run.id, routeIndex: run.routeIndex, deliveries: run.delivered,
+                    fuel: run.fuel, gameplaySeconds: run.elapsed }
+            }));
+        } catch { /* Analytics is optional and must never interrupt gameplay. */ }
+    }
+
     // Archive replaced progress as abandoned and restart every new flight on Earth with full fuel.
     newRun() {
         if (this.busy) return;
@@ -274,6 +292,7 @@ export class FlightApp {
                 previous.reason = 'Pilot started a new flight.';
                 recordRunEvent(previous, 'abandoned');
                 if (!this.store.archive(previous, { claim: true })) return null;
+                this.emitGameLifecycle('abandoned', previous);
             }
             const next = createRun();
             if (!this.isForeground()) recordRunEvent(next, 'suspended');
@@ -282,6 +301,8 @@ export class FlightApp {
             this.busy = false;
             if (!next) return this.ownershipLost();
             this.run = next;
+            this.emitGameLifecycle('started');
+            if (!this.isForeground()) this.emitGameLifecycle('suspended');
             this.saveElapsed = 0;
             this.showScreen(this.isForeground() ? 'flight' : 'menu');
             this.updateHud();
@@ -304,6 +325,8 @@ export class FlightApp {
             this.busy = false;
             if (!saved) return this.ownershipLost();
             this.run = saved;
+            this.emitGameLifecycle('continued');
+            if (!this.isForeground()) this.emitGameLifecycle('suspended');
             this.showScreen(this.isForeground() ? 'flight' : 'menu');
             this.updateHud();
             this.message('Flight resumed. Engines are idle until you apply thrust.', 5);
@@ -318,7 +341,10 @@ export class FlightApp {
         this.showScreen('menu');
         return this.mutateStore(() => departureRun.status !== 'active' || this.store.saveActive(departureRun), saved => {
             if (!saved) this.ownershipLost();
-            else if (this.mode === 'menu') this.updateMenu();
+            else {
+                this.emitGameLifecycle(type === 'left' ? 'left' : 'suspended', departureRun);
+                if (this.mode === 'menu') this.updateMenu();
+            }
         });
     }
 
@@ -375,6 +401,8 @@ export class FlightApp {
         }, result => {
             this.busy = false;
             if (result === 'stale') return this.ownershipLost();
+            if (result === 'delivered' || result === 'won') this.emitGameLifecycle('delivered');
+            if (result === 'won') this.emitGameLifecycle('won');
             if (result === 'notReady') this.message('Align upright within 32 m of the bay marker and slow below 5 m/s.', 5);
             else if (result === 'won') this.renderResults();
             else this.message(`Payload delivered. Next: ${targetFor(this.run).body.name}. Hold J to back away from the bay.`, 8);
@@ -390,13 +418,17 @@ export class FlightApp {
 
     // Archive final state before presenting results so a refresh cannot lose the win or failure record.
     showResults() {
-        if (this.resultsPending) return;
+        if (this.resultsPending || this.failedRunId === this.run.id) return;
         this.resultsPending = true;
         this.clearInput();
         return this.mutateStore(() => this.store.ownsActive(this.run.id) && this.store.archive(this.run), saved => {
             this.resultsPending = false;
             if (!saved) return this.ownershipLost();
-            this.renderResults();
+            this.emitGameLifecycle(this.run.status);
+            if (this.run.status === 'lost') {
+                this.failedRunId = this.run.id;
+                this.failureElapsed = 0;
+            } else this.renderResults();
         });
     }
 
@@ -488,9 +520,14 @@ export class FlightApp {
         this.text('objectiveDistance', formatDistance(Math.hypot(run.x - target.x, run.y - target.y)));
         this.text('environmentLabel', inRange ? `${near.body.name.toUpperCase()} / ${near.body.gas && near.altitude < 200 ? 'ATMOSPHERE' : near.altitude < 50 ? 'SURFACE OPERATIONS' : 'GRAVITY ZONE'}` : 'DEEP SPACE / COAST TO CONSERVE');
         this.text('dockState', run.docked ? 'ATTACHED' : run.phase !== 'station' ? 'DELIVERED' : docking.ready ? 'READY TO ATTACH' : 'ALIGNING');
+        this.ui.dockDialog.hidden = !(this.mode === 'flight' && run.status === 'active'
+            && run.phase === 'station' && !run.docked && docking.distance <= tuning.dockingAssistDistance);
         this.ui.dockRangeCheck.classList.toggle('is-ready', docking.distance <= tuning.dockingDistance);
         this.ui.dockSpeedCheck.classList.toggle('is-ready', docking.speed <= tuning.dockingSpeed);
         this.ui.dockAngleCheck.classList.toggle('is-ready', docking.angle <= tuning.dockingAngle);
+        this.text('dockRangeCheck', `${docking.distance <= tuning.dockingDistance ? '✓' : '○'} Move within 32 m of the bay — now ${docking.distance.toFixed(0)} m`);
+        this.text('dockSpeedCheck', `${docking.speed <= tuning.dockingSpeed ? '✓' : '○'} Slow to 5 m/s or less — now ${docking.speed.toFixed(1)} m/s`);
+        this.text('dockAngleCheck', `${docking.angle <= tuning.dockingAngle ? '✓' : '○'} Point nose straight up (0° ±12°) — now ${degrees.toFixed(0)}°`);
         this.ui.dockButton.classList.toggle('is-ready', docking.ready);
         this.ui.dockButton.disabled = !docking.ready;
         this.ui.throttleSlider.value = String(throttle);
@@ -519,6 +556,7 @@ export class FlightApp {
             else {
                 this.saveElapsed += dt;
                 if (previousIndex !== this.run.routeIndex) {
+                    this.emitGameLifecycle('landed');
                     this.message(`${routeBody(this.run.routeIndex).name} touchdown. Fuel received; next payload loaded.`, 8);
                 }
                 if (!this.savePending && (this.saveElapsed >= 1 || previousIndex !== this.run.routeIndex)) {
@@ -542,7 +580,12 @@ export class FlightApp {
             this.updateHud();
             this.hudElapsed = 0;
         }
-        this.renderer.draw(this.run, this.mode === 'flight' ? input : {}, this.mode !== 'flight', dt || 1 / 60);
+        if (this.mode === 'flight' && this.failedRunId === this.run.id) {
+            this.failureElapsed += dt;
+            if (this.failureElapsed >= 0.9) this.renderResults();
+        }
+        const failureProgress = this.failedRunId === this.run.id ? Math.min(1, this.failureElapsed / 0.9) : null;
+        this.renderer.draw(this.run, this.mode === 'flight' ? input : {}, this.mode !== 'flight', dt || 1 / 60, failureProgress);
         if (this.animating) this.browserWindow.requestAnimationFrame(next => this.frame(next));
     }
 }

@@ -2,7 +2,7 @@ import { getApp, getApps, initializeApp } from 'https://www.gstatic.com/firebase
 import {
     getFirestore, connectFirestoreEmulator, doc, runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js';
+import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js?v=20261116-spark';
 
 const app = getApps().length ? getApp() : initializeApp(useFirebaseEmulators
     ? { ...firebaseConfig, projectId: 'demo-website-analytics' } : firebaseConfig);
@@ -53,14 +53,72 @@ async function recordSiteVisit() {
     }
 }
 
-// Initialize optional Google Analytics only in production, keeping emulator visits local.
-async function initializeGoogleAnalytics() {
-    if (useFirebaseEmulators) return;
+const gameActions = new Set(['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned']);
+const pendingGameEvents = [];
+let googleAnalytics = null;
+let logGoogleEvent = null;
+let analyticsUnavailable = false;
+
+// Exclude local development on every port, including loopback IPv4 and IPv6 hosts.
+function isLocalAnalyticsHost() {
+    const hostname = window.location.hostname.toLowerCase();
+    return hostname === 'localhost' || hostname.endsWith('.localhost')
+        || /^127\./.test(hostname) || ['::1', '[::1]', '0.0.0.0'].includes(hostname);
+}
+
+// Stop optional analytics after SDK failure and release buffered metadata without affecting visits.
+function disableGoogleAnalytics(error) {
+    analyticsUnavailable = true;
+    pendingGameEvents.length = 0;
+    console.warn('[site analytics] Google Analytics unavailable.', { reason: error.message });
+}
+
+// Log a projected event safely so SDK errors never interrupt gameplay or visit counts.
+function sendGameEvent(event) {
     try {
-        const { getAnalytics, isSupported } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js');
-        if (await isSupported()) getAnalytics(app);
+        logGoogleEvent(googleAnalytics, `game_${event.action}`, event);
     } catch (error) {
-        console.warn('[site analytics] Google Analytics unavailable.', { reason: error.message });
+        disableGoogleAnalytics(error);
+    }
+}
+
+// Accept only bounded game statistics and omit run identity and arbitrary event metadata.
+function handleGameLifecycle(event) {
+    if (analyticsUnavailable) return;
+    const detail = event.detail;
+    if (!detail || !gameActions.has(detail.action)
+        || !Number.isInteger(detail.routeIndex) || detail.routeIndex < 0 || detail.routeIndex > 9
+        || !Number.isInteger(detail.deliveries) || detail.deliveries < 0 || detail.deliveries > 10
+        || !Number.isFinite(detail.fuel) || detail.fuel < 0 || detail.fuel > 100
+        || !Number.isFinite(detail.gameplaySeconds) || detail.gameplaySeconds < 0 || detail.gameplaySeconds > 31536000) return;
+    const parameters = { action: detail.action, route_index: detail.routeIndex, deliveries: detail.deliveries,
+        fuel_remaining: detail.fuel, gameplay_seconds: detail.gameplaySeconds };
+    if (logGoogleEvent) sendGameEvent(parameters);
+    else {
+        if (pendingGameEvents.length >= 32) pendingGameEvents.shift();
+        pendingGameEvents.push(parameters);
+    }
+}
+
+// Listen before loading the optional SDK; buffer only new native events while initialization is pending.
+async function initializeGoogleAnalytics() {
+    if (useFirebaseEmulators || isLocalAnalyticsHost()) return;
+    window.addEventListener('rocket:gameLifecycle', handleGameLifecycle);
+    try {
+        const { getAnalytics, isSupported, logEvent } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js');
+        if (!await isSupported()) {
+            analyticsUnavailable = true;
+            pendingGameEvents.length = 0;
+            return;
+        }
+        googleAnalytics = getAnalytics(app);
+        logGoogleEvent = logEvent;
+        for (const event of pendingGameEvents.splice(0)) {
+            if (analyticsUnavailable) break;
+            sendGameEvent(event);
+        }
+    } catch (error) {
+        disableGoogleAnalytics(error);
     }
 }
 

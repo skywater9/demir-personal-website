@@ -47,7 +47,7 @@ test('heatmap queries require valid upload dates, a bounded range, and a layout 
     const base = { view: 'heatmap', from: '2020-01-01', to: '2020-01-31', layoutVersion: 'homepage-v1' };
     const query = parseDashboardQuery(base);
     assert.equal(query.endMs - query.startMs, 31 * 86400000);
-    assert.equal(parseDashboardQuery({ ...base, layoutVersion: 'homepage-v2' }).layoutVersion, 'homepage-v2');
+    assert.equal(parseDashboardQuery({ ...base, layoutVersion: 'homepage-v3' }).layoutVersion, 'homepage-v3');
     for (const changes of [
         { from: '2020-02-30' }, { to: '2020-02-01' }, { from: '2020-02-01' },
         { layoutVersion: '' }, { layoutVersion: '../../index' }, { sessionId: randomUUID() },
@@ -65,14 +65,14 @@ test('heatmap extraction excludes keyboard actions, other pages, and other layou
     const documents = [{ id: 'batch', data: () => ({ events: [
         click, { ...click, sequence: 2, eventName: 'interaction' },
         { ...click, sequence: 3, pagePath: '/animal.html' },
-        { ...click, sequence: 4, layoutVersion: 'homepage-v2' }
+        { ...click, sequence: 4, layoutVersion: 'homepage-v3' }
     ] }) }];
     const result = extractHeatmapClicks(documents, 'homepage-v1');
     assert.equal(result.length, 1);
     assert.equal(result[0].documentY, 600);
     assert.equal(result[0].eventId, 'batch:1');
     assert.equal('session' in result[0], false);
-    const current = extractHeatmapClicks(documents, 'homepage-v2');
+    const current = extractHeatmapClicks(documents, 'homepage-v3');
     assert.equal(current.length, 1);
     assert.equal(current[0].eventId, 'batch:4');
 });
@@ -89,7 +89,7 @@ async function loadHeatmapHelpers(contextValues = {}) {
 test('heatmap groups exact geometry, bins scrolled document coordinates, and guards alignment', async () => {
     const helpers = await loadHeatmapHelpers();
     const first = {
-        layoutVersion: 'homepage-v2', viewportWidth: 1000, viewportHeight: 500,
+        layoutVersion: 'homepage-v3', viewportWidth: 1000, viewportHeight: 500,
         pageWidth: 1000, pageHeight: 2000, documentX: 25, documentY: 625, elementId: 'counterReset'
     };
     const groups = helpers.groupHeatmapClicks([
@@ -194,7 +194,7 @@ test('preview sanitization removes active resources and handlers and adds a rest
 });
 
 // Exercise the real dashboard script with a minimal DOM and mocked authentication boundary.
-async function createDashboardHarness({ DOMParser } = {}) {
+async function createDashboardHarness({ DOMParser, useEmulators = true, customAnalytics = 'enabled' } = {}) {
     const html = await readFile(path.resolve(__dirname, '../public/analytics.html'), 'utf8');
     const nodes = new Map();
 
@@ -232,13 +232,16 @@ async function createDashboardHarness({ DOMParser } = {}) {
     const responses = [];
     const context = vm.createContext({
         URLSearchParams, AbortSignal, AbortController, DOMException, DOMParser, console,
-        document: { querySelectorAll: () => [...nodes.values()], createElement: tag => new Element(tag) },
+        document: { body: { dataset: { customAnalytics } }, querySelectorAll: () => [...nodes.values()], createElement: tag => new Element(tag) },
         async fetch(url, options) {
             requests.push({ url, ...options });
             const response = responses.shift() || { status: 200, body: { sessions: [], nextCursor: null } };
             if (response.wait) await response.wait;
             return { ok: response.status === 200, status: response.status,
-                json: async () => response.body, text: async () => response.text };
+                json: async () => {
+                    if (response.text?.startsWith('<')) throw new SyntaxError('Unexpected token <');
+                    return response.body;
+                }, text: async () => response.text };
         }
     });
     const appModule = new vm.SyntheticModule(['initializeApp'], function () {
@@ -246,7 +249,7 @@ async function createDashboardHarness({ DOMParser } = {}) {
     }, { context });
     const configModule = new vm.SyntheticModule(['firebaseConfig', 'useFirebaseEmulators'], function () {
         this.setExport('firebaseConfig', {});
-        this.setExport('useFirebaseEmulators', true);
+        this.setExport('useFirebaseEmulators', useEmulators);
     }, { context });
     const authExports = {
         getAuth: () => auth,
@@ -266,7 +269,8 @@ async function createDashboardHarness({ DOMParser } = {}) {
     const heatmapSource = await readFile(path.resolve(__dirname, '../public/scripts/analyticsHeatmap.js'), 'utf8');
     const heatmapModule = new vm.SourceTextModule(heatmapSource, { context });
     const dashboard = new vm.SourceTextModule(source, { context });
-    await dashboard.link(specifier => {
+    await dashboard.link(importPath => {
+        const specifier = importPath.split('?')[0];
         if (specifier === './firebaseConfig.js') return configModule;
         if (specifier === './analyticsHeatmap.js') return heatmapModule;
         if (specifier.endsWith('/firebase-app.js')) return appModule;
@@ -288,6 +292,16 @@ async function createDashboardHarness({ DOMParser } = {}) {
     }
     return { nodes, requests, responses, signIn, settle };
 }
+
+test('Spark production page shows available analytics without requesting the inactive backend', async () => {
+    const harness = await createDashboardHarness({ useEmulators: false, customAnalytics: 'disabled' });
+    assert.equal(harness.nodes.get('sparkOverview').hidden, false);
+    assert.equal(harness.nodes.get('signInPanel').hidden, true);
+    assert.equal(harness.nodes.get('dashboard').hidden, true);
+    assert.equal(harness.nodes.get('heatmapPanel').hidden, true);
+    assert.equal(harness.requests.length, 0);
+    assert.match(harness.nodes.get('status').textContent, /inactive/);
+});
 
 test('dashboard renders owner data as text and clears all records immediately on sign-out', async () => {
     const harness = await createDashboardHarness();
@@ -377,7 +391,7 @@ test('heatmap labels partial pages, preserves filters, and clears coordinates af
     assert.equal(nodes.get('heatmapStatus').textContent, '');
 });
 
-test('v2 loads the main stylesheet into a sandboxed inert preview and withholds misaligned overlays', async () => {
+test('v3 loads the main stylesheet into a sandboxed inert preview and withholds misaligned overlays', async () => {
     const html = '<html><body><canvas id="gameCanvas"></canvas><button data-analytics-id="gameBurn">Burn</button></body></html>';
     const css = 'body { margin: 0; background: #111; color: white; }';
     let preview;
@@ -397,9 +411,9 @@ test('v2 loads the main stylesheet into a sandboxed inert preview and withholds 
         documentElement: { outerHTML: html, scrollWidth: 1000, scrollHeight: 500 }
     };
     await harness.signIn();
-    nodes.get('heatmapLayout').value = 'homepage-v2';
+    nodes.get('heatmapLayout').value = 'homepage-v3';
     const point = {
-        eventId: 'burn', layoutVersion: 'homepage-v2', viewportWidth: 1000, viewportHeight: 500,
+        eventId: 'burn', layoutVersion: 'homepage-v3', viewportWidth: 1000, viewportHeight: 500,
         pageWidth: 1000, pageHeight: 500, documentX: 20, documentY: 30, elementId: 'gameBurn'
     };
     harness.responses.push(
@@ -571,7 +585,7 @@ test('emulators: owner reads, non-owner denial, disabled account denial, and cur
         const batchId = `00000000-0000-4000-8000-00000000040${index}`;
         historicalIds.push(batchId);
         const events = index === 1
-            ? [{ ...clickEvent, layoutVersion: 'homepage-v2' }, { ...clickEvent, eventName: 'interaction', sequence: 2 }]
+            ? [{ ...clickEvent, layoutVersion: 'homepage-v3' }, { ...clickEvent, eventName: 'interaction', sequence: 2 }]
             : [{ ...clickEvent, properties: { ...clickEvent.properties, viewportWidth: index === 2 ? 800 : 1000 } }];
         await db.collection('analyticsBatches').doc(batchId).set({
             sessionId: selectedSessionId, pageInstanceId: randomUUID(), events,
@@ -604,4 +618,42 @@ test('emulators: owner reads, non-owner denial, disabled account denial, and cur
     } finally {
         await auth.updateUser('analyticsLocalOwner', { disabled: false });
     }
+});
+
+
+test('dashboard explains an undeployed HTML API and preserves sign-in controls', async () => {
+    const harness = await createDashboardHarness();
+    harness.responses.push({ status: 404, text: '<html>Not found</html>' });
+    await harness.signIn();
+    assert.match(harness.nodes.get('error').textContent, /backend is not deployed/);
+    assert.match(harness.nodes.get('error').textContent, /billing and Functions setup/);
+    assert.equal(harness.nodes.get('signOutButton').hidden, false);
+    assert.equal(harness.requests[0].headers.Authorization, 'Bearer test-token');
+    const html = await readFile(path.resolve(__dirname, '../public/analytics.html'), 'utf8');
+    assert.match(html, /click heatmap are inactive on Spark/);
+});
+
+test('dashboard includes readable gameplay metadata in the default timeline', async () => {
+    const harness = await createDashboardHarness();
+    const session = { sessionId: randomUUID(), startedAt: 1000, durationMs: 5000,
+        visibleMs: 4000, engagedMs: 3000, eventCount: 9, sectionVisibleMs: {}, lastMeaningfulAction: null };
+    harness.responses.push({ status: 200, body: { sessions: [session], nextCursor: null } });
+    await harness.signIn();
+    const labels = { started: 'Flight started', continued: 'Flight continued', left: 'Flight left for menu',
+        suspended: 'Flight suspended', landed: 'Landed and refueled', delivered: 'Payload delivered',
+        won: 'Journey won', lost: 'Flight lost', abandoned: 'Flight abandoned' };
+    const runId = randomUUID();
+    harness.responses.push({ status: 200, body: { session, nextCursor: null,
+        events: Object.keys(labels).map((action, index) => ({ eventId: String(index),
+            sequence: index + 1, recordedAt: 1000 + index, elapsedMs: index,
+            eventName: 'gameLifecycle', pagePath: '/', properties: {
+                action, runId, routeIndex: 2, deliveries: 3, fuel: 72.5, gameplaySeconds: 93
+            } })) } });
+    harness.nodes.get('sessionRows').children[0].children[0].children[0].handlers.click();
+    await harness.settle();
+    const rows = harness.nodes.get('timelineRows').children;
+    assert.equal(rows.length, 9);
+    assert.deepEqual(rows.map(row => row.children[1].textContent), Object.values(labels));
+    assert.equal(rows[0].children[2].textContent,
+        `Run ${runId} · stop 3/10 · deliveries 3/10 · fuel 72.5% · gameplay 1m 33s`);
 });

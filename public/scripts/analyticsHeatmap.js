@@ -1,4 +1,4 @@
-const currentLayoutVersion = 'homepage-v2';
+const currentLayoutVersion = 'homepage-v3';
 const cellSize = 24;
 const maxClicks = 20000;
 

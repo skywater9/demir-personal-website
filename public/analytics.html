@@ -5,15 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title>Website analytics</title>
-    <link rel="stylesheet" href="analytics.css">
+    <link rel="stylesheet" href="analytics.css?v=20261116-spark">
 </head>
-<body>
+<body data-custom-analytics="disabled">
     <header class="toolbar">
-        <div><h1>Website analytics</h1><span id="environmentLabel" class="muted">Private dashboard</span></div>
+        <div><h1>Website analytics</h1><span id="environmentLabel" class="muted">Spark plan overview</span></div>
         <div class="account"><span id="accountLabel"></span><button id="signOutButton" hidden>Sign out</button></div>
     </header>
     <main>
-        <p id="status" role="status" aria-live="polite">Loading sign-in…</p>
+        <section id="sparkOverview" class="panel" aria-labelledby="sparkTitle">
+            <h2 id="sparkTitle">Analytics on the free Spark plan</h2>
+            <p>The game is published. Basic Google Analytics and the existing total visit counter remain available. Game starts, deliveries, landings, and results are sent to Google Analytics when its SDK is available.</p>
+            <p><a href="https://analytics.google.com/analytics/web/#/p561590091/realtime/overview" target="_blank" rel="noopener noreferrer">Open Google Analytics</a> · <a href="https://console.firebase.google.com/project/demir-personal-website/firestore" target="_blank" rel="noopener noreferrer">View the existing visit counter in Firebase</a> · <a href="/">Play Orbital Freight</a></p>
+            <p class="muted">The custom session timeline and click heatmap are inactive because their Cloud Functions backend requires Blaze. Run history remains saved in the game on each player's browser. Previous local runs are not uploaded.</p>
+        </section>
+        <p id="status" role="status" aria-live="polite">Custom session collection and click heatmap are inactive on Spark.</p>
         <p id="error" role="alert" hidden></p>
         <section id="signInPanel" class="panel" aria-labelledby="signInTitle" hidden>
             <h2 id="signInTitle">Owner sign-in</h2>
@@ -70,10 +76,10 @@
             <form id="heatmapForm" class="heatmap-filters">
                 <div><label for="heatmapFrom">Upload date from (UTC)</label><input id="heatmapFrom" type="date" required></div>
                 <div><label for="heatmapTo">Upload date to (UTC)</label><input id="heatmapTo" type="date" required></div>
-                <div><label for="heatmapLayout">Layout version</label><input id="heatmapLayout" value="homepage-v2" pattern="homepage-v[1-9][0-9]{0,3}" required></div>
+                <div><label for="heatmapLayout">Layout version</label><input id="heatmapLayout" value="homepage-v3" pattern="homepage-v[1-9][0-9]{0,3}" required></div>
                 <button id="heatmapLoadButton" type="submit">Load heatmap</button>
             </form>
-            <p class="muted">homepage-v2 previews the static rocket game UI. The canvas stays blank without scripts; runtime screens are not replayed. Query homepage-v1 for historical counts without a page preview. Held flight controls and the throttle slider count once per pointer press; slider values are not collected.</p>
+            <p class="muted">homepage-v3 previews the static rocket game UI. The canvas stays blank without scripts; runtime screens are not replayed. Query homepage-v1 or homepage-v2 for historical counts without a page preview. Held flight controls and the throttle slider count once per pointer press; slider values are not collected.</p>
             <p id="heatmapStatus" class="muted" role="status" aria-live="polite"></p>
             <button id="heatmapMoreButton" type="button" hidden>Load more batches</button>
             <label for="heatmapViewport">Recorded viewport and page size</label>
@@ -92,6 +98,6 @@
         </section>
         <p class="muted footnote">Engaged time estimates recent activity while the page is visible. It does not measure boredom. Multiple sections can be visible at once.</p>
     </main>
-    <script type="module" src="scripts/analyticsDashboard.js"></script>
+    <script type="module" src="scripts/analyticsDashboard.js?v=20261116-spark"></script>
 </body>
 </html>

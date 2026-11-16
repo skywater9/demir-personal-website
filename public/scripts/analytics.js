@@ -1,6 +1,6 @@
-import { analyticsConfig } from './analyticsConfig.js';
-import { useFirebaseEmulators } from './firebaseConfig.js';
-import { createAnalyticsTransport } from './analyticsTransport.js';
+import { analyticsConfig } from './analyticsConfig.js?v=20261116-spark';
+import { useFirebaseEmulators } from './firebaseConfig.js?v=20261116-spark';
+import { createAnalyticsTransport } from './analyticsTransport.js?v=20261116-spark';
 
 // Debug always stays local; a separate opt-in enables collection on the local Hosting emulator.
 const query = new URLSearchParams(window.location.search);
@@ -27,7 +27,7 @@ if (debugEnabled || collectionEnabled) {
 // Track explicit interactions locally and optionally hand snapshots to the private collector.
 function startAnalyticsDebug() {
     const config = {
-        layoutVersion: 'homepage-v2',
+        layoutVersion: 'homepage-v3',
         checkpointMs: 15000,
         engagedTimeoutMs: 60000,
         sessionTimeoutMs: 30 * 60 * 1000,
@@ -219,6 +219,26 @@ function startAnalyticsDebug() {
         if (!alreadyRecorded) recordActivation(event, event.detail === 0 ? 'keyboard' : 'pointer', context);
     }
 
+    // Accept only bounded semantic game metadata; never copy arbitrary CustomEvent fields.
+    function handleGameLifecycle(event) {
+        const detail = event.detail;
+        const fields = ['action', 'runId', 'routeIndex', 'deliveries', 'fuel', 'gameplaySeconds'];
+        if (!detail || typeof detail !== 'object' || Array.isArray(detail)
+            || Object.keys(detail).length !== fields.length
+            || !fields.every(field => Object.hasOwn(detail, field))
+            || !['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned'].includes(detail.action)
+            || typeof detail.runId !== 'string'
+            || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(detail.runId)
+            || !Number.isInteger(detail.routeIndex) || detail.routeIndex < 0 || detail.routeIndex > 9
+            || !Number.isInteger(detail.deliveries) || detail.deliveries < 0 || detail.deliveries > 10
+            || !Number.isFinite(detail.fuel) || detail.fuel < 0 || detail.fuel > 100
+            || !Number.isFinite(detail.gameplaySeconds) || detail.gameplaySeconds < 0 || detail.gameplaySeconds > 31536000) return;
+        noteActivity();
+        recordEvent('gameLifecycle', Object.fromEntries(fields.map(field => [field, detail[field]])));
+        saveSession();
+        transport?.captureSnapshot(getSnapshot());
+    }
+
     // Record each depth once; non-scrollable pages do not imply an intentional full-page scroll.
     function handleScroll() {
         noteActivity();
@@ -322,6 +342,7 @@ function startAnalyticsDebug() {
     document.addEventListener('keydown', noteActivity, { passive: true });
     document.addEventListener('scroll', handleScroll, { passive: true });
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('rocket:gameLifecycle', handleGameLifecycle);
     window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('pageshow', handlePageShow);
     const sectionObserver = new IntersectionObserver(handleSections, { threshold: [0, 0.5] });
