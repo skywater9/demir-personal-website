@@ -1,4 +1,4 @@
-import { bodies, route, stationFor, targetFor, nearestBody, tuning } from './rocketPhysics.mjs';
+import { bodies, route, stationFor, stationGeometry, targetFor, nearestBody, tuning } from './rocketPhysics.mjs';
 
 // Paint low-resolution procedural sprites and a camera-following world without downloaded assets.
 export class RocketRenderer {
@@ -132,19 +132,16 @@ export class RocketRenderer {
         ctx.save(); ctx.translate(point.x, point.y);
         const scale = Math.max(0.55, this.camera.zoom);
         ctx.scale(scale, scale);
-        ctx.fillStyle = '#223b53'; ctx.fillRect(-14, -37, 28, 21); ctx.fillRect(-14, 16, 28, 21);
+        for (const part of stationGeometry) {
+            ctx.fillStyle = part.color;
+            ctx.fillRect(part.left / 2, part.top / 2, (part.right - part.left) / 2, (part.bottom - part.top) / 2);
+        }
         ctx.fillStyle = '#42728b';
         for (let y = -35; y < 37; y += 5) {
             if (y > -16 && y < 16) continue;
             ctx.fillRect(-12, y, 10, 2); ctx.fillRect(2, y, 10, 2);
         }
-        ctx.fillStyle = '#75868b'; ctx.fillRect(-3, -18, 6, 36);
-        ctx.fillStyle = '#c6cebf'; ctx.fillRect(-15, -10, 30, 20);
-        ctx.fillStyle = '#96ada9'; ctx.fillRect(-9, -14, 18, 4); ctx.fillRect(-9, 10, 18, 4);
         ctx.fillStyle = '#16303e'; ctx.fillRect(-10, -6, 7, 12); ctx.fillRect(3, -6, 7, 12);
-        ctx.fillStyle = '#dda456'; ctx.fillRect(-22, -7, 7, 3); ctx.fillRect(-22, 4, 7, 3);
-        ctx.fillStyle = '#81ccb4'; ctx.fillRect(-22, -3, 3, 6);
-        ctx.fillStyle = '#b4c2c0'; ctx.fillRect(15, -1, 10, 2); ctx.fillRect(24, -8, 2, 16);
         ctx.restore();
         const current = run.phase === 'station' && body.id === route[run.routeIndex];
         this.label(`${body.name.toUpperCase()} RELAY`, point.x, point.y - Math.round(44 * scale), current ? '#e9b16a' : '#839aa8', 'center');

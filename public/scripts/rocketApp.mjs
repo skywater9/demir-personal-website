@@ -2,7 +2,7 @@ import {
     createRun, route, routeBody, tuning, stepRun, targetFor, nearestBody,
     stationFor, gravityAt, dockingStatus, tryDock, recordRunEvent
 } from './rocketPhysics.mjs';
-import { RunStore } from './rocketStorage.mjs';
+import { RunStore, saveKey } from './rocketStorage.mjs';
 import { RocketRenderer } from './rocketRenderer.mjs';
 
 const keyControls = Object.freeze({
@@ -48,15 +48,16 @@ export class FlightApp {
         this.messageUntil = 0;
         this.lastFrame = null;
         this.animating = autoStart;
+        this.busy = false;
+        this.resultsPending = false;
+        this.savePending = false;
         let storage = null;
         try { storage = browserWindow.localStorage; } catch { /* The visible warning below covers denied storage access. */ }
-        this.store = store || new RunStore(storage, message => this.showStorageWarning(message));
+        this.store = store || new RunStore(storage, message => this.showStorageWarning(message), {
+            lockManager: browserWindow.navigator?.locks, requireLocks: true
+        });
         const saved = this.store.getActive();
         this.run = saved || createRun();
-        if (saved && !['left', 'suspended', 'interrupted'].includes(saved.events.at(-1)?.type)) {
-            recordRunEvent(this.run, 'interrupted');
-            this.store.saveActive(this.run);
-        }
         this.renderer = renderer || new RocketRenderer(this.ui.flightCanvas, this.ui.mapCanvas);
         this.bindEvents();
         this.updateMenu();
@@ -72,10 +73,41 @@ export class FlightApp {
         this.ui.saveStatus.textContent = 'SAVING UNAVAILABLE / MEMORY ONLY';
     }
 
+    // Avoid starting a pending transition in the background if the pilot leaves while its save is waiting.
+    isForeground() {
+        return this.page.visibilityState !== 'hidden'
+            && (typeof this.page.hasFocus !== 'function' || this.page.hasFocus());
+    }
+
     // Change one text node only when its value changes to keep the frequently updated HUD lightweight.
     text(id, value) {
         const element = this.ui[id];
         if (element.textContent !== String(value)) element.textContent = String(value);
+    }
+
+    // Keep persistence callbacks inside a shared browser lock while allowing lightweight synchronous test stores.
+    mutateStore(action, onComplete) {
+        try {
+            const result = this.store.transaction(action);
+            if (result && typeof result.then === 'function') {
+                return result.then(onComplete).catch(error => this.storageOperationFailed(error));
+            }
+            return onComplete(result);
+        } catch (error) {
+            this.storageOperationFailed(error);
+        }
+    }
+
+    // Recover from a failed lock operation without leaving controls stuck or losing the current in-memory run.
+    storageOperationFailed(error) {
+        console.warn('[orbital freight] Flight recorder operation failed.', error);
+        this.store.available = false;
+        this.store.lockManager = null;
+        this.busy = false;
+        this.resultsPending = false;
+        this.savePending = false;
+        this.showStorageWarning('The flight recorder is unavailable. This session is now kept in memory only.');
+        this.openMenu();
     }
 
     // Bind normal buttons separately from held engine inputs so mouse, touch, and keyboard share behavior.
@@ -111,6 +143,11 @@ export class FlightApp {
         });
         this.browserWindow.addEventListener('pagehide', () => this.suspend('suspended'));
         this.browserWindow.addEventListener('pageshow', () => { this.lastFrame = null; });
+        this.browserWindow.addEventListener('storage', event => {
+            if (event.key !== saveKey && event.key !== null) return;
+            if (this.mode === 'flight' && !this.store.ownsActive(this.run.id)) this.ownershipLost();
+            else if (this.mode === 'menu') this.updateMenu();
+        });
     }
 
     // Use pointer capture and per-pointer state to avoid stuck controls and support simultaneous touch inputs.
@@ -228,45 +265,75 @@ export class FlightApp {
 
     // Archive replaced progress as abandoned and restart every new flight on Earth with full fuel.
     newRun() {
-        const previous = this.store.getActive();
-        if (previous) {
-            previous.status = 'abandoned';
-            previous.reason = 'Pilot started a new flight.';
-            recordRunEvent(previous, 'abandoned');
-            this.store.archive(previous);
-        }
-        this.run = createRun();
-        this.saveElapsed = 0;
-        this.store.saveActive(this.run);
-        this.showScreen('flight');
-        this.updateHud();
-        this.message('Earth payload loaded. Hold Space to launch. Release to coast.', 8);
+        if (this.busy) return;
+        this.busy = true;
+        return this.mutateStore(() => {
+            const previous = this.store.getActive();
+            if (previous) {
+                previous.status = 'abandoned';
+                previous.reason = 'Pilot started a new flight.';
+                recordRunEvent(previous, 'abandoned');
+                if (!this.store.archive(previous, { claim: true })) return null;
+            }
+            const next = createRun();
+            if (!this.isForeground()) recordRunEvent(next, 'suspended');
+            return this.store.saveActive(next) ? next : null;
+        }, next => {
+            this.busy = false;
+            if (!next) return this.ownershipLost();
+            this.run = next;
+            this.saveElapsed = 0;
+            this.showScreen(this.isForeground() ? 'flight' : 'menu');
+            this.updateHud();
+            this.message('Earth payload loaded. Hold Space to launch. Release to coast.', 8);
+        });
     }
 
     // Restore all physical state and record a return without counting any offline time.
     continueRun() {
-        const saved = this.store.getActive();
-        if (!saved) return;
-        this.run = saved;
-        recordRunEvent(this.run, 'returned');
-        this.store.saveActive(this.run);
-        this.showScreen('flight');
-        this.updateHud();
-        this.message('Flight resumed. Engines are idle until you apply thrust.', 5);
+        if (this.busy) return;
+        this.busy = true;
+        return this.mutateStore(() => {
+            const saved = this.store.getActive();
+            if (!saved) return null;
+            if (!['left', 'suspended', 'interrupted'].includes(saved.events.at(-1)?.type)) recordRunEvent(saved, 'interrupted');
+            recordRunEvent(saved, 'returned');
+            if (!this.isForeground()) recordRunEvent(saved, 'suspended');
+            return this.store.saveActive(saved, { claim: true }) ? saved : null;
+        }, saved => {
+            this.busy = false;
+            if (!saved) return this.ownershipLost();
+            this.run = saved;
+            this.showScreen(this.isForeground() ? 'flight' : 'menu');
+            this.updateHud();
+            this.message('Flight resumed. Engines are idle until you apply thrust.', 5);
+        });
     }
 
     // Persist departures once, then require Continue before any further physics or elapsed time.
     suspend(type = 'left') {
         if (this.mode !== 'flight' || this.run.status !== 'active') return;
         recordRunEvent(this.run, type);
-        this.store.saveActive(this.run);
+        const departureRun = this.run;
         this.showScreen('menu');
+        return this.mutateStore(() => departureRun.status !== 'active' || this.store.saveActive(departureRun), saved => {
+            if (!saved) this.ownershipLost();
+            else if (this.mode === 'menu') this.updateMenu();
+        });
     }
 
     // Return to the start menu while preserving active progress or already-recorded results.
     openMenu() {
         if (this.mode === 'flight') this.suspend('left');
         else this.showScreen('menu');
+    }
+
+    // Yield to an explicitly continued or replaced flight in another tab without checkpointing stale state.
+    ownershipLost() {
+        this.showScreen('menu');
+        this.text('savedRunNote', this.store.getActive()
+            ? 'The flight recorder changed in another tab. Choose Continue to use its latest saved progress.'
+            : 'The flight recorder changed in another tab. Previous results remain available; start a new flight to continue.');
     }
 
     // Clamp user throttle changes and show the setting immediately, including while an engine is held.
@@ -297,17 +364,22 @@ export class FlightApp {
 
     // Require an explicit attach action and checkpoint a successful delivery immediately.
     attach() {
-        if (this.mode !== 'flight') return;
-        if (!tryDock(this.run)) {
-            this.message('Align upright within 32 m of the bay marker and slow below 5 m/s.', 5);
-            return;
-        }
-        if (this.run.status === 'won') this.showResults();
-        else {
-            this.store.saveActive(this.run);
-            this.message(`Payload delivered. Next: ${targetFor(this.run).body.name}. Apply thrust to detach.`, 8);
-        }
-        this.updateHud();
+        if (this.mode !== 'flight' || this.busy || this.resultsPending) return;
+        this.busy = true;
+        this.clearInput();
+        return this.mutateStore(() => {
+            if (!this.store.ownsActive(this.run.id)) return 'stale';
+            if (!tryDock(this.run)) return 'notReady';
+            if (this.run.status === 'won') return this.store.archive(this.run) ? 'won' : 'stale';
+            return this.store.saveActive(this.run) ? 'delivered' : 'stale';
+        }, result => {
+            this.busy = false;
+            if (result === 'stale') return this.ownershipLost();
+            if (result === 'notReady') this.message('Align upright within 32 m of the bay marker and slow below 5 m/s.', 5);
+            else if (result === 'won') this.renderResults();
+            else this.message(`Payload delivered. Next: ${targetFor(this.run).body.name}. Hold J to back away from the bay.`, 8);
+            this.updateHud();
+        });
     }
 
     // Explain significant flight transitions in a short non-blocking status message.
@@ -318,7 +390,18 @@ export class FlightApp {
 
     // Archive final state before presenting results so a refresh cannot lose the win or failure record.
     showResults() {
-        this.store.archive(this.run);
+        if (this.resultsPending) return;
+        this.resultsPending = true;
+        this.clearInput();
+        return this.mutateStore(() => this.store.ownsActive(this.run.id) && this.store.archive(this.run), saved => {
+            this.resultsPending = false;
+            if (!saved) return this.ownershipLost();
+            this.renderResults();
+        });
+    }
+
+    // Reveal terminal metrics only after the run result has been archived under the shared storage lock.
+    renderResults() {
         const won = this.run.status === 'won';
         this.text('resultEyebrow', won ? 'ALL PAYLOADS DELIVERED' : 'FLIGHT RECORDED / RUN LOST');
         this.text('resultTitle', won ? 'Journey complete.' : 'Signal lost.');
@@ -413,7 +496,7 @@ export class FlightApp {
         this.ui.throttleSlider.value = String(throttle);
         this.text('throttleValue', `${throttle}%`);
         this.ui.attitudeNeedle.style.transform = `rotate(${degrees}deg)`;
-        this.text('pilotNote', run.docked ? `Payload delivered. Next pad: ${target.body.name}. Burn or use RCS to detach.`
+        this.text('pilotNote', run.docked ? `Payload delivered. Next pad: ${target.body.name}. Use left RCS (J) to clear the receiver before accelerating.`
             : run.phase === 'planet' ? `Next: ${target.body.name}. Surface gravity ${target.body.gravity.toFixed(2)} m/s². Land upright at ≤ 8 m/s. Brake early.`
                 : near.altitude < 100 ? `Launch upright. Use at least ${Math.ceil(near.body.gravity / tuning.mainAcceleration * 100)}% throttle here; release to coast.`
                     : 'Approach the amber bay marker. Use I/J/K/L to cancel drift; align upright and press E.');
@@ -424,7 +507,7 @@ export class FlightApp {
         const dt = this.lastFrame === null ? 0 : Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1000));
         this.lastFrame = now;
         let input = {};
-        if (this.mode === 'flight' && this.page.visibilityState !== 'hidden') {
+        if (this.mode === 'flight' && !this.busy && !this.resultsPending && this.page.visibilityState !== 'hidden') {
             input = this.currentInput();
             this.accumulator += dt;
             const previousIndex = this.run.routeIndex;
@@ -438,10 +521,18 @@ export class FlightApp {
                 if (previousIndex !== this.run.routeIndex) {
                     this.message(`${routeBody(this.run.routeIndex).name} touchdown. Fuel received; next payload loaded.`, 8);
                 }
-                if (this.saveElapsed >= 1 || previousIndex !== this.run.routeIndex) {
+                if (!this.savePending && (this.saveElapsed >= 1 || previousIndex !== this.run.routeIndex)) {
                     this.run.updatedAt = Date.now();
-                    this.store.saveActive(this.run);
+                    const checkpointRun = this.run;
+                    this.savePending = true;
                     this.saveElapsed = 0;
+                    this.mutateStore(() => {
+                        if (checkpointRun.status !== 'active' || this.mode !== 'flight' || this.run !== checkpointRun) return true;
+                        return this.store.saveActive(checkpointRun);
+                    }, saved => {
+                        this.savePending = false;
+                        if (!saved) this.ownershipLost();
+                    });
                 }
                 if (this.run.elapsed > this.messageUntil) this.text('flightMessage', '');
             }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { FlightApp, formatTime } from '../public/scripts/rocketApp.mjs';
 import { RocketRenderer } from '../public/scripts/rocketRenderer.mjs';
+import { saveKey } from '../public/scripts/rocketStorage.mjs';
 import { createRun, routeBody, bodies, dockingPoint, tuning } from '../public/scripts/rocketPhysics.mjs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
@@ -65,7 +66,12 @@ function makePage() {
             const start = html.indexOf(`id="${this.id}"`);
             const end = html.indexOf('</section>', start);
             const content = html.slice(start, end);
-            return [...nodes.values()].filter(node => node.tagName === 'BUTTON' && !node.hidden && !node.disabled && content.includes(`id="${node.id}"`));
+            const buttons = [...nodes.values()].filter(node => node.tagName === 'BUTTON' && !node.hidden && !node.disabled && content.includes(`id="${node.id}"`));
+            if (content.includes('<summary>')) {
+                this.summaryElement ||= new Element('summary');
+                buttons.push(this.summaryElement);
+            }
+            return buttons;
         }
     }
     const fuelPanel = new Element();
@@ -98,9 +104,12 @@ function makeStorage() {
 }
 
 // Build the live application against the homepage fixture with a renderer that cannot start background work.
-function makeApp(storage = makeStorage()) {
+function makeApp(storage = makeStorage(), lockManager = { request(name, action) { return action(); } }) {
     const { page, nodes, controls } = makePage();
-    const browserWindow = { localStorage: storage, handlers: new Map(), addEventListener: page.addEventListener, fire: page.fire };
+    const browserWindow = {
+        localStorage: storage, handlers: new Map(), addEventListener: page.addEventListener, fire: page.fire,
+        navigator: { locks: lockManager }
+    };
     const renderer = { draw() {} };
     const app = new FlightApp({ page, browserWindow, renderer, autoStart: false });
     return { app, page, nodes, controls, browserWindow, storage };
@@ -222,6 +231,61 @@ test('last relay attachment shows the win screen and history safely exposes life
     assert.equal(nodes.get('historyRows').children.length, 1);
     const detail = nodes.get('historyRows').children[0].children[1];
     assert.ok(detail.children[1].children.some(item => item.textContent.includes('Journey completed')));
+});
+
+test('dialogs contain Tab navigation and focused engine buttons support keyboard holds', () => {
+    const { app, page, nodes } = makeApp();
+    let prevented = false;
+    page.fire('keydown', { code: 'Tab', preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(page.activeElement, nodes.get('startButton'));
+    page.fire('keydown', { code: 'Tab', shiftKey: true });
+    assert.equal(page.activeElement.tagName, 'SUMMARY');
+    page.fire('keydown', { code: 'Tab' });
+    assert.equal(page.activeElement, nodes.get('startButton'));
+    nodes.get('startButton').fire('click');
+    nodes.get('burnButton').focus();
+    nodes.get('burnButton').fire('keydown', { code: 'Enter' });
+    assert.equal(app.currentInput().burn, true);
+    page.fire('keyup', { code: 'Enter' });
+    assert.equal(app.currentInput().burn, false);
+    app.openMenu();
+    nodes.get('startButton').fire('click');
+    page.fire('keydown', { code: 'Escape' });
+    assert.equal(app.mode, 'menu');
+});
+
+test('continuing a flight in another tab suspends the old tab without overwriting progress', () => {
+    const first = makeApp();
+    first.nodes.get('startButton').fire('click');
+    const second = makeApp(first.storage);
+    second.nodes.get('continueButton').fire('click');
+    const saved = second.app.store.getActive();
+    first.browserWindow.fire('storage', { key: saveKey });
+    assert.equal(first.app.mode, 'menu');
+    assert.equal(first.app.store.getActive().id, saved.id);
+    assert.equal(first.app.store.getActive().events.at(-1).type, 'returned');
+    assert.match(first.nodes.get('savedRunNote').textContent, /another tab/);
+});
+
+test('asynchronous persistence completes transitions and never starts a flight while the page is hidden', async () => {
+    const locks = { request(name, action) { return Promise.resolve().then(action); } };
+    const { app, page, nodes } = makeApp(makeStorage(), locks);
+    const starting = app.newRun();
+    page.visibilityState = 'hidden';
+    await starting;
+    assert.equal(app.mode, 'menu');
+    assert.equal(app.store.getActive().events.at(-1).type, 'suspended');
+    page.visibilityState = 'visible';
+    await app.continueRun();
+    assert.equal(app.mode, 'flight');
+    app.run.fuel = 0.001;
+    nodes.get('burnButton').fire('pointerdown');
+    flyFor(app, 0.1);
+    assert.equal(app.resultsPending, true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.mode, 'results');
+    assert.equal(app.store.getHistory()[0].status, 'lost');
 });
 
 test('renderer exercises all planet and atmosphere paths with finite canvas coordinates', () => {

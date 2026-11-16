@@ -5,18 +5,26 @@
 Run with Node.js 22 or newer:
 
 ```sh
-node --test tests/rocket.test.mjs tests/rocketApp.test.mjs
+node --test tests/*.test.mjs
 npm --prefix functions test
 ```
 
 - Physics tests cover destination order, gravity falloff, Earth/Jupiter launch,
   fuel use and depletion, unsafe impacts, docking gates, payload transitions,
-  one-time refueling, all ten deliveries, and alignment after a stationary landing.
+  one-time refueling, all ten deliveries, alignment after a stationary landing,
+  station structure impacts, and fast glancing collisions.
+- A complete-route controller test uses only throttle, translation thrusters,
+  and the attach action. It verifies that all ten deliveries are reachable with
+  cumulative fuel and automatic pad refueling; no position, velocity, or fuel
+  shortcuts are allowed. This is a feasibility check, not a measure of human difficulty.
 - Storage tests cover refresh recovery, results, duplicate archival, malformed
-  saves, and blocked storage. Expected warning logs exercise failure paths.
+  saves, blocked storage, semantic progression invariants, and stale-tab checkpoint
+  rejection, including an interleaved takeover/archival under a shared lock.
+  Expected warning logs exercise failure paths.
 - App tests parse IDs and controls from the actual homepage, then exercise its
   event handlers with a small DOM fixture: launch, mixed controls, suspension,
-  offline time exclusion, Continue, New Flight confirmation, retry, win, and history.
+  offline time exclusion, Continue, New Flight confirmation, retry, win, history,
+  modal keyboard focus, and transfer of flight control between tabs.
 - Renderer tests exercise canvas drawing paths and reject non-finite coordinates.
   They verify execution, not visual composition.
 - Existing analytics tests cover strict ingestion, retry/deduplication behavior,
@@ -44,7 +52,7 @@ implementation. Automated DOM/canvas fixtures do not replace visual playtesting.
    Verify that I/J/K/L change velocity in world directions and use less fuel.
 3. Approach the Earth relay's amber bay marker. Brake, align upright, and press E
    when all three checks are green. Confirm one delivery and a Moon pad target.
-4. Detach and fly to the Moon. Land upright at ≤ 8 m/s. Confirm automatic refuel,
+4. Use left RCS (J) to clear the receiver, then fly to the Moon. Land upright at ≤ 8 m/s. Confirm automatic refuel,
    new payload, Moon relay target, and changed gravity. Off-pad contact must not
    refuel; the same route stop must not grant fuel twice.
 5. Check the full route, including the Earth return. Inspect floating pads,
@@ -73,3 +81,18 @@ implementation. Automated DOM/canvas fixtures do not replace visual playtesting.
 - Production analytics collection remains disabled pending the existing App Check
   and deployment verification. Game lifecycle records are local, not backend events.
 - Human flight-feel and visual testing remain necessary when a browser is available.
+
+## Implementation verification
+
+Verified on November 15, 2026, with Node.js 26 and Java 21:
+
+- 29 game tests passed, including asynchronous save transactions and a full
+  control-only journey (1,957.9 simulated seconds, 96.0 fuel remaining).
+- 29 analytics tests passed with Auth, Functions, Firestore, and Hosting emulators;
+  no tests were skipped in that emulator run. Temporary alternate Firestore,
+  Auth, and Functions ports avoided an existing service on port 8080. The tracked
+  Firebase configuration was unchanged. The emulator used the host Node.js runtime;
+  the configured deployment runtime remains Node.js 22.
+- Static HTTP checks verified the homepage, linked assets, and JavaScript module
+  MIME types. HTML tag nesting, JavaScript syntax, and Git whitespace checks passed.
+- No in-app browser connection was available; no visual browser pass is claimed.

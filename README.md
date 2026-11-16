@@ -33,8 +33,8 @@ impact speed or an empty tank ends the run; Retry starts over on Earth.
 
 Use the amber target indicator and navigation map. Land within ±12° upright and
 at ≤ 8 m/s. Dock within 32 m of the bay marker, at ≤ 5 m/s and ±12° upright. Your
-bay is on the rocket's right side. Burn or use a translation thruster to detach
-after delivery. Gas giants have floating pads and reduced atmospheric visibility;
+bay is on the rocket's right side. After delivery, use left RCS (J) to detach and
+back away from the receiver before accelerating. Gas giants have floating pads and reduced atmospheric visibility;
 Jupiter also has a small lateral wind. Distances and planet sizes are arcade scale.
 
 ## Saves and flight records
@@ -53,6 +53,12 @@ devices. Clearing browser data removes them. Blocked or full storage produces a
 visible warning and falls back to memory. Unexpected termination can lose up to
 the last second of progress; shutdown events are best effort.
 
+Use a current browser over HTTPS or localhost. Safe persistent saving uses browser
+Web Locks; browsers without that feature fall back to memory with a warning.
+
+Continue transfers control of the saved flight to the current tab. Older tabs
+return to the menu rather than overwriting newer progress or completed results.
+
 See [FLOW.md](FLOW.md) for player flow and [assumptions.md](assumptions.md) for
 tuning and implementation decisions to review. Physics values and destination
 data are centralized in `public/scripts/rocketPhysics.mjs`.
@@ -60,7 +66,7 @@ data are centralized in `public/scripts/rocketPhysics.mjs`.
 ## Verify the game
 
 ```sh
-node --test tests/rocket.test.mjs tests/rocketApp.test.mjs
+node --test tests/*.test.mjs
 npm --prefix functions test
 ```
 

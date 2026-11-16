@@ -21,6 +21,20 @@ export const bodies = Object.freeze([
 
 export const route = Object.freeze(['earth', 'moon', 'venus', 'mercury', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']);
 
+export const stationGeometry = Object.freeze([
+    { name: 'panelTop', left: -28, right: 28, top: -74, bottom: -32, color: '#223b53' },
+    { name: 'panelBottom', left: -28, right: 28, top: 32, bottom: 74, color: '#223b53' },
+    { name: 'strut', left: -6, right: 6, top: -36, bottom: 36, color: '#75868b' },
+    { name: 'hull', left: -30, right: 30, top: -20, bottom: 20, color: '#c6cebf' },
+    { name: 'capTop', left: -18, right: 18, top: -28, bottom: -20, color: '#96ada9' },
+    { name: 'capBottom', left: -18, right: 18, top: 20, bottom: 28, color: '#96ada9' },
+    { name: 'portTop', left: -44, right: -30, top: -14, bottom: -8, color: '#dda456' },
+    { name: 'portBottom', left: -44, right: -30, top: 8, bottom: 14, color: '#dda456' },
+    { name: 'portLight', left: -44, right: -38, top: -6, bottom: 6, color: '#81ccb4' },
+    { name: 'antennaArm', left: 30, right: 50, top: -2, bottom: 2, color: '#b4c2c0' },
+    { name: 'antenna', left: 48, right: 52, top: -16, bottom: 16, color: '#b4c2c0' }
+].map(part => Object.freeze(part)));
+
 // Keep angles signed so upright landing and docking tolerances work across complete turns.
 export function normalizeAngle(angle) {
     return Math.atan2(Math.sin(angle), Math.cos(angle));
@@ -79,10 +93,12 @@ export function gravityAt(x, y) {
     for (const body of bodies) {
         const dx = body.x - x;
         const dy = body.y - y;
-        const distance = Math.max(body.radius, Math.hypot(dx, dy));
-        const altitude = distance - body.radius;
+        const distance = Math.max(0.001, Math.hypot(dx, dy));
+        const surfaceRadius = body.radius + tuning.shipRadius;
+        const gravityDistance = Math.max(surfaceRadius, distance);
+        const altitude = gravityDistance - surfaceRadius;
         const fade = Math.max(0, Math.min(1, (tuning.influenceAltitude - altitude) / 300));
-        const acceleration = body.gravity * (body.radius / distance) ** 2 * fade;
+        const acceleration = body.gravity * (surfaceRadius / gravityDistance) ** 2 * fade;
         ax += dx / distance * acceleration;
         ay += dy / distance * acceleration;
     }
@@ -97,7 +113,7 @@ export function dockingStatus(run) {
     const angle = Math.abs(normalizeAngle(run.angle - target.angle));
     return {
         distance, speed, angle,
-        ready: run.status === 'active' && run.phase === 'station' && !run.docked
+        ready: run.status === 'active' && run.phase === 'station' && run.payload && !run.docked
             && run.fuel > 0 && distance <= tuning.dockingDistance
             && speed <= tuning.dockingSpeed && angle <= tuning.dockingAngle
     };
@@ -140,12 +156,30 @@ export function tryDock(run) {
 }
 
 // Settle low-speed contact and service only the next expected destination, once per route visit.
-function resolveSurface(run, body, resting = false) {
-    const dx = run.x - body.x;
-    const dy = run.y - body.y;
-    const distance = Math.hypot(dx, dy);
+function resolveSurface(run, body, resting = false, previous = null) {
+    let dx = run.x - body.x;
+    let dy = run.y - body.y;
+    let distance = Math.hypot(dx, dy);
     const surfaceDistance = body.radius + tuning.shipRadius;
-    if (distance > surfaceDistance && !resting) return;
+    if (distance > surfaceDistance && !resting) {
+        if (!previous) return;
+        const sx = run.x - previous.x;
+        const sy = run.y - previous.y;
+        const px = previous.x - body.x;
+        const py = previous.y - body.y;
+        const a = sx * sx + sy * sy;
+        const b = 2 * (px * sx + py * sy);
+        const c = px * px + py * py - surfaceDistance * surfaceDistance;
+        const discriminant = b * b - 4 * a * c;
+        if (a === 0 || c <= 0 || discriminant < 0) return;
+        const fraction = (-b - Math.sqrt(discriminant)) / (2 * a);
+        if (fraction < 0 || fraction > 1) return;
+        run.x = previous.x + sx * fraction;
+        run.y = previous.y + sy * fraction;
+        dx = run.x - body.x;
+        dy = run.y - body.y;
+        distance = Math.hypot(dx, dy);
+    }
     const speed = Math.hypot(run.vx, run.vy);
     if (speed > tuning.safeLandingSpeed) {
         finishRun(run, 'lost', `Impact on ${body.name} at ${speed.toFixed(1)} m/s.`);
@@ -170,6 +204,76 @@ function resolveSurface(run, body, resting = false) {
             run.serviced.push(nextIndex);
         }
         recordRunEvent(run, 'landedAndRefueled');
+    }
+}
+
+// Sweep the whole movement segment through an expanded station part so fast glancing hits cannot tunnel.
+function segmentBoxHit(previous, current, box) {
+    const dx = current.x - previous.x;
+    const dy = current.y - previous.y;
+    if (previous.x >= box.left && previous.x <= box.right && previous.y >= box.top && previous.y <= box.bottom) {
+        const faces = [
+            { distance: previous.x - box.left, x: box.left, y: previous.y, nx: -1, ny: 0 },
+            { distance: box.right - previous.x, x: box.right, y: previous.y, nx: 1, ny: 0 },
+            { distance: previous.y - box.top, x: previous.x, y: box.top, nx: 0, ny: -1 },
+            { distance: box.bottom - previous.y, x: previous.x, y: box.bottom, nx: 0, ny: 1 }
+        ];
+        return { ...faces.reduce((nearest, face) => face.distance < nearest.distance ? face : nearest), fraction: 0 };
+    }
+    let entry = 0;
+    let exit = 1;
+    let nx = 0;
+    let ny = 0;
+    for (const axis of ['x', 'y']) {
+        const delta = axis === 'x' ? dx : dy;
+        const origin = previous[axis];
+        const minimum = axis === 'x' ? box.left : box.top;
+        const maximum = axis === 'x' ? box.right : box.bottom;
+        if (Math.abs(delta) < 1e-12) {
+            if (origin < minimum || origin > maximum) return null;
+            continue;
+        }
+        const first = Math.min((minimum - origin) / delta, (maximum - origin) / delta);
+        const last = Math.max((minimum - origin) / delta, (maximum - origin) / delta);
+        if (first > entry) {
+            entry = first;
+            nx = axis === 'x' ? -Math.sign(delta) : 0;
+            ny = axis === 'y' ? -Math.sign(delta) : 0;
+        }
+        exit = Math.min(exit, last);
+        if (entry > exit) return null;
+    }
+    if (exit < 0 || entry > 1) return null;
+    return { fraction: entry, x: previous.x + dx * entry, y: previous.y + dy * entry, nx, ny };
+}
+
+// Match collisions to the drawn hull, panels, bay, and antenna; soft contacts push away instead of sticking.
+function resolveStation(run, body, previous) {
+    const station = stationFor(body);
+    if (Math.max(previous.x, run.x) < station.x - 100 || Math.min(previous.x, run.x) > station.x + 100
+        || Math.max(previous.y, run.y) < station.y - 100 || Math.min(previous.y, run.y) > station.y + 100) return;
+    let firstHit = null;
+    for (const part of stationGeometry) {
+        const hit = segmentBoxHit(previous, run, {
+            left: station.x + part.left - tuning.shipRadius,
+            right: station.x + part.right + tuning.shipRadius,
+            top: station.y + part.top - tuning.shipRadius,
+            bottom: station.y + part.bottom + tuning.shipRadius
+        });
+        if (hit && (!firstHit || hit.fraction < firstHit.fraction)) firstHit = hit;
+    }
+    if (!firstHit) return;
+    const speed = Math.hypot(run.vx, run.vy);
+    if (speed > tuning.safeLandingSpeed) {
+        finishRun(run, 'lost', `Station collision at ${speed.toFixed(1)} m/s.`);
+        return;
+    }
+    run.x = firstHit.x + firstHit.nx * 0.01;
+    run.y = firstHit.y + firstHit.ny * 0.01;
+    const incoming = run.vx * firstHit.nx + run.vy * firstHit.ny;
+    if (incoming < 0) {
+        run.vx -= incoming * 1.3 * firstHit.nx;
+        run.vy -= incoming * 1.3 * firstHit.ny;
     }
 }
 
@@ -218,25 +322,13 @@ export function stepRun(run, input = {}, dt = tuning.fixedStep) {
     }
     run.vx += ax * dt;
     run.vy += ay * dt;
+    const previous = { x: run.x, y: run.y };
     run.x += run.vx * dt;
     run.y += run.vy * dt;
     for (const body of bodies) {
-        resolveSurface(run, body);
+        resolveSurface(run, body, false, previous);
         if (run.status !== 'active') return;
-        const station = stationFor(body);
-        if (Math.hypot(run.x - station.x, run.y - station.y) < 34) {
-            const speed = Math.hypot(run.vx, run.vy);
-            if (speed > tuning.safeLandingSpeed) {
-                finishRun(run, 'lost', `Station collision at ${speed.toFixed(1)} m/s.`);
-                return;
-            }
-            const dx = run.x - station.x;
-            const dy = run.y - station.y;
-            const distance = Math.max(0.001, Math.hypot(dx, dy));
-            run.x = station.x + (dx / distance || -1) * 35;
-            run.y = station.y + dy / distance * 35;
-            run.vx *= -0.3;
-            run.vy *= -0.3;
-        }
+        resolveStation(run, body, previous);
+        if (run.status !== 'active') return;
     }
 }
