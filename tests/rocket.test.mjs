@@ -125,6 +125,18 @@ test('complete all ten deliveries through actual docking and landing transitions
     assert.equal(isValidRun(run), true);
 });
 
+test('a stationary rocket can align on the next pad and receive service without burning again', () => {
+    const run = createRun();
+    const moon = routeBody(1);
+    Object.assign(run, { phase: 'planet', payload: false, delivered: 1, fuel: 40,
+        x: moon.x, y: moon.y - moon.radius - tuning.shipRadius,
+        landedOn: 'moon', angle: 0.3 });
+    for (let index = 0; index < 10; index += 1) stepRun(run, { rotate: -1 });
+    assert.equal(run.routeIndex, 1);
+    assert.equal(run.payload, true);
+    assert.ok(run.fuel > 73);
+});
+
 test('saved progress resumes all physics state without adding time away and results survive reload', () => {
     const storage = memoryStorage();
     const store = new RunStore(storage);

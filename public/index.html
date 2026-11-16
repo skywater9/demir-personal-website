@@ -1,36 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Static Website</title>
+    <meta name="theme-color" content="#101921">
+    <meta name="description" content="Orbital Freight: a pixel art rocket flight game. Launch, dock, deliver, and cross the solar system on a limited fuel supply.">
+    <title>Orbital Freight — Rocket flight game</title>
     <link rel="stylesheet" href="style.css">
+    <script type="module" src="scripts/rocketApp.mjs"></script>
+    <script type="module" src="scripts/analytics.js"></script>
+    <script type="module" src="scripts/siteAnalytics.js"></script>
 </head>
-
 <body>
-    <section id="header" class="page-section" data-analytics-id="headerClick" data-analytics-section="header">
-        <h1>Welcome to Demir's Website</h1>
-        <p>Hello! I'm Demir and this is my website.</p>
-    </section>
+    <header class="topbar">
+        <a class="wordmark" href="./" aria-label="Orbital Freight home">
+            <svg width="24" height="30" viewBox="0 0 16 20" aria-hidden="true"><path fill="currentColor" d="M7 0h2v2h2v12H5V2h2zM3 11h2v6H3zm8 0h2v6h-2z"/><path fill="#e8ac62" d="M7 14h2v6H7z"/><path fill="#101921" d="M7 4h2v3H7z"/></svg>
+            <span>ORBITAL<span class="wordmark-sub">FREIGHT / FLIGHT SYSTEMS</span></span>
+        </a>
+        <div class="topbar-status"><span class="status-light"></span><span id="systemStatus">AWAITING PILOT</span><span class="separator">/</span><span>LOCAL FLIGHT RECORDER</span></div>
+        <button id="menuButton" class="quiet-button" type="button" data-analytics-id="gameMenu">MENU <kbd>ESC</kbd></button>
+    </header>
+    <main id="gameShell" class="game-shell" data-analytics-section="game">
+        <section class="viewport" aria-label="Flight view">
+            <canvas id="flightCanvas" aria-label="Pixel art rocket flight scene. Use cockpit instruments and the destination indicator for navigation.">Your browser needs canvas support to display this game.</canvas>
+            <div class="view-label"><span class="status-light"></span> FLIGHT CAMERA <span class="muted">/ 2D INERTIAL VIEW</span></div>
+            <div class="objective-strip"><span class="eyebrow" id="objectiveType">CURRENT OBJECTIVE / RELAY</span><strong id="objectiveName">EARTH RELAY</strong><span id="objectiveDistance">671 m</span></div>
+            <div class="viewport-map"><div class="panel-heading map-heading"><span>02 / NAVIGATION</span><span id="routePosition">STOP 01 / 10</span></div>
+            <canvas id="mapCanvas" width="268" height="55" aria-label="Solar system navigation map. Highlighted destination is the current target."></canvas>
+            <div class="navigation-caption"><span class="legend-dot"></span> TARGET <span class="legend-dot ship-dot"></span> SHIP <span class="muted">L = MOON</span></div></div>
+            <div class="view-bottom"><span id="environmentLabel">EARTH / SURFACE OPERATIONS</span><span>WORLD DISTANCES NOT TO SCALE</span></div>
+            <p id="flightMessage" class="flight-message" role="status" aria-live="polite"></p>
+        </section>
+        <aside id="instrumentPanel" class="instruments" data-analytics-section="cockpit" aria-label="Rocket instruments">
+            <div class="panel-heading"><span>01 / TELEMETRY</span><span class="status-light"></span></div>
+            <div class="fuel-panel"><div class="readout-label">PROPELLANT <span id="fuelState">NOMINAL</span></div><div class="fuel-number"><strong id="fuelValue">100.0</strong><span>%</span></div><div class="fuel-track" role="progressbar" aria-label="Remaining fuel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" id="fuelGauge"><span id="fuelFill"></span></div><div class="small muted">MAIN + ATTITUDE + TRANSLATION</div></div>
+            <dl class="telemetry-grid">
+                <div><dt>FLIGHT TIME</dt><dd id="timeValue">00:00.0</dd></div><div><dt>DELIVERIES</dt><dd><span id="deliveryValue">00</span><span class="unit"> / 10</span></dd></div>
+                <div><dt>ALTITUDE <span class="unit">m</span></dt><dd id="altitudeValue">0.0</dd></div><div><dt>RELAY DIST. <span class="unit">m</span></dt><dd id="stationValue">—</dd></div>
+                <div><dt>VELOCITY <span class="unit">m/s</span></dt><dd id="speedValue">0.0</dd></div><div><dt>GRAVITY <span class="unit">m/s²</span></dt><dd id="gravityValue">8.58</dd></div>
+                <div><dt>ROTATION <span class="unit">deg</span></dt><dd id="rotationValue">0.0</dd></div><div><dt>PAYLOAD</dt><dd class="payload-value" id="payloadValue">LOADED</dd></div>
+            </dl>
+            <div class="vector-readout"><span>Vx <b id="vxValue">+0.0</b></span><span>Vy <b id="vyValue">+0.0</b></span><span>+Y DOWN</span></div>
 
-    <section id="section2" class="page-section" data-analytics-id="counterIncrement" data-analytics-section="clickCounter">
-        <h1>Click Me!</h1>
-        <p>Count: <span id="clickCount">-</span></p>
-        <button type="button" id="resetClickCount" data-analytics-id="counterReset">Reset Click Count</button>
-    </section>
 
-    <section id="section3" class="page-section" data-analytics-id="gameStart" data-analytics-section="game">
-        <h1>START GAME</h1>
-        <p>Starts the game</p>
-    </section>
-
-    <section id="counter" class="page-section" data-analytics-section="visitCounter">
-        <h1>Counter</h1>
-        <p>Count: <span id="count">0</span></p>
+            <p class="pilot-note" id="pilotNote">Launch upright. Feather the main engine, then use small thrusters near the relay.</p>
+        </aside>
+        <section id="controlPanel" class="control-panel" data-analytics-section="cockpit" aria-label="Rocket control panel">
+            <div class="control-group propulsion-controls"><div class="panel-heading">03 / MAIN PROPULSION</div><div class="engine-controls"><button type="button" id="burnButton" class="burn-button hold-button" data-control="burn" data-analytics-id="gameBurn">▲<span>HOLD TO BURN</span><kbd>SPACE / ↑</kbd></button><div class="throttle-control"><label for="throttleSlider">THROTTLE <output id="throttleValue" for="throttleSlider">85%</output></label><input id="throttleSlider" type="range" min="0" max="100" step="1" value="85" data-analytics-id="gameThrottle"><div class="throttle-buttons"><button type="button" id="throttleDownButton" data-analytics-id="gameThrottleDown" aria-label="Decrease throttle">− <kbd>S</kbd></button><button type="button" id="throttleUpButton" data-analytics-id="gameThrottleUp" aria-label="Increase throttle">+ <kbd>W</kbd></button></div></div></div></div>
+            <div class="control-group attitude-controls"><div class="panel-heading">04 / ATTITUDE</div><div class="rotation-buttons"><button type="button" class="hold-button" data-control="rotateLeft" data-analytics-id="gameRotateLeft" aria-label="Rotate counterclockwise">↶<kbd>A / ←</kbd></button><div class="attitude-display" aria-hidden="true"><span id="attitudeNeedle">↑</span><span>UPRIGHT 0°</span></div><button type="button" class="hold-button" data-control="rotateRight" data-analytics-id="gameRotateRight" aria-label="Rotate clockwise">↷<kbd>D / →</kbd></button></div></div>
+            <div class="control-group translation-controls"><div class="panel-heading">05 / TRANSLATION <span class="muted">LOW FUEL USE</span></div><div class="rcs-buttons"><button type="button" class="hold-button rcs-up" data-control="rcsUp" data-analytics-id="gameRcsUp" aria-label="Thrust upward">↑ <kbd>I</kbd></button><button type="button" class="hold-button rcs-left" data-control="rcsLeft" data-analytics-id="gameRcsLeft" aria-label="Thrust left">← <kbd>J</kbd></button><span class="rcs-center" aria-hidden="true">✛</span><button type="button" class="hold-button rcs-right" data-control="rcsRight" data-analytics-id="gameRcsRight" aria-label="Thrust right">→ <kbd>L</kbd></button><button type="button" class="hold-button rcs-down" data-control="rcsDown" data-analytics-id="gameRcsDown" aria-label="Thrust downward">↓ <kbd>K</kbd></button></div></div>
+            <div class="control-group dock-panel"><div class="readout-label">PAYLOAD BAY <span id="dockState">OUT OF RANGE</span></div><div class="dock-checks"><span id="dockRangeCheck">DIST ≤ 32 m</span><span id="dockSpeedCheck">SPD ≤ 5 m/s</span><span id="dockAngleCheck">ROT ± 12°</span></div><button id="dockButton" type="button" class="dock-button" data-analytics-id="gameDock">ATTACH &amp; DELIVER <kbd>E</kbd></button></div>
+        </section>
+        <div id="menuOverlay" class="overlay menu-overlay" data-analytics-section="menu">
+            <section id="mainMenu" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="menuTitle" tabindex="-1">
+                <div class="eyebrow menu-kicker"><span class="status-light"></span> INTERPLANETARY CARGO OPERATIONS</div>
+                <h1 id="menuTitle">ORBITAL<br><span>FREIGHT</span><span class="title-square" aria-hidden="true"></span></h1>
+                <p class="menu-intro">Ten deliveries. One continuous flight.<br>Make every burn count.</p>
+                <div class="menu-objectives"><span>01 <b>LAUNCH</b></span><i>→</i><span>02 <b>DOCK</b></span><i>→</i><span>03 <b>DELIVER</b></span></div>
+                <p class="menu-description">Carry payloads from planetary landing pads to orbital relays. Cross the solar system, adapt to changing gravity, and keep fuel in the tank.</p>
+                <div class="menu-actions"><button id="continueButton" class="primary-button" type="button" data-analytics-id="gameContinue" hidden>CONTINUE FLIGHT <span>→</span></button><button id="startButton" class="primary-button" type="button" data-analytics-id="gameStart">START FLIGHT <span>→</span></button><button id="historyButton" class="secondary-button" type="button" data-analytics-id="gameHistory">FLIGHT RECORDS <span id="historyCount">00</span></button></div>
+                <p id="savedRunNote" class="saved-note">Start on Earth with a full tank and your first payload.</p>
+                <details class="manual"><summary>PRE-FLIGHT BRIEFING / CONTROLS</summary><div><p><kbd>SPACE / ↑</kbd> Hold main engine. <kbd>W / S</kbd> Adjust throttle.<br><kbd>A / D / ← / →</kbd> Rotate. <kbd>I J K L</kbd> Small world-direction thrusters.<br><kbd>E</kbd> Attach when bay checks are green. <kbd>ESC</kbd> Save and menu.</p><p>Land upright on the next pad at ≤ 8 m/s to receive fuel and payload. Near a relay, slow to ≤ 5 m/s and align within ±12°. Your bay is on the rocket’s right side. After delivering, burn or use a small thruster to detach.</p><p>Refueling is limited to one grant per route stop. Empty fuel or a high-speed collision ends the run. Leaving the page suspends and saves your flight.</p></div></details>
+                <div class="menu-footer"><span>EARTH → MOON → THE OUTER PLANETS</span><span>PIXEL FLIGHT / V1.0</span></div>
+            </section>
+            <section id="confirmPanel" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="-1" hidden><span class="eyebrow">FLIGHT RECORDER</span><h2 id="confirmTitle">Start over on Earth?</h2><p>Your unfinished flight will be recorded as abandoned. Previous flight records will remain available.</p><div class="stack-actions"><button type="button" id="confirmNewButton" class="primary-button" data-analytics-id="gameConfirmNewRun">CONFIRM NEW FLIGHT</button><button type="button" id="cancelNewButton" class="secondary-button" data-analytics-id="gameCancelNewRun">KEEP CURRENT FLIGHT</button></div></section>
+            <section id="historyPanel" class="history-card" role="dialog" aria-modal="true" aria-labelledby="historyTitle" tabindex="-1" data-analytics-section="history" hidden><div class="history-header"><div><span class="eyebrow">LOCAL FLIGHT RECORDER</span><h2 id="historyTitle">Flight records</h2></div><button type="button" id="historyBackButton" class="secondary-button" data-analytics-id="gameHistoryBack">← MENU</button></div><p class="muted">Saved in this browser. Expand a flight to see departures, returns, and deliveries.</p><div id="historyRows" class="history-rows"></div><p class="small muted">Up to 100 previous flights are retained. The unfinished flight is shown separately.</p></section>
+            <section id="resultPanel" class="modal-card result-card" role="dialog" aria-modal="true" aria-labelledby="resultTitle" tabindex="-1" data-analytics-section="results" hidden><span id="resultEyebrow" class="eyebrow">FLIGHT ENDED</span><h2 id="resultTitle">Signal lost.</h2><p id="resultReason"></p><dl class="result-stats"><div><dt>FLIGHT TIME</dt><dd id="resultTime">00:00.0</dd></div><div><dt>FUEL REMAINING</dt><dd id="resultFuel">0.0%</dd></div><div><dt>PAYLOADS DELIVERED</dt><dd id="resultDeliveries">0 / 10</dd></div><div><dt>LAST DESTINATION</dt><dd id="resultPlanet">EARTH</dd></div></dl><div class="stack-actions"><button id="retryButton" type="button" class="primary-button" data-analytics-id="gameRetry">RETRY FROM EARTH <span>→</span></button><button id="resultMenuButton" type="button" class="secondary-button" data-analytics-id="gameMenu">RETURN TO MENU</button></div></section>
+        </div>
+    </main>
+    <footer class="page-footer"><span>ORBITAL FREIGHT <span class="muted">/ ARCADE PHYSICS. REAL INERTIA.</span></span><span id="saveStatus">AUTOSAVE / LOCAL</span></footer>
+    <p id="storageWarning" class="storage-warning" role="alert" hidden></p>
+    <noscript><div class="noscript">Orbital Freight needs JavaScript to run. Enable JavaScript, then reload this page.</div></noscript>
 </body>
-
-<script type="module" src="scripts/analytics.js"></script>
-<script type="module" src="scripts/main.js"></script>
-
 </html>

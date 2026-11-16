@@ -1,7 +1,13 @@
 const maxSessionMs = 24 * 60 * 60 * 1000;
 const maxClockSkewMs = 5 * 60 * 1000;
-const sectionIds = ['header', 'clickCounter', 'game', 'visitCounter'];
-const elementIds = ['headerClick', 'counterIncrement', 'counterReset', 'gameStart'];
+const sectionIds = ['header', 'clickCounter', 'game', 'visitCounter', 'menu', 'cockpit', 'history', 'results'];
+const elementIds = [
+    'headerClick', 'counterIncrement', 'counterReset', 'gameStart', 'gameContinue',
+    'gameNewRun', 'gameConfirmNewRun', 'gameCancelNewRun', 'gameMenu', 'gameRetry',
+    'gameHistory', 'gameHistoryBack', 'gameDock', 'gameThrottleUp', 'gameThrottleDown',
+    'gameRotateLeft', 'gameRotateRight', 'gameRcsUp', 'gameRcsDown', 'gameRcsLeft',
+    'gameRcsRight', 'gameResume', 'gameBurn', 'gameThrottle'
+];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // Reject unknown fields so unplanned personal data cannot enter analytics documents.
@@ -119,7 +125,7 @@ function validateBatch(batch, now = Date.now()) {
         requireKeys(event, ['eventName', 'sessionId', 'pagePath', 'layoutVersion',
             'recordedAt', 'elapsedMs', 'sequence', 'properties']);
         if (event.sessionId !== batch.session.sessionId || !['/', '/index.html'].includes(event.pagePath)
-            || event.layoutVersion !== 'homepage-v1' || !Number.isSafeInteger(event.sequence)
+            || !['homepage-v1', 'homepage-v2'].includes(event.layoutVersion) || !Number.isSafeInteger(event.sequence)
             || event.sequence <= previousSequence || event.sequence > 1000000) {
             throw new Error('Invalid analytics event context.');
         }

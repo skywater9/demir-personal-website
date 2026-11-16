@@ -7,6 +7,18 @@ const query = new URLSearchParams(window.location.search);
 const debugEnabled = query.get('analyticsDebug') === '1';
 const collectionEnabled = !debugEnabled && (analyticsConfig.collectionEnabled
     || (useFirebaseEmulators && query.get('analyticsCollect') === '1'));
+const sectionIds = new Set(['header', 'clickCounter', 'game', 'visitCounter', 'menu', 'cockpit', 'history', 'results']);
+const elementIds = new Set([
+    'headerClick', 'counterIncrement', 'counterReset', 'gameStart', 'gameContinue',
+    'gameNewRun', 'gameConfirmNewRun', 'gameCancelNewRun', 'gameMenu', 'gameRetry',
+    'gameHistory', 'gameHistoryBack', 'gameDock', 'gameThrottleUp', 'gameThrottleDown',
+    'gameRotateLeft', 'gameRotateRight', 'gameRcsUp', 'gameRcsDown', 'gameRcsLeft',
+    'gameRcsRight', 'gameResume', 'gameBurn', 'gameThrottle'
+]);
+const heldControlIds = new Set([
+    'gameThrottleUp', 'gameThrottleDown', 'gameRotateLeft', 'gameRotateRight',
+    'gameRcsUp', 'gameRcsDown', 'gameRcsLeft', 'gameRcsRight', 'gameBurn', 'gameThrottle'
+]);
 
 if (debugEnabled || collectionEnabled) {
     startAnalyticsDebug();
@@ -15,7 +27,7 @@ if (debugEnabled || collectionEnabled) {
 // Track explicit interactions locally and optionally hand snapshots to the private collector.
 function startAnalyticsDebug() {
     const config = {
-        layoutVersion: 'homepage-v1',
+        layoutVersion: 'homepage-v2',
         checkpointMs: 15000,
         engagedTimeoutMs: 60000,
         sessionTimeoutMs: 30 * 60 * 1000,
@@ -25,6 +37,7 @@ function startAnalyticsDebug() {
     const storageKey = collectionEnabled ? 'websiteAnalyticsSession' : 'websiteAnalyticsDebugSession';
     const events = [];
     const visibleSections = new Set();
+    const visibleSectionTargets = new Map();
     const scrollMilestones = new Set();
     const transport = collectionEnabled ? createAnalyticsTransport(useFirebaseEmulators) : null;
     let nextSequence = 1;
@@ -33,6 +46,7 @@ function startAnalyticsDebug() {
     let lastCheckpoint = performance.now();
     let lastInput = lastCheckpoint - Math.max(0, Date.now() - session.lastActivityAt);
     let pageVisible = document.visibilityState === 'visible';
+    let pointerActivation = null;
 
     // Start a fresh anonymous session without storing a persistent visitor identity.
     function createSession() {
@@ -56,12 +70,20 @@ function startAnalyticsDebug() {
                 && Number.isFinite(saved.startedAt) && saved.startedAt <= Date.now()
                 && Date.now() - saved.startedAt < config.maxSessionMs
                 && Number.isFinite(saved.lastActivityAt) && saved.lastActivityAt <= Date.now()
+                && saved.lastActivityAt >= saved.startedAt
                 && Date.now() - saved.lastActivityAt < config.sessionTimeoutMs
                 && Number.isFinite(saved.visibleMs) && saved.visibleMs >= 0
                 && Number.isFinite(saved.engagedMs) && saved.engagedMs >= 0
+                && saved.engagedMs <= saved.visibleMs
                 && saved.sectionVisibleMs && typeof saved.sectionVisibleMs === 'object'
                 && !Array.isArray(saved.sectionVisibleMs)
-                && Object.values(saved.sectionVisibleMs).every(value => Number.isFinite(value) && value >= 0)) {
+                && Object.entries(saved.sectionVisibleMs).every(([sectionId, value]) => sectionIds.has(sectionId)
+                    && Number.isFinite(value) && value >= 0 && value <= saved.visibleMs)
+                && (saved.lastMeaningfulAction === null
+                    || (elementIds.has(saved.lastMeaningfulAction?.elementId)
+                        && Number.isFinite(saved.lastMeaningfulAction.recordedAt)
+                        && saved.lastMeaningfulAction.recordedAt >= saved.startedAt
+                        && saved.lastMeaningfulAction.recordedAt <= saved.lastActivityAt))) {
                 return saved;
             }
         } catch (error) {
@@ -137,16 +159,24 @@ function startAnalyticsDebug() {
         lastInput = performance.now();
     }
 
-    // Capture real pointer positions separately from meaningful control activation.
-    function handleClick(event) {
-        noteActivity();
+    // Resolve allowlisted metadata without collecting arbitrary DOM identifiers or contents.
+    function getTargetContext(event) {
         const target = event.target instanceof Element ? event.target : null;
         const trackedElement = target?.closest('[data-analytics-id]');
         const section = target?.closest('[data-analytics-section]');
+        return {
+            trackedElement,
+            section,
+            elementId: elementIds.has(trackedElement?.dataset.analyticsId) ? trackedElement.dataset.analyticsId : null,
+            sectionId: sectionIds.has(section?.dataset.analyticsSection) ? section.dataset.analyticsSection : null
+        };
+    }
+
+    // Capture pointer coordinates and named controls using the existing backend event schema.
+    function recordActivation(event, inputType, context) {
+        const { trackedElement, section, elementId, sectionId } = context;
         const anchor = trackedElement || section;
-        const elementId = trackedElement?.dataset.analyticsId || null;
-        const sectionId = section?.dataset.analyticsSection || null;
-        if (event.detail > 0) {
+        if (inputType === 'pointer') {
             const bounds = anchor?.getBoundingClientRect();
             recordEvent('click', {
                 elementId,
@@ -164,9 +194,29 @@ function startAnalyticsDebug() {
         if (elementId) {
             session.lastMeaningfulAction = { elementId, recordedAt: Date.now() };
             session.lastActivityAt = session.lastMeaningfulAction.recordedAt;
-            recordEvent('interaction', { elementId, sectionId, inputType: event.detail === 0 ? 'keyboard' : 'pointer' });
+            recordEvent('interaction', { elementId, sectionId, inputType });
         }
         saveSession();
+    }
+
+    // Record held flight controls on press even when game input suppresses a later click.
+    function handlePointerDown(event) {
+        noteActivity();
+        pointerActivation = null;
+        const context = getTargetContext(event);
+        if (event.button !== 0 || !heldControlIds.has(context.elementId)) return;
+        pointerActivation = context.trackedElement;
+        recordActivation(event, 'pointer', context);
+    }
+
+    // Avoid counting the synthetic click after a held control press; keyboard clicks have no coordinates.
+    function handleClick(event) {
+        noteActivity();
+        const context = getTargetContext(event);
+        const alreadyRecorded = event.detail > 0 && pointerActivation !== null
+            && pointerActivation === context.trackedElement;
+        pointerActivation = null;
+        if (!alreadyRecorded) recordActivation(event, event.detail === 0 ? 'keyboard' : 'pointer', context);
     }
 
     // Record each depth once; non-scrollable pages do not imply an intentional full-page scroll.
@@ -199,7 +249,14 @@ function startAnalyticsDebug() {
         updateTiming();
         for (const entry of entries) {
             const sectionId = entry.target.dataset.analyticsSection;
-            if (entry.intersectionRatio >= 0.5) {
+            if (!sectionIds.has(sectionId)) continue;
+            visibleSectionTargets.set(entry.target, entry.intersectionRatio >= 0.5);
+        }
+        const currentlyVisible = new Set([...visibleSectionTargets.entries()]
+            .filter(([, visible]) => visible)
+            .map(([target]) => target.dataset.analyticsSection));
+        for (const sectionId of sectionIds) {
+            if (currentlyVisible.has(sectionId)) {
                 if (!visibleSections.has(sectionId)) {
                     visibleSections.add(sectionId);
                     recordEvent('sectionView', { sectionId });
@@ -261,7 +318,7 @@ function startAnalyticsDebug() {
 
     window.websiteAnalytics = Object.freeze({ getSnapshot });
     document.addEventListener('click', handleClick, true);
-    document.addEventListener('pointerdown', noteActivity, { passive: true });
+    document.addEventListener('pointerdown', handlePointerDown, { passive: true, capture: true });
     document.addEventListener('keydown', noteActivity, { passive: true });
     document.addEventListener('scroll', handleScroll, { passive: true });
     document.addEventListener('visibilitychange', handleVisibility);

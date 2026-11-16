@@ -47,6 +47,7 @@ test('heatmap queries require valid upload dates, a bounded range, and a layout 
     const base = { view: 'heatmap', from: '2020-01-01', to: '2020-01-31', layoutVersion: 'homepage-v1' };
     const query = parseDashboardQuery(base);
     assert.equal(query.endMs - query.startMs, 31 * 86400000);
+    assert.equal(parseDashboardQuery({ ...base, layoutVersion: 'homepage-v2' }).layoutVersion, 'homepage-v2');
     for (const changes of [
         { from: '2020-02-30' }, { to: '2020-02-01' }, { from: '2020-02-01' },
         { layoutVersion: '' }, { layoutVersion: '../../index' }, { sessionId: randomUUID() },
@@ -71,6 +72,9 @@ test('heatmap extraction excludes keyboard actions, other pages, and other layou
     assert.equal(result[0].documentY, 600);
     assert.equal(result[0].eventId, 'batch:1');
     assert.equal('session' in result[0], false);
+    const current = extractHeatmapClicks(documents, 'homepage-v2');
+    assert.equal(current.length, 1);
+    assert.equal(current[0].eventId, 'batch:4');
 });
 
 // Load pure geometry helpers from the actual browser module without a browser dependency.
@@ -85,13 +89,13 @@ async function loadHeatmapHelpers(contextValues = {}) {
 test('heatmap groups exact geometry, bins scrolled document coordinates, and guards alignment', async () => {
     const helpers = await loadHeatmapHelpers();
     const first = {
-        layoutVersion: 'homepage-v1', viewportWidth: 1000, viewportHeight: 500,
+        layoutVersion: 'homepage-v2', viewportWidth: 1000, viewportHeight: 500,
         pageWidth: 1000, pageHeight: 2000, documentX: 25, documentY: 625, elementId: 'counterReset'
     };
     const groups = helpers.groupHeatmapClicks([
         first, { ...first, documentX: 30, documentY: 630 },
         { ...first, viewportHeight: 600 }, { ...first, pageHeight: 2100 },
-        { ...first, layoutVersion: 'homepage-v2' }, { ...first, documentX: -1 }
+        { ...first, layoutVersion: 'homepage-v1' }, { ...first, documentX: -1 }
     ]);
     assert.equal(groups.length, 4);
     assert.equal(groups[0].clicks.length, 2);
@@ -102,7 +106,7 @@ test('heatmap groups exact geometry, bins scrolled document coordinates, and gua
     assert.equal(summary.elementCounts[0][1], 2);
     assert.equal(helpers.checkPreviewGeometry(groups[0], 1000, 2000), null);
     assert.match(helpers.checkPreviewGeometry(groups[0], 1000, 1990), /Overlay withheld/);
-    assert.match(helpers.checkPreviewGeometry({ ...groups[0], layoutVersion: 'homepage-v2' }), /No page preview/);
+    assert.match(helpers.checkPreviewGeometry({ ...groups[0], layoutVersion: 'homepage-v1' }), /No page preview/);
     assert.match(helpers.checkPreviewGeometry({ ...groups[0], pageWidth: 100000 }), /size limit/);
 });
 
@@ -155,11 +159,14 @@ test('preview sanitization removes active resources and handlers and adds a rest
     const button = makeElement('button', { onclick: 'sendData()', autofocus: '', class: 'control' });
     const anchor = makeElement('a', { href: 'javascript:sendData()', target: '_top', onfocus: 'sendData()' });
     const form = makeElement('form', { action: 'https://external.example' });
+    const canvas = makeElement('canvas', { id: 'gameCanvas', width: '1000', height: '500' });
+    const menu = makeElement('section', { 'data-analytics-section': 'menu', class: 'menu' });
+    const throttle = makeElement('input', { type: 'range', 'data-analytics-id': 'gameThrottle' });
     const head = [];
     const body = makeElement('body');
     const fixture = {
         querySelectorAll(selector) {
-            if (selector === '*') return [button, anchor, form];
+            if (selector === '*') return [button, anchor, form, canvas, menu, throttle];
             return resources.filter(element => selector.split(',').map(value => value.trim()).includes(element.tag));
         },
         createElement: tag => makeElement(tag),
@@ -170,19 +177,24 @@ test('preview sanitization removes active resources and handlers and adds a rest
     const helpers = await loadHeatmapHelpers({ DOMParser: class {
         parseFromString() { return fixture; }
     } });
-    helpers.createInertPreview('public page markup', 'body { margin: 0; }');
+    const markup = helpers.createInertPreview('public page markup', 'body { margin: 0; }');
     assert.ok(resources.every(element => element.removed));
     assert.deepEqual(button.attributes.map(attribute => attribute.name).sort(), ['class', 'tabindex']);
     assert.deepEqual(anchor.attributes.map(attribute => attribute.name), ['tabindex']);
     assert.equal(form.attributes.length, 0);
+    assert.equal(canvas.removed, false);
+    assert.equal(menu.removed, false);
+    assert.ok(throttle.attributes.some(attribute => attribute.name === 'data-analytics-id'));
     assert.equal(head[0].httpEquiv, 'Content-Security-Policy');
     assert.match(head[0].content, /default-src 'none'/);
     assert.match(head[0].content, /script-src 'none'/);
+    assert.equal(head[1].textContent, 'body { margin: 0; }\nbody { pointer-events: none; }');
+    assert.ok(markup.startsWith('<!DOCTYPE html>\n<html>'));
     assert.ok(body.attributes.some(attribute => attribute.name === 'inert'));
 });
 
 // Exercise the real dashboard script with a minimal DOM and mocked authentication boundary.
-async function createDashboardHarness() {
+async function createDashboardHarness({ DOMParser } = {}) {
     const html = await readFile(path.resolve(__dirname, '../public/analytics.html'), 'utf8');
     const nodes = new Map();
 
@@ -219,13 +231,14 @@ async function createDashboardHarness() {
     const requests = [];
     const responses = [];
     const context = vm.createContext({
-        URLSearchParams, AbortSignal, AbortController, DOMException, console,
+        URLSearchParams, AbortSignal, AbortController, DOMException, DOMParser, console,
         document: { querySelectorAll: () => [...nodes.values()], createElement: tag => new Element(tag) },
         async fetch(url, options) {
             requests.push({ url, ...options });
             const response = responses.shift() || { status: 200, body: { sessions: [], nextCursor: null } };
             if (response.wait) await response.wait;
-            return { ok: response.status === 200, status: response.status, json: async () => response.body };
+            return { ok: response.status === 200, status: response.status,
+                json: async () => response.body, text: async () => response.text };
         }
     });
     const appModule = new vm.SyntheticModule(['initializeApp'], function () {
@@ -335,9 +348,9 @@ test('heatmap labels partial pages, preserves filters, and clears coordinates af
     const nodes = harness.nodes;
     nodes.get('heatmapFrom').value = '2020-01-01';
     nodes.get('heatmapTo').value = '2020-01-02';
-    nodes.get('heatmapLayout').value = 'homepage-v2';
+    nodes.get('heatmapLayout').value = 'homepage-v1';
     const point = {
-        eventId: 'one', layoutVersion: 'homepage-v2', viewportWidth: 1000, viewportHeight: 500,
+        eventId: 'one', layoutVersion: 'homepage-v1', viewportWidth: 1000, viewportHeight: 500,
         pageWidth: 1000, pageHeight: 2000, documentX: 20, documentY: 600, elementId: 'counterReset'
     };
     const cursor = randomUUID();
@@ -356,11 +369,107 @@ test('heatmap labels partial pages, preserves filters, and clears coordinates af
     assert.match(nodes.get('heatmapStatus').textContent, /2 clicks loaded/);
     assert.match(nodes.get('heatmapStatus').textContent, /All batches/);
     assert.equal(nodes.get('heatmapElementRows').children[0].children[1].textContent, '2');
+    assert.ok(harness.requests.every(request => request.url.startsWith('/api/analytics?')));
     await nodes.get('signOutButton').handlers.click();
     assert.equal(nodes.get('heatmapPanel').hidden, true);
     assert.equal(nodes.get('heatmapPreview').children.length, 0);
     assert.equal(nodes.get('heatmapElementRows').children.length, 0);
     assert.equal(nodes.get('heatmapStatus').textContent, '');
+});
+
+test('v2 loads the main stylesheet into a sandboxed inert preview and withholds misaligned overlays', async () => {
+    const html = '<html><body><canvas id="gameCanvas"></canvas><button data-analytics-id="gameBurn">Burn</button></body></html>';
+    const css = 'body { margin: 0; background: #111; color: white; }';
+    let preview;
+    const harness = await createDashboardHarness({ DOMParser: class {
+        // Model parsed static markup while the dedicated sanitizer test checks resource stripping.
+        parseFromString(source) { assert.equal(source, html); return preview; }
+    } });
+    const { nodes } = harness;
+    const Element = nodes.get('heatmapPreview').constructor;
+    const styles = [];
+    preview = {
+        querySelectorAll: () => [],
+        createElement: tag => new Element(tag),
+        createElementNS: (namespace, tag) => new Element(tag),
+        head: { prepend() {}, append(style) { styles.push(style); } },
+        body: new Element('body'),
+        documentElement: { outerHTML: html, scrollWidth: 1000, scrollHeight: 500 }
+    };
+    await harness.signIn();
+    nodes.get('heatmapLayout').value = 'homepage-v2';
+    const point = {
+        eventId: 'burn', layoutVersion: 'homepage-v2', viewportWidth: 1000, viewportHeight: 500,
+        pageWidth: 1000, pageHeight: 500, documentX: 20, documentY: 30, elementId: 'gameBurn'
+    };
+    harness.responses.push(
+        { status: 200, body: { clicks: [point], scannedBatches: 1, nextCursor: null } },
+        { status: 200, text: html }, { status: 200, text: css }
+    );
+    nodes.get('heatmapForm').handlers.submit({ preventDefault() {} });
+    await harness.settle();
+    assert.deepEqual(harness.requests.slice(-2).map(request => request.url), ['/index.html', '/style.css']);
+    assert.equal(harness.requests.at(-1).headers, undefined);
+    const frame = nodes.get('heatmapPreview').children[0];
+    assert.equal(frame.attributes.sandbox, 'allow-same-origin');
+    assert.equal(frame.attributes.referrerpolicy, 'no-referrer');
+    assert.equal(frame.style.width, '1000px');
+    assert.equal(frame.style.height, '500px');
+    assert.ok(styles[0].textContent.startsWith(css));
+    assert.equal(preview.body.attributes.inert, '');
+    assert.match(frame.srcdoc, /gameCanvas/);
+    assert.match(frame.srcdoc, /gameBurn/);
+    frame.contentDocument = preview;
+    frame.handlers.load();
+    assert.equal(preview.body.children[0].tagName, 'svg');
+    assert.match(nodes.get('heatmapPreviewNote').textContent, /canvas is blank/);
+    assert.equal(nodes.get('heatmapElementRows').children[0].children[1].textContent, '1');
+    preview.body.replaceChildren();
+    preview.documentElement.scrollHeight = 600;
+    frame.handlers.load();
+    assert.match(nodes.get('heatmapPreviewNote').textContent, /Overlay withheld/);
+    assert.equal(preview.body.children.length, 0);
+    await nodes.get('signOutButton').handlers.click();
+    frame.handlers.load();
+    assert.equal(nodes.get('heatmapPreview').children.length, 0);
+    assert.equal(preview.body.children.length, 0);
+});
+
+test('dashboard labels all planned game actions and section durations', async () => {
+    const harness = await createDashboardHarness();
+    const actions = {
+        gameStart: 'Game start requested', gameContinue: 'Continue requested',
+        gameNewRun: 'New run requested', gameConfirmNewRun: 'New run confirmed',
+        gameCancelNewRun: 'New run canceled', gameMenu: 'Game menu requested',
+        gameRetry: 'Retry requested', gameHistory: 'Run history requested',
+        gameHistoryBack: 'Run history back requested', gameDock: 'Dock requested',
+        gameThrottleUp: 'Throttle increased', gameThrottleDown: 'Throttle decreased',
+        gameRotateLeft: 'Rotate left pressed', gameRotateRight: 'Rotate right pressed',
+        gameRcsUp: 'RCS up pressed', gameRcsDown: 'RCS down pressed',
+        gameRcsLeft: 'RCS left pressed', gameRcsRight: 'RCS right pressed',
+        gameResume: 'Resume requested', gameBurn: 'Main engine pressed', gameThrottle: 'Throttle control pressed'
+    };
+    const session = {
+        sessionId: randomUUID(), startedAt: 1000, durationMs: 5000, visibleMs: 4000, engagedMs: 3000,
+        eventCount: Object.keys(actions).length, sectionVisibleMs: { menu: 1000, cockpit: 2000, history: 1000, results: 1000 },
+        lastMeaningfulAction: { elementId: 'gameBurn', recordedAt: 2000 }
+    };
+    harness.responses.push({ status: 200, body: { sessions: [session], nextCursor: null } });
+    await harness.signIn();
+    harness.responses.push({ status: 200, body: {
+        session, nextCursor: null,
+        events: Object.keys(actions).map((elementId, index) => ({
+            eventId: String(index), pageInstanceId: 'one', sequence: index + 1, eventName: 'interaction',
+            recordedAt: 1000 + index, elapsedMs: index, pagePath: '/',
+            properties: { elementId, sectionId: 'cockpit', inputType: 'pointer' }
+        }))
+    } });
+    harness.nodes.get('sessionRows').children[0].children[0].children[0].handlers.click();
+    await harness.settle();
+    assert.deepEqual(harness.nodes.get('timelineRows').children.map(row => row.children[1].textContent), Object.values(actions));
+    assert.match(harness.nodes.get('sessionMetrics').children.at(-1).children[1].textContent, /Main engine pressed/);
+    assert.deepEqual(harness.nodes.get('sectionDurations').children.map(row => row.textContent),
+        ['Menu: 1.0s', 'Cockpit: 2.0s', 'Run history: 1.0s', 'Results: 1.0s']);
 });
 
 test('emulators: owner reads, non-owner denial, disabled account denial, and cursor pagination', {

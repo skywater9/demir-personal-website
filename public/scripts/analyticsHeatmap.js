@@ -1,4 +1,4 @@
-const currentLayoutVersion = 'homepage-v1';
+const currentLayoutVersion = 'homepage-v2';
 const cellSize = 24;
 const maxClicks = 20000;
 
@@ -97,7 +97,7 @@ export function createInertPreview(html, css) {
     policy.httpEquiv = 'Content-Security-Policy';
     policy.content = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
     const style = preview.createElement('style');
-    style.textContent = `${css}\nhtml { background: white; color: black; } body { pointer-events: none; }`;
+    style.textContent = `${css}\nbody { pointer-events: none; }`;
     preview.head.prepend(policy);
     preview.head.append(style);
     preview.body.setAttribute('inert', '');
@@ -186,7 +186,7 @@ export function createAnalyticsHeatmap({ elements, readAnalytics, showError, cle
             return;
         }
         preview.body.append(createHeatmapOverlay(preview, group, summary));
-        elements.heatmapPreviewNote.textContent = `${group.clicks.length} clicks in this exact geometry. Scroll inside the preview to inspect lower sections. The preview runs no visitor scripts.`;
+        elements.heatmapPreviewNote.textContent = `${group.clicks.length} clicks in this exact geometry. Static homepage HUD, menu, and controls only; runtime menu, history, and results states are not replayed. The game canvas is blank because the preview runs no scripts. Counts include all recorded UI states.`;
     }
 
     // Load trusted source files without letting the preview execute scripts or request resources.

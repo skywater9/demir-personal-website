@@ -25,9 +25,21 @@ let sessionsBusy = false;
 let timelineBusy = false;
 const actionLabels = {
     headerClick: 'Header clicked', counterIncrement: 'Counter incremented',
-    counterReset: 'Counter reset', gameStart: 'Game start requested'
+    counterReset: 'Counter reset', gameStart: 'Game start requested',
+    gameContinue: 'Continue requested', gameNewRun: 'New run requested',
+    gameConfirmNewRun: 'New run confirmed', gameCancelNewRun: 'New run canceled',
+    gameMenu: 'Game menu requested', gameRetry: 'Retry requested',
+    gameHistory: 'Run history requested', gameHistoryBack: 'Run history back requested',
+    gameDock: 'Dock requested', gameThrottleUp: 'Throttle increased', gameThrottleDown: 'Throttle decreased',
+    gameRotateLeft: 'Rotate left pressed', gameRotateRight: 'Rotate right pressed',
+    gameRcsUp: 'RCS up pressed', gameRcsDown: 'RCS down pressed',
+    gameRcsLeft: 'RCS left pressed', gameRcsRight: 'RCS right pressed', gameResume: 'Resume requested',
+    gameBurn: 'Main engine pressed', gameThrottle: 'Throttle control pressed'
 };
-const sectionLabels = { header: 'Header', clickCounter: 'Click counter', game: 'Game', visitCounter: 'Visit counter' };
+const sectionLabels = {
+    header: 'Header', clickCounter: 'Click counter', game: 'Game', visitCounter: 'Visit counter',
+    menu: 'Menu', cockpit: 'Cockpit', history: 'Run history', results: 'Results'
+};
 const meaningfulEvents = new Set(['pageView', 'pageRestore', 'interaction', 'sectionView', 'scrollMilestone']);
 const heatmap = createAnalyticsHeatmap({ elements, readAnalytics, showError, clearError });
 

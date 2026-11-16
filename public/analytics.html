@@ -70,9 +70,10 @@
             <form id="heatmapForm" class="heatmap-filters">
                 <div><label for="heatmapFrom">Upload date from (UTC)</label><input id="heatmapFrom" type="date" required></div>
                 <div><label for="heatmapTo">Upload date to (UTC)</label><input id="heatmapTo" type="date" required></div>
-                <div><label for="heatmapLayout">Layout version</label><input id="heatmapLayout" value="homepage-v1" pattern="homepage-v[1-9][0-9]{0,3}" required></div>
+                <div><label for="heatmapLayout">Layout version</label><input id="heatmapLayout" value="homepage-v2" pattern="homepage-v[1-9][0-9]{0,3}" required></div>
                 <button id="heatmapLoadButton" type="submit">Load heatmap</button>
             </form>
+            <p class="muted">homepage-v2 previews the static rocket game UI. The canvas stays blank without scripts; runtime screens are not replayed. Query homepage-v1 for historical counts without a page preview. Held flight controls and the throttle slider count once per pointer press; slider values are not collected.</p>
             <p id="heatmapStatus" class="muted" role="status" aria-live="polite"></p>
             <button id="heatmapMoreButton" type="button" hidden>Load more batches</button>
             <label for="heatmapViewport">Recorded viewport and page size</label>

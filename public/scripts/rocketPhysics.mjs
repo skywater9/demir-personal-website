@@ -2,8 +2,8 @@ export const tuning = Object.freeze({
     maxFuel: 100, mainAcceleration: 34, rcsAcceleration: 5,
     mainFuelRate: 0.62, rcsFuelRate: 0.12, rotationFuelRate: 0.025,
     rotationRate: 1.55, shipRadius: 18, padHalfWidth: 48,
-    safeLandingSpeed: 8, safeLandingAngle: 0.22,
-    dockingDistance: 32, dockingSpeed: 5, dockingAngle: 0.21,
+    safeLandingSpeed: 8, safeLandingAngle: Math.PI / 15,
+    dockingDistance: 32, dockingSpeed: 5, dockingAngle: Math.PI / 15,
     influenceAltitude: 1050, fixedStep: 1 / 120
 });
 
@@ -140,12 +140,12 @@ export function tryDock(run) {
 }
 
 // Settle low-speed contact and service only the next expected destination, once per route visit.
-function resolveSurface(run, body) {
+function resolveSurface(run, body, resting = false) {
     const dx = run.x - body.x;
     const dy = run.y - body.y;
     const distance = Math.hypot(dx, dy);
     const surfaceDistance = body.radius + tuning.shipRadius;
-    if (distance > surfaceDistance) return;
+    if (distance > surfaceDistance && !resting) return;
     const speed = Math.hypot(run.vx, run.vy);
     if (speed > tuning.safeLandingSpeed) {
         finishRun(run, 'lost', `Impact on ${body.name} at ${speed.toFixed(1)} m/s.`);
@@ -202,7 +202,11 @@ export function stepRun(run, input = {}, dt = tuning.fixedStep) {
         recordRunEvent(run, 'undocked');
     }
     run.angle = normalizeAngle(run.angle + rotate * tuning.rotationRate * dt);
-    if (run.landedOn && !moving) return;
+    if (run.landedOn && !moving) {
+        const landedBody = bodies.find(body => body.id === run.landedOn);
+        resolveSurface(run, landedBody, true);
+        return;
+    }
     run.landedOn = null;
     const gravity = gravityAt(run.x, run.y);
     const thrust = burning ? tuning.mainAcceleration * run.throttle : 0;

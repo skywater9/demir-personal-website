@@ -5,6 +5,13 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const vm = require('node:vm');
 const { validateBatch, mergeSession } = require('./analyticsValidation');
+const gameElementIds = [
+    'gameStart', 'gameContinue', 'gameNewRun', 'gameConfirmNewRun', 'gameCancelNewRun',
+    'gameMenu', 'gameRetry', 'gameHistory', 'gameHistoryBack', 'gameDock',
+    'gameThrottleUp', 'gameThrottleDown', 'gameRotateLeft', 'gameRotateRight',
+    'gameRcsUp', 'gameRcsDown', 'gameRcsLeft', 'gameRcsRight', 'gameResume', 'gameBurn', 'gameThrottle'
+];
+const gameSectionIds = ['game', 'menu', 'cockpit', 'history', 'results'];
 
 // Build a real-shaped batch so rejection tests exercise the boundary used by the endpoint.
 function makeBatch(now = Date.now()) {
@@ -20,7 +27,7 @@ function makeBatch(now = Date.now()) {
         },
         events: [{
             eventName: 'pageView', sequence: 1, sessionId, pagePath: '/',
-            layoutVersion: 'homepage-v1', recordedAt: now - 10000, elapsedMs: 0, properties: {}
+            layoutVersion: 'homepage-v2', recordedAt: now - 10000, elapsedMs: 0, properties: {}
         }]
     };
 }
@@ -68,6 +75,63 @@ test('heatmap validation rejects positions outside the page and unknown controls
     assert.throws(() => validateBatch(batch));
 });
 
+test('v2 accepts every planned game control and section while retaining v1 identifiers', () => {
+    const now = Date.now();
+    for (const elementId of [...gameElementIds, 'headerClick', 'counterIncrement', 'counterReset']) {
+        for (const sectionId of [...gameSectionIds, 'header', 'clickCounter', 'visitCounter', null]) {
+            const batch = makeBatch(now);
+            batch.session.lastMeaningfulAction = { elementId, recordedAt: batch.session.lastActivityAt };
+            batch.events[0].eventName = 'interaction';
+            batch.events[0].properties = { elementId, sectionId, inputType: 'pointer' };
+            assert.doesNotThrow(() => validateBatch(batch, now), `${elementId} / ${sectionId}`);
+            batch.events[0].eventName = 'click';
+            batch.events[0].properties = {
+                elementId, sectionId, documentX: 0, documentY: 500,
+                viewportWidth: 1000, viewportHeight: 500, pageWidth: 1000, pageHeight: 500,
+                relativeX: 0, relativeY: 1
+            };
+            assert.doesNotThrow(() => validateBatch(batch, now));
+        }
+    }
+    for (const sectionId of [...gameSectionIds, 'header', 'clickCounter', 'visitCounter']) {
+        const batch = makeBatch(now);
+        batch.session.sectionVisibleMs[sectionId] = 1000;
+        batch.events[0].eventName = 'sectionView';
+        batch.events[0].properties = { sectionId };
+        assert.doesNotThrow(() => validateBatch(batch, now));
+    }
+    const historical = makeBatch(now);
+    historical.events[0].layoutVersion = 'homepage-v1';
+    historical.events[0].eventName = 'interaction';
+    historical.events[0].properties = { elementId: 'counterReset', sectionId: 'clickCounter', inputType: 'keyboard' };
+    assert.doesNotThrow(() => validateBatch(historical, now));
+});
+
+test('game adaptation still rejects unknown layouts, IDs, lifecycle payloads, and personal data', () => {
+    const now = Date.now();
+    const changes = [
+        batch => { batch.events[0].layoutVersion = 'homepage-v3'; },
+        batch => { batch.events[0].layoutVersion = 'homepage-v2?player=secret'; },
+        batch => { batch.events[0].properties.elementId = 'gameUnknown'; },
+        batch => { batch.events[0].properties.sectionId = 'unknown'; },
+        batch => { batch.events[0].properties.inputType = 'touch'; },
+        batch => { batch.events[0].properties.score = 10; },
+        batch => { batch.events[0].properties.playerName = 'private'; },
+        batch => { batch.session.sectionVisibleMs.unknown = 100; },
+        batch => { batch.session.sectionVisibleMs.cockpit = batch.session.visibleMs + 1; },
+        batch => { batch.session.lastMeaningfulAction = { elementId: 'gameUnknown', recordedAt: now - 1000 }; },
+        batch => { batch.events[0].eventName = 'gameRunComplete'; },
+        batch => { batch.events[0].properties = { elementId: 'gameStart', sectionId: 'menu' }; }
+    ];
+    for (const change of changes) {
+        const batch = makeBatch(now);
+        batch.events[0].eventName = 'interaction';
+        batch.events[0].properties = { elementId: 'gameStart', sectionId: 'menu', inputType: 'pointer' };
+        change(batch);
+        assert.throws(() => validateBatch(batch, now));
+    }
+});
+
 test('out-of-order summaries preserve maxima without adding cumulative timing twice', () => {
     const batch = makeBatch();
     const first = mergeSession(null, batch.session, batch.events, Date.now());
@@ -81,13 +145,15 @@ test('out-of-order summaries preserve maxima without adding cumulative timing tw
 });
 
 // Load the actual browser modules in a controlled clock/DOM without contacting Firebase.
-async function createBrowserHarness({ search = '', port = '5050', blockStorage = false, responses = [] } = {}) {
+async function createBrowserHarness({ search = '', port = '5050', blockStorage = false,
+    responses = [], savedSession = null } = {}) {
     let elapsed = 0;
     const wallStart = Date.now();
     const handlers = {};
     const requests = [];
     const timers = [];
     const storage = new Map();
+    if (savedSession) storage.set('websiteAnalyticsDebugSession', JSON.stringify(savedSession));
     const window = {
         location: { search, pathname: '/', hostname: '127.0.0.1', port },
         innerWidth: 1000, innerHeight: 500, scrollX: 0, scrollY: 0,
@@ -108,7 +174,12 @@ async function createBrowserHarness({ search = '', port = '5050', blockStorage =
             getItem(key) { if (blockStorage) throw Error('blocked'); return storage.get(key) || null; },
             setItem(key, value) { if (blockStorage) throw Error('blocked'); storage.set(key, value); }
         },
-        IntersectionObserver: class { observe() {} },
+        IntersectionObserver: class {
+            // Expose section changes so tests can model HUD/menu visibility transitions.
+            constructor(handler) { handlers.sections = handler; }
+            // No real layout is needed to feed deterministic section entries.
+            observe() {}
+        },
         async fetch(url, options) {
             requests.push({ url, ...options });
             const responseCode = responses.shift() || 200;
@@ -141,7 +212,7 @@ async function createBrowserHarness({ search = '', port = '5050', blockStorage =
         window, document, handlers, requests, timers, Element, settle,
         now() { return wallStart + elapsed; },
         advance(ms) { elapsed += ms; },
-        snapshot() { return window.websiteAnalytics.getSnapshot(); }
+        snapshot() { return JSON.parse(JSON.stringify(window.websiteAnalytics.getSnapshot())); }
     };
 }
 
@@ -198,6 +269,186 @@ test('keyboard activation has no heatmap coordinate and timeout batches stay ass
     assert.ok(events.some(event => event.eventName === 'interaction'));
     assert.equal(events.some(event => event.eventName === 'click'), false);
     assert.ok(batches.some(batch => batch.session.sessionId !== firstSessionId));
+});
+
+test('v2 game interactions, canvas clicks, and section exposure produce server-valid batches', async () => {
+    const harness = await createBrowserHarness({ search: '?analyticsCollect=1' });
+    for (const [index, elementId] of gameElementIds.entries()) {
+        const sectionId = gameSectionIds[index % gameSectionIds.length];
+        const target = new harness.Element();
+        target.dataset = { analyticsId: elementId, analyticsSection: sectionId };
+        target.closest = () => target;
+        target.getBoundingClientRect = () => ({ left: 10, top: 20, width: 100, height: 100 });
+        harness.handlers.click({ target, detail: index % 2, clientX: 30, clientY: 40 });
+    }
+    const canvas = new harness.Element();
+    canvas.closest = () => null;
+    harness.handlers.click({ target: canvas, detail: 1, clientX: 250, clientY: 100 });
+    const entries = [...gameSectionIds, 'unplanned'].map(sectionId => ({
+        target: { dataset: { analyticsSection: sectionId } }, intersectionRatio: 1
+    }));
+    harness.handlers.sections(entries);
+    harness.advance(1000);
+    harness.handlers.sections(entries.map(entry => ({ ...entry, intersectionRatio: 0 })));
+    harness.timers[0]();
+    await harness.settle();
+    const snapshot = harness.snapshot();
+    assert.equal(snapshot.config.layoutVersion, 'homepage-v2');
+    const interactions = snapshot.events.filter(event => event.eventName === 'interaction');
+    assert.deepEqual(interactions.map(event => event.properties.elementId), gameElementIds);
+    assert.equal(snapshot.events.filter(event => event.eventName === 'click').length, Math.floor(gameElementIds.length / 2) + 1);
+    assert.ok(snapshot.events.some(event => event.eventName === 'click' && event.properties.elementId === null));
+    for (const sectionId of gameSectionIds) assert.equal(snapshot.session.sectionVisibleMs[sectionId], 1000);
+    assert.equal('unplanned' in snapshot.session.sectionVisibleMs, false);
+    for (const request of harness.requests) assert.doesNotThrow(() => validateBatch(JSON.parse(request.body), harness.now()));
+    assert.ok(harness.requests.length >= 2);
+});
+
+test('split cockpit sections remain visible while either instrument or control panel is exposed', async () => {
+    const harness = await createBrowserHarness({ search: '?analyticsDebug=1' });
+    const instruments = { dataset: { analyticsSection: 'cockpit' } };
+    const controls = { dataset: { analyticsSection: 'cockpit' } };
+    harness.handlers.sections([{ target: instruments, intersectionRatio: 1 }, { target: controls, intersectionRatio: 0 }]);
+    harness.advance(1000);
+    harness.handlers.sections([{ target: instruments, intersectionRatio: 0 }, { target: controls, intersectionRatio: 1 }]);
+    harness.advance(1000);
+    harness.handlers.sections([{ target: controls, intersectionRatio: 0 }]);
+    harness.advance(1000);
+    assert.equal(harness.snapshot().session.sectionVisibleMs.cockpit, 2000);
+    assert.equal(harness.snapshot().events.filter(event => event.eventName === 'sectionView' && event.properties.sectionId === 'cockpit').length, 1);
+});
+
+test('held controls record a press without a click and do not duplicate a later pointer click', async () => {
+    const heldControlIds = [
+        'gameBurn', 'gameThrottle', 'gameThrottleUp', 'gameThrottleDown',
+        'gameRotateLeft', 'gameRotateRight', 'gameRcsUp', 'gameRcsDown', 'gameRcsLeft', 'gameRcsRight'
+    ];
+    for (const elementId of heldControlIds) {
+        const harness = await createBrowserHarness({ search: '?analyticsCollect=1' });
+        const target = new harness.Element();
+        target.dataset = { analyticsId: elementId, analyticsSection: 'cockpit' };
+        target.value = '75';
+        target.closest = () => target;
+        target.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+        harness.handlers.pointerdown({ target, button: 0, clientX: 25, clientY: 25 });
+        const pressed = harness.snapshot();
+        assert.equal(pressed.events.filter(event => event.eventName === 'interaction').length, 1, elementId);
+        assert.equal(pressed.session.lastMeaningfulAction.elementId, elementId);
+        harness.timers[0]();
+        await harness.settle();
+        for (const request of harness.requests) assert.doesNotThrow(() => validateBatch(JSON.parse(request.body), harness.now()));
+        harness.handlers.click({ target, detail: 1, clientX: 25, clientY: 25 });
+        assert.equal(harness.snapshot().events.filter(event => event.eventName === 'interaction').length, 1);
+        assert.equal(harness.snapshot().events.filter(event => event.eventName === 'click').length, 1);
+        harness.handlers.click({ target, detail: 0 });
+        assert.equal(harness.snapshot().events.filter(event => event.eventName === 'interaction').length, 2);
+        assert.equal(harness.snapshot().events.filter(event => event.eventName === 'click').length, 1);
+        harness.handlers.pointerdown({ target, button: 2, clientX: 25, clientY: 25 });
+        assert.equal(harness.snapshot().events.filter(event => event.eventName === 'interaction').length, 2);
+        // Only the named press is collected, including when the target is the range input.
+        assert.deepEqual(harness.snapshot().events.find(event => event.eventName === 'interaction').properties,
+            { elementId, sectionId: 'cockpit', inputType: 'pointer' });
+    }
+});
+
+test('unknown DOM metadata cannot poison a batch or its restored session summary', async () => {
+    const harness = await createBrowserHarness({ search: '?analyticsCollect=1' });
+    const target = new harness.Element();
+    target.dataset = { analyticsId: 'privateIdentifier', analyticsSection: 'privateSection' };
+    target.closest = () => target;
+    target.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+    harness.handlers.click({ target, detail: 1, clientX: 10, clientY: 20 });
+    harness.timers[0]();
+    await harness.settle();
+    const snapshot = harness.snapshot();
+    assert.equal(snapshot.session.lastMeaningfulAction, null);
+    const click = snapshot.events.find(event => event.eventName === 'click');
+    assert.equal(click.properties.elementId, null);
+    assert.equal(click.properties.sectionId, null);
+    for (const request of harness.requests) assert.doesNotThrow(() => validateBatch(JSON.parse(request.body), harness.now()));
+    const savedSession = { ...snapshot.session, sectionVisibleMs: { privateSection: 1 } };
+    const restored = await createBrowserHarness({ search: '?analyticsDebug=1', savedSession });
+    assert.notEqual(restored.snapshot().session.sessionId, savedSession.sessionId);
+    assert.deepEqual(restored.snapshot().session.sectionVisibleMs, {});
+});
+
+test('legacy site analytics preserves visit counts without the old DOM or a working Google Analytics SDK', async () => {
+    const source = await readFile(path.resolve(__dirname, '../public/scripts/siteAnalytics.js'), 'utf8');
+    for (const scenario of [
+        { emulator: true, blockStorage: false, hasCounter: false, failAnalytics: false },
+        { emulator: false, blockStorage: true, hasCounter: true, failAnalytics: true },
+        { emulator: false, blockStorage: false, hasCounter: true, failAnalytics: false }
+    ]) {
+        const stored = new Map([['pageViewsCount', '2']]);
+        const writes = [];
+        const emulatorConnections = [];
+        const counter = { textContent: '' };
+        let initializedConfig;
+        let analyticsImports = 0;
+        let analyticsStarts = 0;
+        const context = vm.createContext({
+            document: { getElementById: () => scenario.hasCounter ? counter : null },
+            console: { warn() {} },
+            localStorage: {
+                // Simulate privacy settings without preventing the shared visit transaction.
+                getItem(key) { if (scenario.blockStorage) throw Error('blocked'); return stored.get(key); },
+                // Retain the legacy key to ensure existing local counts survive the migration.
+                setItem(key, value) { stored.set(key, value); }
+            }
+        });
+        const appExports = {
+            getApps: () => [], getApp: () => { throw Error('No app exists.'); },
+            initializeApp: config => { initializedConfig = config; return config; }
+        };
+        const firestoreExports = {
+            getFirestore: app => app,
+            connectFirestoreEmulator: (...args) => emulatorConnections.push(args),
+            doc: (db, collection, id) => ({ collection, id }),
+            runTransaction: async (db, update) => update({
+                get: async () => ({ exists: () => true, data: () => ({ count: 12 }) }),
+                set: (reference, data, options) => writes.push({ reference, data, options })
+            })
+        };
+        const configExports = {
+            firebaseConfig: { projectId: 'production-project' }, useFirebaseEmulators: scenario.emulator
+        };
+        const analyticsExports = { isSupported: async () => true, getAnalytics: () => { analyticsStarts++; } };
+        const modules = new Map();
+        for (const [name, exports] of [
+            ['firebase-app.js', appExports], ['firebase-firestore.js', firestoreExports],
+            ['./firebaseConfig.js', configExports], ['firebase-analytics.js', analyticsExports]
+        ]) {
+            const module = new vm.SyntheticModule(Object.keys(exports), function () {
+                for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
+            }, { context });
+            await module.link(() => { throw Error('Unexpected SDK dependency.'); });
+            await module.evaluate();
+            modules.set(name, module);
+        }
+        const tracker = new vm.SourceTextModule(source, {
+            context,
+            // Keep optional Google Analytics failures isolated from both visit counters.
+            importModuleDynamically: async specifier => {
+                assert.ok(specifier.endsWith('/firebase-analytics.js'));
+                analyticsImports++;
+                if (scenario.failAnalytics) throw Error('SDK unavailable');
+                return modules.get('firebase-analytics.js');
+            }
+        });
+        await tracker.link(specifier => modules.get(specifier) || modules.get(specifier.split('/').at(-1)));
+        await tracker.evaluate();
+        for (let index = 0; index < 20; index++) await Promise.resolve();
+        assert.equal(initializedConfig.projectId, scenario.emulator ? 'demo-website-analytics' : 'production-project');
+        assert.equal(emulatorConnections.length, scenario.emulator ? 1 : 0);
+        assert.equal(writes.length, 1);
+        assert.deepEqual(writes[0].reference, { collection: 'siteStats', id: 'visits' });
+        assert.equal(writes[0].data.count, 13);
+        assert.equal(writes[0].options.merge, true);
+        assert.equal(stored.get('pageViewsCount'), scenario.blockStorage ? '2' : '3');
+        assert.equal(counter.textContent, scenario.hasCounter ? 'Website visits: 13' : '');
+        assert.equal(analyticsImports, scenario.emulator ? 0 : 1);
+        assert.equal(analyticsStarts, !scenario.emulator && !scenario.failAnalytics ? 1 : 0);
+    }
 });
 
 test('production refuses missing App Check even when a request claims emulator mode', async () => {

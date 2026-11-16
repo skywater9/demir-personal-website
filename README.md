@@ -1,5 +1,72 @@
-# BasicStaticWebsite
-This is static website content for learning HTML and CSS
+# Orbital Freight
+
+A buildless, pixel art rocket game with continuous 2D flight, changing planetary
+gravity, payload deliveries, and a limited fuel supply. The game is the homepage;
+the existing private analytics dashboard remains at `/analytics.html`.
+
+## Play locally
+
+```sh
+python3 -m http.server 8000 --directory public
+```
+
+Open `http://localhost:8000/`, read the pre-flight briefing, and choose **Start
+Flight**. No build or dependency installation is needed for the game.
+
+| Control | Action |
+| --- | --- |
+| Hold Space or Up | Burn the main engine; release to coast |
+| W / S | Increase / decrease throttle by 5% |
+| A / D or Left / Right | Rotate counterclockwise / clockwise |
+| I / J / K / L | Small thrusters: up / left / down / right in world directions |
+| E | Attach and deliver when all bay checks are green |
+| Escape | Save and return to the menu |
+
+All flight actions also have on-screen controls, including simultaneous touch
+inputs. Keyboard users can Tab to a control and hold Space or Enter to operate it.
+
+The route is Earth → Moon → Venus → Mercury → Earth → Mars → Jupiter → Saturn →
+Uranus → Neptune. Each stop starts with a payload for its relay. Deliver it, then
+manually fly to the next landing pad. A safe upright landing grants fuel and the
+next payload once per route stop. Deliver the Neptune payload to win. Excessive
+impact speed or an empty tank ends the run; Retry starts over on Earth.
+
+Use the amber target indicator and navigation map. Land within ±12° upright and
+at ≤ 8 m/s. Dock within 32 m of the bay marker, at ≤ 5 m/s and ±12° upright. Your
+bay is on the rocket's right side. Burn or use a translation thruster to detach
+after delivery. Gas giants have floating pads and reduced atmospheric visibility;
+Jupiter also has a small lateral wind. Distances and planet sizes are arcade scale.
+
+## Saves and flight records
+
+The game autosaves every second of gameplay and immediately after landings,
+deliveries, or leaving the run. Refreshing opens the menu with **Continue Flight**
+and **New Flight**. Replacing unfinished progress requires confirmation and keeps
+the old run as an abandoned record. Switching tabs or losing window focus suspends
+the simulation; Continue resumes with engines idle. The timer counts simulated
+gameplay only, excluding menus and time away.
+
+Flight Records shows up to 100 previous runs plus unfinished progress, including
+time, fuel, deliveries, and a bounded leave/return/delivery timeline. Saves use
+`orbitalFreight.v1` in this browser's local storage; they do not sync between
+devices. Clearing browser data removes them. Blocked or full storage produces a
+visible warning and falls back to memory. Unexpected termination can lose up to
+the last second of progress; shutdown events are best effort.
+
+See [FLOW.md](FLOW.md) for player flow and [assumptions.md](assumptions.md) for
+tuning and implementation decisions to review. Physics values and destination
+data are centralized in `public/scripts/rocketPhysics.mjs`.
+
+## Verify the game
+
+```sh
+node --test tests/rocket.test.mjs tests/rocketApp.test.mjs
+npm --prefix functions test
+```
+
+Use Node.js 22 or newer. Game tests use built-in Node modules and do not need
+installed dependencies. The analytics tests use the existing Functions setup.
+See [TESTING.md](TESTING.md) for coverage, emulator checks, and the playtest checklist.
 
 ## Analytics: step 1 local preview
 
@@ -11,9 +78,9 @@ To serve locally without installing dependencies, run `python3 -m http.server 80
 
 - Open browser developer tools. Enable Debug/Verbose console messages to see events.
 - Run `window.websiteAnalytics.getSnapshot()` to inspect timing totals and up to 300 recent events.
-- Click the counter and reset button. Each pointer click should have one `click`
+- Click Start Flight and the menu controls. Each pointer click should have one `click`
   event and one `interaction` naming the nearest tracked control.
-- Focus the reset button and press Enter. It should create an `interaction`
+- Focus a menu button and press Enter. It should create an `interaction`
   without an artificial heatmap position.
 - Use a short browser window to scroll. Check section exposure and scroll milestones.
 - Switch tabs, wait, and return. `visibleMs` and `engagedMs` should exclude hidden time.
@@ -25,16 +92,18 @@ To serve locally without installing dependencies, run `python3 -m http.server 80
 - Remove the query parameter and reload to disable the custom tracker.
 
 Click events include document coordinates, viewport/page dimensions, section/control
-identifiers, and relative positions for a future heatmap. `homepage-v1` identifies
-the layout; increment it when layout changes make old click positions incompatible.
+identifiers, and relative positions for the heatmap. `homepage-v2` identifies
+the rocket game layout; `homepage-v1` identifies the previous homepage. Increment
+the version when layout changes make old click positions incompatible.
 Sections count as exposed when at least half of the section is visible. Section
 exposure and recent input are estimates of attention, not measurements of boredom.
 
 Local debug sends no custom analytics to a backend. The session summary uses
 `sessionStorage`; detailed events stay in memory. Storage failures fall back to
-in-memory tracking. Existing Google Analytics and public Firestore counters still
-run independently. Game activation is recorded as an attempted action; successful
-game start/end instrumentation is deferred to a later step.
+in-memory tracking. Google Analytics and the existing Firestore visit counter run
+independently through `siteAnalytics.js`; the game runs even if their CDN is blocked.
+Analytics records control interactions rather than gameplay outcomes. Actual
+game results and leave/return events are stored separately in the local flight recorder.
 
 ## Analytics: step 2 private ingestion
 
@@ -67,7 +136,7 @@ firebase emulators:start --only auth,functions,firestore,hosting --project demo-
 ```
 
 1. Open `http://127.0.0.1:5050/?analyticsCollect=1`.
-2. Click the counter and reset button, scroll, and switch tabs.
+2. Start a flight, press flight controls, open the menu, and switch tabs.
 3. Inspect `window.websiteAnalytics.getSnapshot()` in developer tools. `mode`
    should be `collection`; `collection.sentBatches` should increase after uploads.
 4. Open the Firestore emulator at `http://127.0.0.1:4000/firestore`.
@@ -79,8 +148,8 @@ firebase emulators:start --only auth,functions,firestore,hosting --project demo-
    requests to `/api/events` and no new custom analytics documents.
 
 Emulator data is temporary and disappears when the emulator stops. The demo project
-avoids production backend access. The existing homepage counters connect to local
-Firestore on port 5050; existing Google Analytics still runs independently.
+avoids production backend access. When served on port 5050, the visit counter
+connects to local Firestore; Google Analytics is skipped in emulator mode.
 Do not use the Python static server for collection: `/api/events` needs the Firebase
 Hosting rewrite. The collection endpoint accepts only the configured local origins.
 
@@ -217,17 +286,18 @@ changes to public Firestore access.
 ### Verify the heatmap locally
 
 1. Open `http://127.0.0.1:5050/?analyticsCollect=1` and click several times near one
-   spot, then click the reset button and another section. Wait 15 seconds for upload.
+   spot, then press other flight controls and menu buttons. Wait 15 seconds for upload.
 2. Open `http://127.0.0.1:5050/analytics.html` and sign in as the local test owner.
 3. Scroll to Homepage click heatmap. Choose upload dates covering your test and
-   leave the layout version as `homepage-v1`. Select Load heatmap.
+   leave the layout version as `homepage-v2`. Select Load heatmap.
 4. If the status says Partial data, use Load more batches until all batches in the
    range have been scanned. Loaded counts remain explicitly partial until then.
 5. Choose the recorded viewport/page size matching the browser window used in step 1.
    Each option shows its own click count. Different dimensions are kept separate.
 6. Inspect the colored cells and element click counts. The repeated-click spot should
-   have the highest density in that group. Scroll inside the preview to inspect
-   lower sections; scroll the surrounding panel horizontally if the recorded
+   have the highest density in that group. The script-free preview shows the
+   initial menu and static cockpit; it cannot replay the game canvas or runtime
+   menu/history/result states. Scroll the surrounding panel horizontally if the recorded
    viewport is wider than the dashboard.
 7. Resize the test website, record more clicks, and load the heatmap again. A different
    recorded geometry should appear instead of moving the original group's points.
@@ -257,7 +327,7 @@ The preview must not create visits, increment counters, or upload visitor events
   It does not add scroll offsets again. Blue-to-red colors indicate fewer-to-more
   clicks relative to the highest-count cell in the selected group. Counts are raw
   clicks, not click rates normalized by section exposure.
-- Only `homepage-v1` has a current page preview. Other layout versions can show
+- Only `homepage-v2` has a current page preview. Historical `homepage-v1` and other layout versions can show
   counts but do not borrow this preview. Update the tracker version and the
   supported preview whenever layout changes make old positions incompatible;
   old page snapshots are not archived by this implementation.
