@@ -259,7 +259,7 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
     if (hack.progress >= hack.required) {
         Object.assign(planet, { owner: world.player.id, level: 0, stock: 0,
             nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
-        for (const key of ['turretHealth', 'turretDisabledUntil', 'turretAngle', 'nextShotAt']) delete planet[key];
+        for (const key of ['turrets', 'turretHealth', 'turretDisabledUntil', 'turretAngle', 'nextShotAt']) delete planet[key];
         world.stats.captures += 1;
         emit(world, 'hackCompleted', { bodyId: hack.bodyId });
         emit(world, 'captured', { bodyId: hack.bodyId });
@@ -273,9 +273,9 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
 }
 
 const upgrades = Object.freeze([
-    { name: 'Bullet barrier', description: 'Stops hostile shots crossing the small field.' },
-    { name: 'Turret', description: 'A turret fires slowly at hostile rockets outside the relay refuge.' },
-    { name: 'Outer field', description: 'A large soft field repels hostile rockets and slows bullets.' }
+    { name: 'Barrier + turret', description: 'Stops hostile shots crossing the small field and adds the first turret.' },
+    { name: 'Second turret', description: 'Adds a second turret on another side of the planet.' },
+    { name: 'Field + turret', description: 'Adds a third turret and a large soft field that repels hostile rockets and slows bullets.' }
 ]);
 
 // Describe only the docked planet's next purchase, distinguishing eligibility from affordability.
@@ -304,6 +304,7 @@ export function upgradePlanet(world) {
     const bodyId = world.player.docked;
     world.player.cargo -= upgrade.cost;
     world.planets[bodyId].level += 1;
+    prepareTurrets(world.planets[bodyId]);
     emit(world, 'upgraded', { bodyId, amount: world.planets[bodyId].level });
     return { ok: true, reason: upgrade.name };
 }
@@ -673,56 +674,85 @@ function coolPlayerGun(player, dt, elapsed) {
     player.gunHeat = Math.max(0, player.gunHeat - tuning.gunCoolingRate * dt);
 }
 
-// Aim each turret at the nearest visible enemy once per galaxy step, including its owner's view.
+// Keep added turrets in fixed, evenly spaced slots so upgrades never move an existing defense.
+export function turretPositions(body, level) {
+    const count = Math.max(0, Math.min(3, Math.floor(level || 0)));
+    return Array.from({ length: count }, (_, index) => {
+        const angle = -Math.PI / 2 + index * Math.PI * 2 / 3;
+        return { index, angle, x: body.x + Math.cos(angle) * (body.radius + 26),
+            y: body.y + Math.sin(angle) * (body.radius + 26) };
+    });
+}
+
+// Preserve the original turret on old saves and give each new upgrade independent health and timing.
+function prepareTurrets(planet) {
+    if (!Array.isArray(planet.turrets)) {
+        planet.turrets = [];
+        if (planet.level >= 2 && planet.turretHealth !== undefined) {
+            planet.turrets.push({ health: planet.turretHealth, angle: planet.turretAngle ?? -Math.PI / 2,
+                disabledUntil: planet.turretDisabledUntil || 0, nextShotAt: planet.nextShotAt || 0 });
+        }
+    }
+    const count = Math.max(0, Math.min(3, planet.level));
+    planet.turrets.length = Math.min(planet.turrets.length, count);
+    while (planet.turrets.length < count) {
+        const index = planet.turrets.length;
+        planet.turrets.push({ health: tuning.turretHealth, angle: -Math.PI / 2 + index * Math.PI * 2 / 3,
+            disabledUntil: 0, nextShotAt: 0 });
+    }
+    for (const key of ['turretHealth', 'turretDisabledUntil', 'turretAngle', 'nextShotAt']) delete planet[key];
+    return planet.turrets;
+}
+
+// Aim and fire every independent turret at its nearest visible enemy once per galaxy step.
 function fireTurrets(world) {
     const players = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
     for (const body of bodies) {
         const planet = world.planets[body.id];
-        if (!planet.owner || planet.level < 2) continue;
-        planet.turretHealth ??= tuning.turretHealth;
-        planet.turretAngle ??= -Math.PI / 2;
-        if (planet.turretDisabledUntil > world.elapsed) {
-            planet.turretHealth = tuning.turretHealth * Math.max(0, 1 - (planet.turretDisabledUntil - world.elapsed) / tuning.turretRecoveryDuration);
-            continue;
-        }
-        if (planet.turretDisabledUntil) {
-            planet.turretDisabledUntil = 0;
-            planet.turretHealth = tuning.turretHealth;
-            planet.nextShotAt = world.elapsed;
-        }
+        if (!planet.owner || planet.level < 1) continue;
+        const states = prepareTurrets(planet);
         const refuge = dockingPoint(body);
-        const x = body.x, y = body.y - body.radius - 26;
-        let target = null;
-        let distance = tuning.turretRange;
-        for (const player of players) {
-            if (player.deadUntil || player.id === planet.owner
-                || Math.hypot(player.x - refuge.x, player.y - refuge.y) <= tuning.refugeRadius + tuning.shipRadius) continue;
-            const candidateDistance = Math.hypot(player.x - x, player.y - y);
-            if (candidateDistance < 1 || candidateDistance > distance
-                || circleHit({ x, y }, player, body, body.radius) !== null) continue;
-            target = player; distance = candidateDistance;
+        for (const { x, y, index } of turretPositions(body, planet.level)) {
+            const turret = states[index];
+            if (turret.disabledUntil > world.elapsed) {
+                turret.health = tuning.turretHealth * Math.max(0, 1 - (turret.disabledUntil - world.elapsed) / tuning.turretRecoveryDuration);
+                continue;
+            }
+            if (turret.disabledUntil) {
+                turret.disabledUntil = 0;
+                turret.health = tuning.turretHealth;
+                turret.nextShotAt = world.elapsed;
+            }
+            let target = null;
+            let distance = tuning.turretRange;
+            for (const player of players) {
+                if (player.deadUntil || player.id === planet.owner
+                    || Math.hypot(player.x - refuge.x, player.y - refuge.y) <= tuning.refugeRadius + tuning.shipRadius) continue;
+                const candidateDistance = Math.hypot(player.x - x, player.y - y);
+                if (candidateDistance < 1 || candidateDistance > distance
+                    || circleHit({ x, y }, player, body, body.radius) !== null) continue;
+                target = player; distance = candidateDistance;
+            }
+            if (!target) continue;
+            turret.angle = Math.atan2(target.y - y, target.x - x);
+            if (world.elapsed + 1e-9 < turret.nextShotAt || world.projectiles.length >= tuning.maxProjectiles) continue;
+            world.projectiles.push({ id: `turret-${world.eventCounter + 1}`, owner: planet.owner,
+                source: 'turret', bodyId: body.id, turretIndex: index, x, y,
+                vx: (target.x - x) / distance * tuning.turretBulletSpeed,
+                vy: (target.y - y) / distance * tuning.turretBulletSpeed,
+                radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
+            turret.nextShotAt = world.elapsed + tuning.turretCooldown;
+            emit(world, 'turretFired', { bodyId: body.id, turretIndex: index });
         }
-        if (!target) continue;
-        planet.turretAngle = Math.atan2(target.y - y, target.x - x);
-        if (world.elapsed + 1e-9 < (planet.nextShotAt || 0) || world.projectiles.length >= tuning.maxProjectiles) continue;
-        world.projectiles.push({ id: `turret-${world.eventCounter + 1}`, owner: planet.owner,
-            source: 'turret', bodyId: body.id, x, y,
-            vx: (target.x - x) / distance * tuning.turretBulletSpeed,
-            vy: (target.y - y) / distance * tuning.turretBulletSpeed,
-            radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
-        planet.nextShotAt = world.elapsed + tuning.turretCooldown;
-        emit(world, 'turretFired', { bodyId: body.id });
     }
 }
 
-// Count hostile player hits, then recover on a fixed timer without extending it for extra hits.
-function hitTurret(world, body) {
-    const planet = world.planets[body.id];
-    if (planet.turretDisabledUntil > world.elapsed) return;
-    planet.turretHealth = Math.max(0, (planet.turretHealth ?? tuning.turretHealth) - 1);
-    if (planet.turretHealth === 0) {
-        planet.turretDisabledUntil = world.elapsed + tuning.turretRecoveryDuration;
-    }
+// Disable only the turret that was hit; further hits never extend its recovery timer.
+function hitTurret(world, body, index) {
+    const turret = prepareTurrets(world.planets[body.id])[index];
+    if (!turret || turret.disabledUntil > world.elapsed) return;
+    turret.health = Math.max(0, turret.health - 1);
+    if (turret.health === 0) turret.disabledUntil = world.elapsed + tuning.turretRecoveryDuration;
 }
 
 // Step one projectile through shields and refuge before its swept moving-player hit can apply.
@@ -747,10 +777,11 @@ function moveProjectile(world, shot, dt, previousPlayer) {
                 if (outerFraction !== null) interactions.push({ fraction: outerFraction, type: 'outer', body });
             }
         }
-        if (planet.owner && planet.owner !== shot.owner && planet.level >= 2 && shot.source === 'player') {
-            const turret = { x: body.x, y: body.y - body.radius - 26 };
-            const fraction = circleHit(start, end, turret, tuning.turretRadius + radius);
-            if (fraction !== null) interactions.push({ fraction, type: 'turret', body });
+        if (planet.owner && planet.owner !== shot.owner && planet.level >= 1 && shot.source === 'player') {
+            for (const turret of turretPositions(body, planet.level)) {
+                const fraction = circleHit(start, end, turret, tuning.turretRadius + radius);
+                if (fraction !== null) interactions.push({ fraction, type: 'turret', body, turretIndex: turret.index });
+            }
         }
         const surface = circleHit(start, end, body, body.radius + radius);
         if (surface !== null) interactions.push({ fraction: surface, type: 'surface', body });
@@ -792,7 +823,7 @@ function moveProjectile(world, shot, dt, previousPlayer) {
             if (world.players) withPlayer(world, interaction.playerId, () => damagePlayer(world, tuning.shotFuelDamage, reason, cause));
             else damagePlayer(world, tuning.shotFuelDamage, reason, cause);
         }
-        else if (interaction.type === 'turret') hitTurret(world, interaction.body);
+        else if (interaction.type === 'turret') hitTurret(world, interaction.body, interaction.turretIndex);
         else if (interaction.type === 'shield') emit(world, 'shieldBlocked', { bodyId: interaction.body.id });
         else if (interaction.type === 'refuge') emit(world, 'refugeBlocked', { bodyId: interaction.body.id });
         return false;

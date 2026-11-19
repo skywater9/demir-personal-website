@@ -1,6 +1,6 @@
 import {
-    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus
-} from './conquestPhysics.mjs?v=20261119-turrets';
+    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions
+} from './conquestPhysics.mjs?v=20261119-turret-rings';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -369,23 +369,29 @@ export class ConquestRenderer {
             this.label(`${body.name.toUpperCase()} PAD`, pad.x, pad.y + 21, color, 'center');
             this.label(status, pad.x, pad.y + 32, color, 'center');
         }
-        if (state.owner && state.level >= 2) this.drawTurret(body, world, color);
+        if (state.owner) for (const turret of turretPositions(body, state.level)) this.drawTurret(body, world, color, turret.index);
     }
 
     // Use the shared barrel angle and a bright silhouette so defenders see the same turret as attackers.
-    drawTurret(body, world, color) {
+    drawTurret(body, world, color, index = 0) {
         const ctx = this.context;
-        const state = world.planets[body.id];
-        const point = this.screen(body.x, body.y - body.radius - 26);
-        const disabled = state.turretDisabledUntil > world.elapsed;
-        const health = Math.max(0, Math.min(1, (state.turretHealth ?? tuning.turretHealth) / tuning.turretHealth));
+        const planet = world.planets[body.id];
+        const position = turretPositions(body, planet.level)[index];
+        if (!position) return;
+        const state = planet.turrets?.[index] || (index === 0 ? { health: planet.turretHealth,
+            angle: planet.turretAngle, disabledUntil: planet.turretDisabledUntil } : {});
+        const point = this.screen(position.x, position.y);
+        const disabled = state.disabledUntil > world.elapsed;
+        const health = Math.max(0, Math.min(1, (state.health ?? tuning.turretHealth) / tuning.turretHealth));
         const scale = Math.max(0.8, this.camera.zoom);
         ctx.save(); ctx.translate(point.x, point.y); ctx.scale(scale, scale);
+        ctx.save(); ctx.rotate(position.angle + Math.PI / 2);
         ctx.shadowColor = disabled ? '#dfab68' : color; ctx.shadowBlur = disabled ? 0 : 5;
         ctx.fillStyle = '#132833'; ctx.fillRect(-12, -3, 24, 12);
         ctx.strokeStyle = disabled ? '#927e70' : '#e1eee8'; ctx.lineWidth = 1; ctx.strokeRect(-12, -3, 24, 12);
         ctx.fillStyle = disabled ? '#776b60' : color; ctx.fillRect(-7, -9, 14, 9);
-        ctx.save(); ctx.rotate(state.turretAngle ?? -Math.PI / 2);
+        ctx.restore();
+        ctx.save(); ctx.rotate(state.angle ?? position.angle);
         ctx.fillStyle = disabled ? '#927e70' : '#e1eee8'; ctx.fillRect(0, -3, 20, 6);
         ctx.fillStyle = disabled ? '#dfab68' : color; ctx.fillRect(16, -4, 5, 8);
         ctx.restore(); ctx.shadowBlur = 0;

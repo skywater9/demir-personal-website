@@ -107,7 +107,7 @@ export class GameRoom {
         this.announce(id, 'left the galaxy.');
         for (const planet of Object.values(this.world.planets)) if (planet.owner === id) {
             Object.assign(planet, { owner: null, home: false, level: 0, stock: 0, nextShotAt: 0 });
-            for (const key of ['turretHealth', 'turretDisabledUntil', 'turretAngle']) delete planet[key];
+            for (const key of ['turrets', 'turretHealth', 'turretDisabledUntil', 'turretAngle']) delete planet[key];
         }
         this.world.projectiles = this.world.projectiles.filter(shot => shot.owner !== id);
         delete this.world.players[id]; delete this.sessions[id]; delete this.inputs[id];

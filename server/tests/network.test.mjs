@@ -120,7 +120,8 @@ test('a restarted service restores territory and gives online pilots a fresh rec
     const id = pilot.welcome.playerId;
     first.room.world.planets.moon.owner = id;
     first.room.world.planets.moon.level = 2;
-    Object.assign(first.room.world.planets.moon, { turretHealth: 2.5, turretDisabledUntil: first.room.world.elapsed + 5, turretAngle: -.7 });
+    first.room.world.planets.moon.turrets = [{ health: 2.5, disabledUntil: first.room.world.elapsed + 5, angle: -.7, nextShotAt: 0 },
+        { health: 5, disabledUntil: 0, angle: .2, nextShotAt: 0 }];
     first.room.world.players[id].player.rocketTier = 3;
     await first.close();
     clock = 1000000;
@@ -131,9 +132,9 @@ test('a restarted service restores territory and gives online pilots a fresh rec
         assert.equal(recovered.welcome.playerId, id);
         assert.equal(recovered.welcome.resumed, true);
         assert.equal(recovered.welcome.world.planets.moon.level, 2);
-        assert.equal(recovered.welcome.world.planets.moon.turretHealth, 2.5);
-        assert.equal(recovered.welcome.world.planets.moon.turretAngle, -.7);
-        assert.ok(recovered.welcome.world.planets.moon.turretDisabledUntil > recovered.welcome.world.elapsed);
+        assert.equal(recovered.welcome.world.planets.moon.turrets[0].health, 2.5);
+        assert.equal(recovered.welcome.world.planets.moon.turrets[0].angle, -.7);
+        assert.ok(recovered.welcome.world.planets.moon.turrets[0].disabledUntil > recovered.welcome.world.elapsed);
         assert.equal(recovered.welcome.world.player.rocketTier, 3);
         recovered.socket.terminate();
     } finally { await restarted.close(); await rm(dir, { recursive: true, force: true }); }

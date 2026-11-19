@@ -32,6 +32,10 @@ export function validateSave(data) {
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
             || planet.level < 0 || planet.level > 3 || !Number.isFinite(planet.stock) || planet.stock < 0
             || typeof planet.home !== 'boolean' || (planet.home && !planet.owner)) throw new Error('Invalid saved territory.');
+        if (planet.turrets !== undefined && (!Array.isArray(planet.turrets) || planet.turrets.length !== planet.level
+            || !planet.turrets.every(turret => turret && ['health', 'angle', 'disabledUntil', 'nextShotAt'].every(key =>
+                Number.isFinite(turret[key]) && Math.abs(turret[key]) < 1e8)
+                && turret.health >= 0 && turret.health <= tuning.turretHealth))) throw new Error('Invalid saved turret array.');
         if (planet.turretHealth !== undefined && (!Number.isFinite(planet.turretHealth) || planet.turretHealth < 0 || planet.turretHealth > tuning.turretHealth)) throw new Error('Invalid saved turret health.');
         for (const key of ['turretAngle', 'turretDisabledUntil']) {
             if (planet[key] !== undefined && (!Number.isFinite(planet[key]) || Math.abs(planet[key]) > 1e8)) throw new Error('Invalid saved turret state.');

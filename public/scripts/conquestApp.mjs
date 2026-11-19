@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-turrets';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-turret-rings';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-turrets';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-turrets';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-turrets';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-turret-rings';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-turret-rings';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-turret-rings';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',

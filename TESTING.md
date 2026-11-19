@@ -168,3 +168,10 @@ proxy/service deployment have not been performed.
 - Watch chat from a second connection while a pilot joins, gets destroyed, disconnects, returns within 30 seconds, and explicitly leaves. Confirm correct generated labels and colors, one announcement per transition, and no chat content in durable saves or analytics.
 - At zero fuel, holding Space must not self-destruct. Release and press once to accept the warning above the map, or click its button. With fuel, Space still fires; typing in chat cannot self-destruct.
 - Visual browser checking was unavailable during this implementation; rendering and interaction are covered by automated checks, with real local WebSocket lifecycle tests.
+
+## Turret added by every planet upgrade
+
+- Buy tiers one through three: check one, two, then three turrets spaced in stable surface slots. Shield effects and prices remain unchanged.
+- Shoot each turret from inside the shield: only that turret loses health and disables. Other turrets keep aiming and firing if they have line of sight.
+- Upgrade while a turret is damaged or recovering: its state and position must remain intact. Capture or owner departure clears all turret state.
+- Restore a legacy single-turret save: preserve that gun's health/aim/recovery and create the additional turrets for the saved tier. Restart and recover the new independent turret state.

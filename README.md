@@ -7,6 +7,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 ## Combat and room activity
 
+- Each of the three planet upgrades adds one turret in a fixed slot around the planet (one, two, then three total), keeping the existing shield effects and prices. Each turret aims, fires, takes damage, and recovers independently.
 - Turret heads share one server-controlled aim for owners and attackers. Bright bases and outlined barrels make them easier to spot.
 - Five hostile player-bullet hits disable a turret for 10 seconds. Enter its bullet shield before shooting it. A small bar appears on damage and refills while disabled; full health reactivates it. Friendly shots do not damage turrets, and hits during recovery do not extend the timer.
 - New pilots at every home get a large flashing relay arrow and “CAPTURE PLANETS TO GAIN CARGO” guidance until their first capture. Earth prefers Moon when neutral; other homes target nearby neutral relays.

@@ -88,7 +88,7 @@ tier 2 fires pairs; tier 3 reduces powered-control fuel use by 20%; tier 4 alter
 faster barrels and increases bullet speed by 30%. Death removes one tier, at most
 once, and the death notice identifies the loss. These are initial playtest values.
 
-Turrets choose their nearest eligible enemy in the shared simulation, so the owner's barrel moves identically to the attacker's. Five hostile player shots disable one for ten seconds. Its shared health refills during recovery; friendly shots cannot damage it, and hits during recovery do not extend the timer. Capture and departure reset turret state. Existing saves without turret fields remain supported.
+Each planet upgrade adds one turret, with three fixed surface slots spaced 120 degrees apart. Each has independent health, aim, firing and recovery timers. Existing single-turret saves migrate their original gun state into the first slot, then add the remaining guns required by the saved tier. Turrets choose their nearest eligible enemy in the shared simulation, so the owner's barrel moves identically to the attacker's. Five hostile player shots disable one for ten seconds. Its shared health refills during recovery; friendly shots cannot damage it, and hits during recovery do not extend the timer. Capture and departure reset turret state. Existing saves without turret fields remain supported.
 
 ## Local verification
 

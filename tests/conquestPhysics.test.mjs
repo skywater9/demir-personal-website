@@ -4,7 +4,7 @@ import {
     tuning, systems, bodies, stationGeometry, stationFor, dockingPoint,
     createWorld, nearestBody, gravityAt, targetFor, setTarget, nearestRelay,
     dockingStatus, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stepWorld
+    killPlayer, stepWorld, turretPositions
 } from '../public/scripts/conquestPhysics.mjs';
 import { tuning as motionTuning, stationGeometry as originalGeometry } from '../public/scripts/rocketPhysics.mjs?v=20261118-conquest';
 
@@ -205,6 +205,7 @@ test('owned relay upgrades charge exact costs, reject insufficient cargo and sto
         assert.equal(upgradePlanet(world).ok, true);
         assert.equal(world.player.cargo, cargo - tuning.upgradeCosts[level]);
         assert.equal(world.planets[body.id].level, level + 1);
+        assert.equal(world.planets[body.id].turrets.length, level + 1);
     }
     const cargo = world.player.cargo;
     assert.equal(nextUpgrade(world).available, false);
@@ -499,7 +500,8 @@ test('turrets only target a live hostile pilot outside relay refuge', () => {
     assert.equal(world.projectiles.length, 0);
     world.player.x += tuning.refugeRadius + 100;
     advance(world, 0.1);
-    assert.equal(world.projectiles.length, 1);
+    assert.equal(world.projectiles.length, 2);
+    assert.deepEqual(new Set(world.projectiles.map(shot => shot.turretIndex)), new Set([0, 1]));
     assert.equal(world.projectiles[0].source, 'turret');
     world.projectiles = [];
     world.planets[body.id].owner = 'pilot';
@@ -760,19 +762,19 @@ test('five hostile shots disable a turret, its bar recovers, and extra hits do n
         stepWorld(world);
     };
     hit('pilot');
-    assert.equal(planet.turretHealth, tuning.turretHealth);
+    assert.equal(planet.turrets[0].health, tuning.turretHealth);
     world.projectiles = [];
     for (let index = 0; index < 5; index++) hit('hostile');
-    assert.equal(planet.turretHealth, 0);
-    assert.ok(planet.turretDisabledUntil > world.elapsed);
-    const deadline = planet.turretDisabledUntil;
+    assert.equal(planet.turrets[0].health, 0);
+    assert.ok(planet.turrets[0].disabledUntil > world.elapsed);
+    const deadline = planet.turrets[0].disabledUntil;
     hit('hostile');
-    assert.equal(planet.turretDisabledUntil, deadline);
+    assert.equal(planet.turrets[0].disabledUntil, deadline);
     advance(world, 5);
-    assert.ok(planet.turretHealth > 2 && planet.turretHealth < 3);
+    assert.ok(planet.turrets[0].health > 2 && planet.turrets[0].health < 3);
     advance(world, 5.1);
-    assert.equal(planet.turretHealth, tuning.turretHealth);
-    assert.equal(planet.turretDisabledUntil, 0);
+    assert.equal(planet.turrets[0].health, tuning.turretHealth);
+    assert.equal(planet.turrets[0].disabledUntil, 0);
 });
 
 // Existing defense layers must intercept external shots before they can reach a turret.
@@ -782,7 +784,79 @@ test('bullet barrier still protects a turret from shots fired outside the field'
     Object.assign(world.planets[body.id], { owner: 'pilot', level: 2 });
     world.projectiles.push(shot(body.x, body.y - body.radius - 400, 0, 100000));
     stepWorld(world);
-    assert.equal(world.planets[body.id].turretHealth, tuning.turretHealth);
+    assert.equal(world.planets[body.id].turrets[0].health, tuning.turretHealth);
     assert.equal(world.projectiles.length, 0);
     assert.ok(world.events.some(event => event.type === 'shieldBlocked'));
+});
+
+// Every paid tier adds a stable slot, retaining the health and recovery of existing defenses.
+test('each planet upgrade adds one stationary turret and preserves existing turret state', () => {
+    const world = createWorld();
+    const body = atRelay(world);
+    world.planets[body.id].owner = world.player.id;
+    interact(world); world.player.cargo = 100;
+    const planet = world.planets[body.id];
+    assert.equal(upgradePlanet(world).ok, true);
+    const first = planet.turrets[0];
+    first.health = 2; first.disabledUntil = 3;
+    const firstPosition = turretPositions(body, 1)[0];
+    for (const level of [2, 3]) {
+        assert.equal(upgradePlanet(world).ok, true);
+        assert.equal(planet.turrets.length, level);
+        assert.equal(planet.turrets[0], first);
+        assert.equal(first.health, 2); assert.equal(first.disabledUntil, 3);
+        assert.deepEqual(turretPositions(body, level)[0], firstPosition);
+    }
+    const positions = turretPositions(body, 3);
+    for (const turret of positions) close(Math.hypot(turret.x - body.x, turret.y - body.y), body.radius + 26);
+    for (const [a, b] of [[0, 1], [1, 2]]) close(positions[b].angle - positions[a].angle, Math.PI * 2 / 3);
+});
+
+// Swept collisions must select the correct turret on every side of the planet.
+test('each turret has its own projectile hitbox and five-hit disable state', () => {
+    const world = inSpace();
+    const body = bodies[1], planet = world.planets[body.id];
+    Object.assign(planet, { owner: world.player.id, level: 3 });
+    for (const turret of turretPositions(body, 3)) {
+        const tangent = { x: -Math.sin(turret.angle), y: Math.cos(turret.angle) };
+        for (let hit = 0; hit < 5; hit++) {
+            world.projectiles.push(shot(turret.x - tangent.x * 70, turret.y - tangent.y * 70,
+                tangent.x * 10000, tangent.y * 10000));
+            stepWorld(world);
+            assert.equal(planet.turrets[turret.index].health, 4 - hit);
+        }
+        assert.ok(planet.turrets[turret.index].disabledUntil > world.elapsed);
+        for (let index = turret.index + 1; index < 3; index++) assert.equal(planet.turrets[index].health, 5);
+    }
+});
+
+// Disabling one emplacement must not stop another turret that can see an enemy.
+test('a disabled turret does not prevent the other side of a planet from firing', () => {
+    const world = inSpace();
+    const body = bodies[1], planet = world.planets[body.id];
+    Object.assign(planet, { owner: 'hostile', level: 2 });
+    stepWorld(world);
+    planet.turrets[0].health = 0;
+    planet.turrets[0].disabledUntil = world.elapsed + 10;
+    const second = turretPositions(body, 2)[1];
+    Object.assign(world.player, { x: second.x + Math.cos(second.angle) * 500,
+        y: second.y + Math.sin(second.angle) * 500, vx: 0, vy: 0 });
+    stepWorld(world);
+    assert.ok(world.projectiles.some(shot => shot.source === 'turret' && shot.turretIndex === 1));
+    assert.ok(!world.projectiles.some(shot => shot.source === 'turret' && shot.turretIndex === 0));
+});
+
+// Old single-turret snapshots keep their original gun and gain the newly required second slot.
+test('legacy saved turret health and recovery migrate without resetting the original defense', () => {
+    const world = inSpace();
+    const planet = world.planets.moon;
+    Object.assign(planet, { owner: world.player.id, level: 2, turretHealth: 2.5,
+        turretAngle: -.7, turretDisabledUntil: 5, nextShotAt: 1 });
+    stepWorld(world);
+    assert.equal(planet.turrets.length, 2);
+    assert.equal(planet.turrets[0].angle, -.7);
+    assert.equal(planet.turrets[0].disabledUntil, 5);
+    assert.ok(planet.turrets[0].health > 2.49 && planet.turrets[0].health < 2.52);
+    assert.equal(planet.turrets[1].health, 5);
+    assert.equal(planet.turretHealth, undefined);
 });

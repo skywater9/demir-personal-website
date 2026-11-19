@@ -183,20 +183,22 @@ test('turret owner and attacker see the same tracking head and disabled turrets 
     Object.assign(owner.player, { y: body.y - 500 });
     Object.assign(enemy.player, { x: body.x + 500, y: body.y - body.radius - 400, landedOn: null });
     room.tick(tuning.fixedStep, 1000);
-    const firstAngle = planet.turretAngle;
+    const firstAngle = planet.turrets[0].angle;
     assert.ok(Number.isFinite(firstAngle));
     assert.notEqual(firstAngle, -Math.PI / 2);
-    assert.equal(room.view(a.playerId).planets.moon.turretAngle, room.view(b.playerId).planets.moon.turretAngle);
+    assert.equal(room.view(a.playerId).planets.moon.turrets[0].angle, room.view(b.playerId).planets.moon.turrets[0].angle);
     enemy.player.x -= 100;
     room.tick(tuning.fixedStep, 1000);
-    assert.notEqual(planet.turretAngle, firstAngle);
+    assert.notEqual(planet.turrets[0].angle, firstAngle);
     // Model the server-confirmed disable state and verify no gunfire until recovery completes.
-    planet.turretHealth = 0;
-    planet.turretDisabledUntil = room.world.elapsed + 10;
+    planet.turrets[0].health = 0;
+    planet.turrets[0].disabledUntil = room.world.elapsed + 10;
+    planet.turrets[1].health = 0;
+    planet.turrets[1].disabledUntil = room.world.elapsed + 10;
     room.world.projectiles = [];
     for (let index = 0; index < 5; index++) room.tick(1, 1000);
     assert.equal(room.world.projectiles.filter(shot => shot.source === 'turret').length, 0);
-    assert.ok(planet.turretHealth > 2 && planet.turretHealth < 3);
+    assert.ok(planet.turrets[0].health > 2 && planet.turrets[0].health < 3);
 });
 
 // Every spawn slot should direct a newcomer toward a capturable relay near its home system.

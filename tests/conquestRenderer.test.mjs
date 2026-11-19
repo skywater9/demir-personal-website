@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConquestRenderer } from '../public/scripts/conquestRenderer.mjs';
-import { createWorld, bodies, systems, stepWorld, dockingPoint, killPlayer } from '../public/scripts/conquestPhysics.mjs';
+import { createWorld, bodies, systems, stepWorld, dockingPoint, killPlayer, turretPositions } from '../public/scripts/conquestPhysics.mjs';
 
 // Observe real drawing operations and fail on invalid coordinates without requiring an installed browser.
 function makeRenderer() {
@@ -495,12 +495,12 @@ test('visible turret uses shared aim and displays a refilling disable health bar
     const world = createWorld();
     const body = bodies[1];
     const state = world.planets[body.id];
-    Object.assign(state, { owner: world.player.id, level: 2, turretAngle: -.7, turretHealth: 3 });
+    Object.assign(state, { owner: world.player.id, level: 2, turrets: [{ angle: -.7, health: 3, disabledUntil: 0 }] });
     renderer.drawTurret(body, world, '#8cdeb0');
     assert.ok(calls.some(call => call[0] === 'rotate' && call[1] === -.7));
     assert.ok(calls.some(call => call[0] === 'fillRect' && call[1] === -16 && call[3] === 32 * 3 / 5));
     calls.length = 0;
-    state.turretHealth = 5;
+    state.turrets[0].health = 5;
     renderer.drawTurret(body, world, '#8cdeb0');
     assert.ok(!calls.some(call => call[0] === 'strokeRect' && call[1] === -17));
 });
@@ -514,4 +514,22 @@ test('map draws distant public pilot markers independently of nearby flight ship
     renderer.drawMap(world);
     assert.ok(calls.some(call => call[0] === 'fillText' && call[1] === 'Pilot 2'));
     assert.ok(calls.some(call => call[0] === 'translate' && call[1] === map.width - 8));
+});
+
+// Planet art must use the same stable surface slots as projectile collisions and server aiming.
+test('planet renders one turret per upgrade at its shared world position without changing state', () => {
+    const { renderer } = makeRenderer();
+    const world = createWorld();
+    const body = bodies[1], planet = world.planets[body.id];
+    renderer.camera = { x: body.x, y: body.y, zoom: .5 };
+    const positions = [];
+    renderer.drawTurret = (body, world, color, index) => positions.push(turretPositions(body, world.planets[body.id].level)[index]);
+    for (const level of [1, 2, 3]) {
+        Object.assign(planet, { owner: world.player.id, level });
+        positions.length = 0;
+        const before = structuredClone(world);
+        renderer.drawBody(body, world);
+        assert.deepEqual(positions, turretPositions(body, level));
+        assert.deepEqual(world, before);
+    }
 });

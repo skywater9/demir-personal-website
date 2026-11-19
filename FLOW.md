@@ -25,7 +25,7 @@ flowchart TD
     progress -->|No| hack
     progress -->|Yes| capture[Transfer ownership, reset defenses, expand shield, announce capture]
     capture --> shop[T planet purchase or R rocket purchase at owned relay]
-    shop -->|Server validates cargo and tier| purchase[Charge once, save state, confirm upgrade]
+    shop -->|Server validates cargo and tier| purchase[Charge once; planet upgrade adds one independently operating turret, up to three; save and confirm]
     purchase --> shop
     shop -->|E detach| shared
     hack -->|E detach or disconnect| cancel[Reset partial hack]
@@ -40,7 +40,7 @@ flowchart TD
     fuelWarning -->|Reach owned pad| refuel
     fuelWarning -->|Fresh Space press or click| death[Death drops cargo and removes one rocket tier]
     shared -->|Lethal damage| death
-    shared -->|Shoot hostile turret inside its shield| turretDamage[Show small health bar; five hits disable turret]
+    shared -->|Shoot hostile turret inside its shield| turretDamage[Show hit turret health bar; five hits disable only that turret]
     turretDamage --> turretRecovery[Turret stops firing; bar refills for ten seconds]
     turretRecovery --> shared
     shared --> mapPilots[Map shows all pilots; distant pilots use edge direction markers]
@@ -168,7 +168,7 @@ flowchart TD
   defenses expand the digit pool and increase required presses. Detaching resets.
 - Cargo is one resource. Owned planets produce it; owned-pad landings automatically
   collect it. Any owned relay can upgrade only its own planet.
-- The upgrade sequence is bullet barrier → turret → outer field. Newly captured
+- The upgrade sequence is bullet barrier plus first turret → second turret → outer field plus third turret. Newly captured
   worlds have a weak field. Small fields gently repel hostile rockets; hard bullet
   barriers still allow rockets inside. Friendly shots ignore friendly barriers.
 - Home cannot be captured and has a hard shield against hostile ships/shots.
