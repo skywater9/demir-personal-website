@@ -1,6 +1,6 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus
-} from './conquestPhysics.mjs?v=20261119-feedback';
+} from './conquestPhysics.mjs?v=20261119-turrets';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -372,17 +372,28 @@ export class ConquestRenderer {
         if (state.owner && state.level >= 2) this.drawTurret(body, world, color);
     }
 
-    // Draw the fixed planetary turret with its barrel tracking the nearby pilot.
+    // Use the shared barrel angle and a bright silhouette so defenders see the same turret as attackers.
     drawTurret(body, world, color) {
         const ctx = this.context;
-        const turret = { x: body.x, y: body.y - body.radius - 26 };
-        const point = this.screen(turret.x, turret.y);
-        const hostile = world.planets[body.id]?.owner !== world.player.id;
-        const angle = hostile ? Math.atan2(world.player.y - turret.y, world.player.x - turret.x) : -Math.PI / 2;
-        ctx.save(); ctx.translate(point.x, point.y); ctx.scale(Math.max(0.6, this.camera.zoom), Math.max(0.6, this.camera.zoom));
-        ctx.fillStyle = '#253e4a'; ctx.fillRect(-7, -3, 14, 7);
-        ctx.fillStyle = color; ctx.fillRect(-4, -5, 8, 5);
-        ctx.rotate(angle); ctx.fillRect(0, -2, 12, 4);
+        const state = world.planets[body.id];
+        const point = this.screen(body.x, body.y - body.radius - 26);
+        const disabled = state.turretDisabledUntil > world.elapsed;
+        const health = Math.max(0, Math.min(1, (state.turretHealth ?? tuning.turretHealth) / tuning.turretHealth));
+        const scale = Math.max(0.8, this.camera.zoom);
+        ctx.save(); ctx.translate(point.x, point.y); ctx.scale(scale, scale);
+        ctx.shadowColor = disabled ? '#dfab68' : color; ctx.shadowBlur = disabled ? 0 : 5;
+        ctx.fillStyle = '#132833'; ctx.fillRect(-12, -3, 24, 12);
+        ctx.strokeStyle = disabled ? '#927e70' : '#e1eee8'; ctx.lineWidth = 1; ctx.strokeRect(-12, -3, 24, 12);
+        ctx.fillStyle = disabled ? '#776b60' : color; ctx.fillRect(-7, -9, 14, 9);
+        ctx.save(); ctx.rotate(state.turretAngle ?? -Math.PI / 2);
+        ctx.fillStyle = disabled ? '#927e70' : '#e1eee8'; ctx.fillRect(0, -3, 20, 6);
+        ctx.fillStyle = disabled ? '#dfab68' : color; ctx.fillRect(16, -4, 5, 8);
+        ctx.restore(); ctx.shadowBlur = 0;
+        if (health < 1 || disabled) {
+            ctx.fillStyle = '#101a22'; ctx.fillRect(-17, -24, 34, 6);
+            ctx.fillStyle = disabled ? '#edb368' : '#ed7971'; ctx.fillRect(-16, -23, 32 * health, 4);
+            ctx.strokeStyle = '#b6c7c5'; ctx.strokeRect(-17, -24, 34, 6);
+        }
         ctx.restore();
     }
 
@@ -721,7 +732,8 @@ export class ConquestRenderer {
         const distanceText = distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
         const relay = target.type === 'relay' || target.type === 'station';
         const moonRelay = relay && target.body.id === 'moon';
-        const explainCargo = moonRelay && world.stats.captures === 0;
+        const explainCargo = relay && world.stats.captures === 0;
+        const largeArrow = moonRelay || explainCargo;
         const text = `${target.body.name.toUpperCase()} ${relay ? 'RELAY' : 'PAD'} / ${distanceText}`;
         const width = this.canvas.width;
         const height = this.canvas.height;
@@ -736,7 +748,7 @@ export class ConquestRenderer {
             const size = relay ? 14 : 18;
             ctx.strokeRect(point.x - size, point.y - size, size * 2, size * 2);
             ctx.fillStyle = color; ctx.beginPath();
-            const arrowHalfWidth = moonRelay ? 14 : 7;
+            const arrowHalfWidth = largeArrow ? 14 : 7;
             ctx.moveTo(point.x, point.y - size - 18); ctx.lineTo(point.x - arrowHalfWidth, point.y - size - 18 - arrowHalfWidth * 1.6);
             ctx.lineTo(point.x + arrowHalfWidth, point.y - size - 18 - arrowHalfWidth * 1.6); ctx.fill();
             captionX = point.x; captionY = point.y + size + 20;
@@ -753,7 +765,7 @@ export class ConquestRenderer {
             const x = centerX + dx * factor;
             const y = centerY + dy * factor;
             ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx));
-            const arrowSize = moonRelay ? 20 : 10;
+            const arrowSize = largeArrow ? 20 : 10;
             ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(arrowSize, 0); ctx.lineTo(-arrowSize * .6, -arrowSize * .6); ctx.lineTo(-arrowSize * .6, arrowSize * .6); ctx.fill(); ctx.restore();
             captionX = x; captionY = y + 28;
             this.label(text, x, y - 12, color, 'center', true);
@@ -805,10 +817,18 @@ export class ConquestRenderer {
                 ctx.fillStyle = homeColor; ctx.fillText('H', x + 9, y + 3);
             }
         }
-        for (const other of world.others || []) if (!other.deadUntil) {
+        for (const other of world.mapPlayers || world.others || []) if (other.id !== world.player.id && !other.deadUntil) {
             const point = this.mapPoint(other.x, other.y, layout);
-            ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(other.angle);
-            ctx.fillStyle = other.color; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(-4, 5); ctx.lineTo(4, 5); ctx.closePath(); ctx.fill(); ctx.restore();
+            const x = Math.max(8, Math.min(width - 8, point.x)), y = Math.max(8, Math.min(height - 8, point.y));
+            const offMap = x !== point.x || y !== point.y;
+            ctx.save(); ctx.globalAlpha = other.connected === false ? .45 : 1;
+            ctx.translate(x, y); ctx.rotate(offMap ? Math.atan2(point.y - height / 2, point.x - width / 2) + Math.PI / 2 : other.angle);
+            ctx.fillStyle = other.color; ctx.strokeStyle = '#e1eee8'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(-4, 5); ctx.lineTo(4, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.restore();
+            ctx.fillStyle = other.color; ctx.textAlign = x > width - 65 ? 'right' : 'left';
+            ctx.fillText(other.label || 'Pilot', x > width - 65 ? x - 7 : x + 7, Math.max(10, y - 7));
+            ctx.textAlign = 'center';
         }
         const x = width / 2;
         const y = height / 2;

@@ -15,7 +15,8 @@ flowchart TD
     retry --> onlineMenu
     accepted -->|New pilot| spawn[Assign free protected home, anonymous label and color]
     accepted -->|Valid reconnect| recover[Restore server-confirmed state]
-    spawn --> shared[Fly in the shared galaxy; server owns outcomes]
+    spawn --> guide[Target nearby neutral relay; large capture and cargo arrow for every home]
+    guide --> shared[Fly in the shared galaxy; server owns outcomes]
     recover --> shared
     shared --> hack[Dock non-home relay and enter changing code]
     hack -->|Wrong code| feedback[Flash red; progress unchanged]
@@ -35,9 +36,18 @@ flowchart TD
     refuel --> shared
     shared --> chat[Slash opens room chat; Enter sends; Escape closes]
     chat --> shared
-    shared --> death[Death drops cargo and removes one rocket tier]
+    shared -->|Zero fuel| fuelWarning[Warning above map: coast or press Space to self-destruct]
+    fuelWarning -->|Reach owned pad| refuel
+    fuelWarning -->|Fresh Space press or click| death[Death drops cargo and removes one rocket tier]
+    shared -->|Lethal damage| death
+    shared -->|Shoot hostile turret inside its shield| turretDamage[Show small health bar; five hits disable turret]
+    turretDamage --> turretRecovery[Turret stops firing; bar refills for ten seconds]
+    turretRecovery --> shared
+    shared --> mapPilots[Map shows all pilots; distant pilots use edge direction markers]
+    mapPilots --> shared
     death --> notice[Show tier loss during death and respawn at home]
-    notice --> shared
+    notice --> activity[Announce death in room chat]
+    activity --> shared
     shared --> menu[Menu overlay; server simulation continues]
     menu -->|Continue| shared
     menu -->|Leave| release[Release territory immediately]
@@ -53,7 +63,7 @@ flowchart TD
 Rocket tiers are sequential: fading acceleration/weapon improvement, twin gun,
 fuel efficiency, then faster alternating barrels and bullet speed. Death floors
 the tier at zero. Chat contents and reconnect credentials never enter analytics.
-The server broadcasts public planet colors and only relevant remote ship states.
+The server broadcasts public planet colors and map positions for all pilots, with only relevant full remote ship states. Room chat announces joins, disconnects, returns, departures, captures and deaths; messages remain transient.
 
 ---
 
@@ -123,10 +133,8 @@ flowchart TD
     noservice --> flight
     flight -->|Zero fuel| emptyfuel[Coast under gravity; show self-destruct option]
     emptyfuel -->|Reach owned pad| service
-    emptyfuel -->|Self-destruct| selfconfirm{Confirm cargo loss and respawn?}
-    selfconfirm -->|Cancel| emptyfuel
-    selfconfirm -->|Confirm| death[Explosion; drop carried cargo; lose one rocket tier; retain territory]
-    flight -->|Hostile projectile or fast impact| damage[Fuel damage; white leak particles]
+    emptyfuel -->|Fresh Space press or click: accept cargo loss| death[Explosion; drop carried cargo; lose one rocket tier; retain territory]
+    flight -->|Hostile projectile or fast impact| damage[Fuel damage; red hull flash and white leak particles]
     damage -->|Damage exceeds fuel before hit| death
     damage -->|Fuel covers damage, including equality| flight
     flight -->|Star contact| death

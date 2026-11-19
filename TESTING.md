@@ -158,3 +158,13 @@ proxy/service deployment have not been performed.
 - A captured planet now generates 3 cargo per 10 seconds, with roughly one pod every 3.34 seconds. Existing cargo is retained.
 - Hold fire until overheating: no gun steam should appear. The aim cursor blinks red and its cooldown pie drains to empty over 2.5 seconds. With reduced motion, it stays steady while the pie drains.
 - Backend updates require pulling the commit in the existing project and restarting with `svc restart game`; frontend changes alone do not change authoritative production or remote hit feedback.
+
+## Turrets, onboarding, map pilots and room activity
+
+- Compare the same turret from its owner and attacker's views: its barrel should track the same enemy even between shots. Test a nearer enemy, relay refuge, planet occlusion, and a disabled turret.
+- Fire five hostile shots from inside its ordinary bullet shield. Its small bar loses health per hit, refills during a 10-second disablement, and disappears at full health. Extra hits during recovery do not restart it. Friendly and externally shield-blocked shots do not damage it.
+- Spawn pilots in all eight home slots: each starts toward a neutral relay and sees the large cargo/capture guide until their first capture.
+- Fly outside nearby-ship range: the other pilot stays on the map, with a direction marker if beyond its bounds, while the flight view keeps its visibility limit.
+- Watch chat from a second connection while a pilot joins, gets destroyed, disconnects, returns within 30 seconds, and explicitly leaves. Confirm correct generated labels and colors, one announcement per transition, and no chat content in durable saves or analytics.
+- At zero fuel, holding Space must not self-destruct. Release and press once to accept the warning above the map, or click its button. With fuel, Space still fires; typing in chat cannot self-destruct.
+- Visual browser checking was unavailable during this implementation; rendering and interaction are covered by automated checks, with real local WebSocket lifecycle tests.

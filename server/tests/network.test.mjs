@@ -43,6 +43,8 @@ test('two real connections share captures, purchases, chat and restart recovery'
     assert.notEqual(a.welcome.playerId, b.welcome.playerId);
     const aid = a.welcome.playerId, bid = b.welcome.playerId;
     assert.equal(a.welcome.world.target.bodyId, 'moon');
+    const joined = await a.wait(message => message.type === 'announcement' && message.text === `${b.welcome.world.player.label} joined the galaxy.`);
+    assert.equal(joined.color, b.welcome.world.player.color);
     a.socket.send(JSON.stringify({ type: 'chat', sequence: 1, text: 'test space message' }));
     const chat = await b.wait(message => message.type === 'chat');
     assert.equal(chat.text, 'test space message');
@@ -76,6 +78,7 @@ test('two real connections share captures, purchases, chat and restart recovery'
     b.socket.send(JSON.stringify({ type: 'action', sequence: 1, actionId: 1, action: 'selfDestruct' }));
     const explosion = await a.wait(message => message.type === 'death');
     assert.equal(explosion.id, bid);
+    await a.wait(message => message.type === 'announcement' && message.text === `${victim.label} self-destructed.`);
     assert.ok(Number.isFinite(explosion.x));
     const saved = await new GalaxyStore(file).load();
     assert.equal(saved.world.planets.moon.owner, aid);
@@ -85,10 +88,13 @@ test('two real connections share captures, purchases, chat and restart recovery'
     assert.equal(a.welcome.world.players, undefined);
     assert.equal(saved.world.players[bid].player.homeId === saved.world.players[aid].player.homeId, false);
     a.socket.close(); await once(a.socket, 'close');
-    await new Promise(resolveWait => setTimeout(resolveWait, 30));
+    await b.wait(message => message.type === 'announcement' && message.text.startsWith(`${actor.player.label} disconnected`));
     const rejoined = await peer(url, a.welcome.token);
     assert.equal(rejoined.welcome.resumed, true);
     assert.equal(rejoined.welcome.world.player.rocketTier, 1);
+    await b.wait(message => message.type === 'announcement' && message.text === `${actor.player.label} rejoined the galaxy.`);
+    rejoined.socket.send(JSON.stringify({ type: 'leave', sequence: 1 }));
+    await b.wait(message => message.type === 'announcement' && message.text === `${actor.player.label} left the galaxy.`);
     rejoined.socket.terminate();
 });
 
@@ -114,6 +120,7 @@ test('a restarted service restores territory and gives online pilots a fresh rec
     const id = pilot.welcome.playerId;
     first.room.world.planets.moon.owner = id;
     first.room.world.planets.moon.level = 2;
+    Object.assign(first.room.world.planets.moon, { turretHealth: 2.5, turretDisabledUntil: first.room.world.elapsed + 5, turretAngle: -.7 });
     first.room.world.players[id].player.rocketTier = 3;
     await first.close();
     clock = 1000000;
@@ -124,6 +131,9 @@ test('a restarted service restores territory and gives online pilots a fresh rec
         assert.equal(recovered.welcome.playerId, id);
         assert.equal(recovered.welcome.resumed, true);
         assert.equal(recovered.welcome.world.planets.moon.level, 2);
+        assert.equal(recovered.welcome.world.planets.moon.turretHealth, 2.5);
+        assert.equal(recovered.welcome.world.planets.moon.turretAngle, -.7);
+        assert.ok(recovered.welcome.world.planets.moon.turretDisabledUntil > recovered.welcome.world.elapsed);
         assert.equal(recovered.welcome.world.player.rocketTier, 3);
         recovered.socket.terminate();
     } finally { await restarted.close(); await rm(dir, { recursive: true, force: true }); }

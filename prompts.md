@@ -1042,3 +1042,23 @@ ok now it works, i had two people on the same game at once
 164.
 
 the main issue was when I hit someone else, there was not really any animation, when you are hit it should flash red. any kind of damage like bumping or being shot. An issue was that on the map the solar systems looked close but when I actually flied over the solar system like teleported away? i didnt see it in game but just teleported on the map. Another thing is that there is too much cargo that is being produced per planet, we should reduce the cargo production amount. Also the weapon heat up animation is hard to understand, remove the steam effects from that, and instead animate the cursor, of over heated, blink the cursor, and put a pie chart overlay on it that goes from full to empty, signifying the cooldown time.
+
+165.
+
+Also for some reason turret head does not move for turret owner, also, you should be able to temporarily disable turrents by shooting then a bunch of times, when a turret is shot place a small healtbar over it, which refills slowly after reaching zero, that is the timer for reactivation. Also make turrets more visible on planets. also the self-destruct dialogue and other notification dialogues shoud show up above the map, it should be press space to self destruct.
+
+166.
+
+also if you are born on a planet that is not earth, you dont get the capture planets and gain cargo arrow
+
+167.
+
+also chat should also say if somebody is killed, or stuff like that. Also game map should show other player positions
+
+168.
+
+also chat should say if someone leaves or rejoins
+
+169.
+
+continue

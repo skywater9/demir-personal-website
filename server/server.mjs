@@ -58,6 +58,11 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
         lastBroadcast = now();
     }
 
+    // Broadcast server activity without retaining chat text, credentials, or personal information.
+    function announce(text, color) {
+        for (const client of clients.values()) send(client.socket, { type: 'announcement', text, color });
+    }
+
     // Emit confirmed actor outcomes only to their owner, with public capture announcements separately.
     function events() {
         for (const event of room.world.events.splice(0)) {
@@ -65,6 +70,10 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
             if (clients.has(event.playerId)) send(clients.get(event.playerId).socket, { type: 'event', event });
             if (event.type === 'died' && actor) {
                 const victim = actor.player;
+                const attacker = room.world.players[event.attackerId]?.player;
+                const text = attacker ? `${attacker.label}${event.source === 'turret' ? "'s turret" : ''} destroyed ${victim.label}.`
+                    : event.reason?.startsWith('Self-destruct') ? `${victim.label} self-destructed.` : `${victim.label} was destroyed.`;
+                announce(text, attacker?.color || victim.color);
                 for (const [id, client] of clients) {
                     const viewer = room.world.players[id]?.player;
                     if (id !== victim.id && viewer && Math.hypot(viewer.x - victim.x, viewer.y - victim.y) <= 2400) {
@@ -78,6 +87,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                     label: actor.player.label, color: actor.player.color, owner: planet.owner });
             }
         }
+        for (const notice of room.notices.splice(0)) announce(notice.text, notice.color);
     }
 
     // Stop accepting gameplay if durable saves fail, rather than confirming ownership that can be lost.
@@ -163,7 +173,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 }
                 if (message.type === 'leave') {
                     room.leave(playerId); clients.delete(playerId); await checkpoint();
-                    send(socket, { type: 'left' }); socket.close(1000, 'Left galaxy.'); snapshots(); return;
+                    send(socket, { type: 'left' }); socket.close(1000, 'Left galaxy.'); events(); snapshots(); return;
                 }
                 if (message.type !== 'action' || !Number.isSafeInteger(message.actionId) || message.actionId < 1) return;
                 if (message.actionId <= (room.sessions[playerId].lastActionId || 0)) {

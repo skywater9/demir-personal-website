@@ -25,6 +25,7 @@ export const tuning = Object.freeze({
     outerBulletSlowFactor: 0.75, dockingDistance: 100, refugeRadius: 100,
     bulletSpeed: 680, bulletRadius: 3, bulletLifetime: 5, fireCooldown: 0.24,
     turretRange: 1700, turretCooldown: 2.4, turretBulletSpeed: 190,
+    turretHealth: 5, turretRadius: 22, turretRecoveryDuration: 10,
     rocketUpgradeCosts: Object.freeze([8, 16, 28, 40]),
     maxProjectiles: 256, maxEvents: 200
 });
@@ -258,6 +259,7 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
     if (hack.progress >= hack.required) {
         Object.assign(planet, { owner: world.player.id, level: 0, stock: 0,
             nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
+        for (const key of ['turretHealth', 'turretDisabledUntil', 'turretAngle', 'nextShotAt']) delete planet[key];
         world.stats.captures += 1;
         emit(world, 'hackCompleted', { bodyId: hack.bodyId });
         emit(world, 'captured', { bodyId: hack.bodyId });
@@ -322,19 +324,19 @@ function flushCollection(world) {
 }
 
 // Spend fuel as impact health; only damage exceeding the tank destroys the rocket.
-function damagePlayer(world, amount, reason) {
+function damagePlayer(world, amount, reason, cause = {}) {
     const player = world.player;
     if (player.deadUntil || !Number.isFinite(amount) || amount <= 0) return false;
     const fatal = amount > player.fuel;
     player.fuel = Math.max(0, player.fuel - amount);
     player.damageFlashUntil = world.elapsed + 0.3;
     emit(world, 'damaged', { amount, fuel: player.fuel, reason, x: player.x, y: player.y });
-    if (fatal) killPlayer(world, reason);
+    if (fatal) killPlayer(world, reason, cause);
     return fatal;
 }
 
 // Drop cargo once and schedule a short home respawn without releasing territory.
-export function killPlayer(world, reason = 'Destroyed.') {
+export function killPlayer(world, reason = 'Destroyed.', cause = {}) {
     const player = world.player;
     if (player.deadUntil) return false;
     detach(world);
@@ -357,7 +359,8 @@ export function killPlayer(world, reason = 'Destroyed.') {
     player.vy = 0;
     player.rotationVelocity = 0;
     world.stats.deaths += 1;
-    emit(world, 'died', { reason, previousTier, rocketTier: player.rocketTier });
+    emit(world, 'died', { reason, previousTier, rocketTier: player.rocketTier,
+        ...(cause.attackerId ? { attackerId: cause.attackerId, source: cause.source } : {}) });
     return true;
 }
 
@@ -670,29 +673,55 @@ function coolPlayerGun(player, dt, elapsed) {
     player.gunHeat = Math.max(0, player.gunHeat - tuning.gunCoolingRate * dt);
 }
 
-// Fire only hostile level-two-or-higher turrets, excluding dead pilots and the relay refuge.
+// Aim each turret at the nearest visible enemy once per galaxy step, including its owner's view.
 function fireTurrets(world) {
-    const player = world.player;
-    if (player.deadUntil) return;
+    const players = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
     for (const body of bodies) {
         const planet = world.planets[body.id];
-        if (!planet.owner || planet.owner === player.id || planet.level < 2
-            || world.elapsed + 1e-9 < (planet.nextShotAt || 0)) continue;
+        if (!planet.owner || planet.level < 2) continue;
+        planet.turretHealth ??= tuning.turretHealth;
+        planet.turretAngle ??= -Math.PI / 2;
+        if (planet.turretDisabledUntil > world.elapsed) {
+            planet.turretHealth = tuning.turretHealth * Math.max(0, 1 - (planet.turretDisabledUntil - world.elapsed) / tuning.turretRecoveryDuration);
+            continue;
+        }
+        if (planet.turretDisabledUntil) {
+            planet.turretDisabledUntil = 0;
+            planet.turretHealth = tuning.turretHealth;
+            planet.nextShotAt = world.elapsed;
+        }
         const refuge = dockingPoint(body);
-        if (Math.hypot(player.x - refuge.x, player.y - refuge.y) <= tuning.refugeRadius + tuning.shipRadius) continue;
-        const x = body.x;
-        const y = body.y - body.radius - 26;
-        const distance = Math.hypot(player.x - x, player.y - y);
-        if (distance > tuning.turretRange || distance < 1 || world.projectiles.length >= tuning.maxProjectiles) continue;
-        // Do not shoot through the planet toward an attacker on the opposite side.
-        if (circleHit({ x, y }, player, body, body.radius) !== null) continue;
+        const x = body.x, y = body.y - body.radius - 26;
+        let target = null;
+        let distance = tuning.turretRange;
+        for (const player of players) {
+            if (player.deadUntil || player.id === planet.owner
+                || Math.hypot(player.x - refuge.x, player.y - refuge.y) <= tuning.refugeRadius + tuning.shipRadius) continue;
+            const candidateDistance = Math.hypot(player.x - x, player.y - y);
+            if (candidateDistance < 1 || candidateDistance > distance
+                || circleHit({ x, y }, player, body, body.radius) !== null) continue;
+            target = player; distance = candidateDistance;
+        }
+        if (!target) continue;
+        planet.turretAngle = Math.atan2(target.y - y, target.x - x);
+        if (world.elapsed + 1e-9 < (planet.nextShotAt || 0) || world.projectiles.length >= tuning.maxProjectiles) continue;
         world.projectiles.push({ id: `turret-${world.eventCounter + 1}`, owner: planet.owner,
             source: 'turret', bodyId: body.id, x, y,
-            vx: (player.x - x) / distance * tuning.turretBulletSpeed,
-            vy: (player.y - y) / distance * tuning.turretBulletSpeed,
+            vx: (target.x - x) / distance * tuning.turretBulletSpeed,
+            vy: (target.y - y) / distance * tuning.turretBulletSpeed,
             radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
         planet.nextShotAt = world.elapsed + tuning.turretCooldown;
         emit(world, 'turretFired', { bodyId: body.id });
+    }
+}
+
+// Count hostile player hits, then recover on a fixed timer without extending it for extra hits.
+function hitTurret(world, body) {
+    const planet = world.planets[body.id];
+    if (planet.turretDisabledUntil > world.elapsed) return;
+    planet.turretHealth = Math.max(0, (planet.turretHealth ?? tuning.turretHealth) - 1);
+    if (planet.turretHealth === 0) {
+        planet.turretDisabledUntil = world.elapsed + tuning.turretRecoveryDuration;
     }
 }
 
@@ -717,6 +746,11 @@ function moveProjectile(world, shot, dt, previousPlayer) {
                 const outerFraction = circleCrossing(start, end, body, body.radius + tuning.outerFieldAltitude + radius);
                 if (outerFraction !== null) interactions.push({ fraction: outerFraction, type: 'outer', body });
             }
+        }
+        if (planet.owner && planet.owner !== shot.owner && planet.level >= 2 && shot.source === 'player') {
+            const turret = { x: body.x, y: body.y - body.radius - 26 };
+            const fraction = circleHit(start, end, turret, tuning.turretRadius + radius);
+            if (fraction !== null) interactions.push({ fraction, type: 'turret', body });
         }
         const surface = circleHit(start, end, body, body.radius + radius);
         if (surface !== null) interactions.push({ fraction: surface, type: 'surface', body });
@@ -753,9 +787,12 @@ function moveProjectile(world, shot, dt, previousPlayer) {
             continue;
         }
         if (interaction.type === 'player') {
-            if (world.players) withPlayer(world, interaction.playerId, () => damagePlayer(world, tuning.shotFuelDamage, 'Projectile hit.'));
-            else damagePlayer(world, tuning.shotFuelDamage, 'Projectile hit.');
+            const reason = shot.source === 'turret' ? 'Turret hit.' : 'Projectile hit.';
+            const cause = { attackerId: shot.owner, source: shot.source };
+            if (world.players) withPlayer(world, interaction.playerId, () => damagePlayer(world, tuning.shotFuelDamage, reason, cause));
+            else damagePlayer(world, tuning.shotFuelDamage, reason, cause);
         }
+        else if (interaction.type === 'turret') hitTurret(world, interaction.body);
         else if (interaction.type === 'shield') emit(world, 'shieldBlocked', { bodyId: interaction.body.id });
         else if (interaction.type === 'refuge') emit(world, 'refugeBlocked', { bodyId: interaction.body.id });
         return false;
@@ -1026,7 +1063,7 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
             servicePad(world, step);
             firePlayer(world, input);
         });
-        for (const id of ids) withPlayer(world, id, () => fireTurrets(world));
+        fireTurrets(world);
         world.projectiles = world.projectiles.filter(shot => moveProjectile(world, shot, step, { x: 0, y: 0 }));
         movePickups(world, step, { x: 0, y: 0 });
         delete world.previousPlayers;

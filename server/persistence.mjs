@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { bodies } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, tuning } from '../public/scripts/conquestPhysics.mjs';
 
 // Validate snapshots before restoration rather than silently replacing corrupt persistent territory.
 export function validateSave(data) {
@@ -32,6 +32,10 @@ export function validateSave(data) {
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
             || planet.level < 0 || planet.level > 3 || !Number.isFinite(planet.stock) || planet.stock < 0
             || typeof planet.home !== 'boolean' || (planet.home && !planet.owner)) throw new Error('Invalid saved territory.');
+        if (planet.turretHealth !== undefined && (!Number.isFinite(planet.turretHealth) || planet.turretHealth < 0 || planet.turretHealth > tuning.turretHealth)) throw new Error('Invalid saved turret health.');
+        for (const key of ['turretAngle', 'turretDisabledUntil']) {
+            if (planet[key] !== undefined && (!Number.isFinite(planet[key]) || Math.abs(planet[key]) > 1e8)) throw new Error('Invalid saved turret state.');
+        }
     }
     const homes = new Set();
     for (const id of ids) {

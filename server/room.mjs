@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit,
-    upgradePlanet, upgradeRocket, killPlayer, setTarget, nearestRelay } from '../public/scripts/conquestPhysics.mjs';
+    upgradePlanet, upgradeRocket, killPlayer, setTarget, nearestRelay, dockingPoint } from '../public/scripts/conquestPhysics.mjs';
 
 export const reconnectMs = 30000;
 export const playerLimit = 8;
@@ -22,6 +22,7 @@ export class GameRoom {
         this.world = saved?.world || createWorld(randomUUID(), now);
         this.sessions = saved?.sessions || {};
         this.inputs = {};
+        this.notices = [];
         if (!saved) {
             this.world.players = {};
             this.world.events = [];
@@ -38,11 +39,22 @@ export class GameRoom {
         this.expire(now);
     }
 
+    // Start each home near useful neutral territory, keeping Moon as Earth's first destination when free.
+    starterRelay(player) {
+        const neutral = bodies.filter(body => !this.world.planets[body.id].owner && !this.world.planets[body.id].home);
+        if (player.homeId === 'earth' && neutral.some(body => body.id === 'moon')) return bodies.find(body => body.id === 'moon');
+        return neutral.sort((a, b) => {
+            const first = dockingPoint(a), second = dockingPoint(b);
+            return Math.hypot(first.x - player.x, first.y - player.y) - Math.hypot(second.x - player.x, second.y - player.y);
+        })[0] || nearestRelay(player, this.world);
+    }
+
     // Join anonymously or recover the same pilot using an opaque, unexpired credential.
     join(token = '', now = Date.now()) {
         this.expire(now);
         for (const [id, session] of Object.entries(this.sessions)) {
             if (matchesToken(token, session.tokenHash)) {
+                if (!session.connected) this.announce(id, 'rejoined the galaxy.');
                 session.connected = true; session.expiresAt = null;
                 this.inputs[id] = { value: {}, at: now };
                 return { playerId: id, token, resumed: true };
@@ -66,22 +78,24 @@ export class GameRoom {
             x: home.x, y: home.y - home.radius - tuning.shipRadius, landedOn: home.id };
         this.world.players[id] = { player, hack: null, target: { bodyId: home.id, type: 'planet' }, stats: seed.stats, refueling: null };
         Object.assign(this.world.planets[home.id], { owner: id, home: true, level: 0, stock: 0 });
-        withPlayer(this.world, id, () => { this.world.target = { bodyId: home.id === 'earth' && !this.world.planets.moon.home ? 'moon' : nearestRelay(player, this.world).id, type: 'relay' }; });
+        withPlayer(this.world, id, () => { this.world.target = { bodyId: this.starterRelay(player).id, type: 'relay' }; });
         for (const actorId of Object.keys(this.world.players)) withPlayer(this.world, actorId, () => {
             if (this.world.target.bodyId === home.id && this.world.target.type === 'relay') {
-                this.world.target = { bodyId: nearestRelay(this.world.player, this.world).id, type: 'relay' };
+                this.world.target = { bodyId: this.starterRelay(this.world.player).id, type: 'relay' };
             }
         });
         token = randomBytes(32).toString('hex');
         this.sessions[id] = { tokenHash: tokenHash(token), connected: true, expiresAt: null, lastActionId: 0 };
         this.inputs[id] = { value: {}, at: now };
+        this.announce(id, 'joined the galaxy.');
         return { playerId: id, token, resumed: false };
     }
 
     // Stop held inputs and partial hacks immediately, without granting disconnect invulnerability.
     disconnect(id, now = Date.now()) {
         const session = this.sessions[id];
-        if (!session) return;
+        if (!session || !session.connected) return;
+        this.announce(id, 'disconnected — reconnecting for up to 30 seconds.');
         session.connected = false; session.expiresAt = now + reconnectMs;
         this.inputs[id] = { value: {}, at: now };
         withPlayer(this.world, id, () => { if (this.world.player.docked) interact(this.world); });
@@ -90,11 +104,21 @@ export class GameRoom {
     // Release all territory after departure and remove the corresponding pilot reservation.
     leave(id) {
         if (!this.sessions[id]) return;
+        this.announce(id, 'left the galaxy.');
         for (const planet of Object.values(this.world.planets)) if (planet.owner === id) {
             Object.assign(planet, { owner: null, home: false, level: 0, stock: 0, nextShotAt: 0 });
+            for (const key of ['turretHealth', 'turretDisabledUntil', 'turretAngle']) delete planet[key];
         }
         this.world.projectiles = this.world.projectiles.filter(shot => shot.owner !== id);
         delete this.world.players[id]; delete this.sessions[id]; delete this.inputs[id];
+    }
+
+    // Keep a bounded transient activity feed made only from generated pilot labels and server actions.
+    announce(id, action) {
+        const player = this.world.players[id]?.player;
+        if (!player) return;
+        this.notices.push({ text: `${player.label} ${action}`, color: player.color });
+        if (this.notices.length > 40) this.notices.shift();
     }
 
     // Expire absence using wall time so a paused or restarted process cannot retain abandoned homes.
@@ -171,6 +195,9 @@ export class GameRoom {
             elapsed: this.world.elapsed, player, planets: this.world.planets, projectiles: this.world.projectiles,
             pickups: this.world.pickups, events: [], eventCounter: this.world.eventCounter, ...actor,
             ownerColors: Object.fromEntries(Object.values(this.world.players).map(actor => [actor.player.id, actor.player.color])),
+            mapPlayers: Object.values(this.world.players).map(actor => ({ id: actor.player.id, label: actor.player.label,
+                color: actor.player.color, x: actor.player.x, y: actor.player.y, angle: actor.player.angle,
+                deadUntil: actor.player.deadUntil, connected: Boolean(this.sessions[actor.player.id]?.connected) })),
             others, online: Object.values(this.sessions).filter(session => session.connected).length };
     }
 

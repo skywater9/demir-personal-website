@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-multiplayer-live';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-turrets';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-feedback';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-feedback';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-feedback';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-turrets';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-turrets';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-turrets';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -65,6 +65,7 @@ export class ConquestApp {
             onWorld: (world, details) => this.receiveWorld(world, details),
             onEvent: event => { this.world.events.push(event); this.drainEvents(); },
             onChat: message => this.appendChat(message.text, false, message),
+            onAnnouncement: message => this.appendChat(message.text, false, { ...message, system: true }),
             onCapture: message => {
                 if (message.owner === this.world.player.id) return;
                 const body = bodies.find(body => body.id === message.bodyId);
@@ -139,7 +140,6 @@ export class ConquestApp {
         this.ui.recordsBackButton.addEventListener('click', () => this.showScreen('menu'));
         this.ui.confirmButton.addEventListener('click', () => this.confirmAction());
         this.ui.cancelButton.addEventListener('click', () => {
-            if (this.confirmKind === 'selfDestruct') this.emit('selfDestructCancelled');
             this.showScreen(this.confirmReturn || 'menu');
         });
         this.ui.chatForm.addEventListener('submit', event => {
@@ -260,6 +260,11 @@ export class ConquestApp {
             return;
         }
         if (event.code === 'KeyE' && !event.repeat) { event.preventDefault(); this.interact(); return; }
+        if (event.code === 'Space' && !this.ui.fuelPrompt.hidden && this.world.player.fuel <= 0) {
+            event.preventDefault();
+            if (!event.repeat && !this.keys.has('Space')) this.requestSelfDestruct();
+            return;
+        }
         if (keyControls[event.code]) {
             event.preventDefault();
             this.keys.add(event.code);
@@ -414,25 +419,26 @@ export class ConquestApp {
         this.updateHud({});
     }
 
-    // Confirm self-destruction separately from replacing the entire galaxy.
+    // Confirm replacement of the current galaxy through the existing new-run action.
     confirmAction() {
-        if (this.confirmKind === 'selfDestruct') {
-            this.emit('selfDestruct');
-            if (this.connection) this.connection.action('selfDestruct').then(result => { if (!result.ok) this.message(result.reason); });
-            else killPlayer(this.world, 'Self-destructed.');
-            this.showScreen('flight');
-            this.drainEvents();
-            this.checkpoint();
-        } else this.newSession();
+        this.newSession();
     }
 
-    // Keep a fuel-empty ship coasting until the pilot explicitly accepts the cargo-loss tradeoff.
+    // Treat a fresh Space press or button click on the fuel-empty warning as explicit consent.
     requestSelfDestruct() {
-        this.confirmKind = 'selfDestruct';
-        this.confirmReturn = 'flight';
-        this.text('confirmTitle', 'Self-destruct and return home?');
-        this.text('confirmDescription', 'Your carried cargo will float here for collection. You respawn at home with a full tank; owned planets stay yours.');
-        this.showScreen('confirm');
+        if (this.mode !== 'flight' || this.world.player.fuel > 0 || this.world.player.deadUntil
+            || this.ui.fuelPrompt.hidden || this.selfDestructPending) return;
+        this.clearInput();
+        this.emit('selfDestruct');
+        if (this.connection) {
+            this.selfDestructPending = true;
+            this.connection.action('selfDestruct').then(result => {
+                if (!result.ok) this.message(result.reason);
+            }).finally(() => { this.selfDestructPending = false; });
+        } else {
+            killPlayer(this.world, 'Self-destructed.');
+            this.drainEvents(); this.checkpoint(); this.updateHud({});
+        }
     }
 
     // Select either a relay or landing pad, with owned planets defaulting to their useful service pad.
@@ -548,7 +554,7 @@ export class ConquestApp {
         const row = this.page.createElement('p');
         row.style.color = sender.color || this.world.player.color;
         const label = sender.label || this.world.player.label || 'Pilot';
-        row.textContent = announcement ? `${label} conquered ${text}` : `${label}: ${text}`;
+        row.textContent = sender.system ? text : announcement ? `${label} conquered ${text}` : `${label}: ${text}`;
         const messages = this.ui.chatMessages;
         messages.append(row);
         if (messages.children.length > 40) messages.replaceChildren(...Array.from(messages.children).slice(-40));

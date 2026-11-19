@@ -748,3 +748,41 @@ test('captured planets produce three cargo per ten seconds with slower pod relea
     assert.ok(Math.abs(produced - 3) < 1e-8);
     assert.ok(pods.length <= 3);
 });
+
+// Turret damage uses swept hits inside the existing bullet shield and cannot be caused by friendly shots.
+test('five hostile shots disable a turret, its bar recovers, and extra hits do not extend recovery', () => {
+    const world = inSpace();
+    const body = bodies[1], planet = world.planets[body.id];
+    Object.assign(planet, { owner: 'pilot', level: 2 });
+    const y = body.y - body.radius - 26;
+    const hit = owner => {
+        world.projectiles.push(shot(body.x - 70, y, 10000, 0, { owner }));
+        stepWorld(world);
+    };
+    hit('pilot');
+    assert.equal(planet.turretHealth, tuning.turretHealth);
+    world.projectiles = [];
+    for (let index = 0; index < 5; index++) hit('hostile');
+    assert.equal(planet.turretHealth, 0);
+    assert.ok(planet.turretDisabledUntil > world.elapsed);
+    const deadline = planet.turretDisabledUntil;
+    hit('hostile');
+    assert.equal(planet.turretDisabledUntil, deadline);
+    advance(world, 5);
+    assert.ok(planet.turretHealth > 2 && planet.turretHealth < 3);
+    advance(world, 5.1);
+    assert.equal(planet.turretHealth, tuning.turretHealth);
+    assert.equal(planet.turretDisabledUntil, 0);
+});
+
+// Existing defense layers must intercept external shots before they can reach a turret.
+test('bullet barrier still protects a turret from shots fired outside the field', () => {
+    const world = inSpace();
+    const body = bodies[1];
+    Object.assign(world.planets[body.id], { owner: 'pilot', level: 2 });
+    world.projectiles.push(shot(body.x, body.y - body.radius - 400, 0, 100000));
+    stepWorld(world);
+    assert.equal(world.planets[body.id].turretHealth, tuning.turretHealth);
+    assert.equal(world.projectiles.length, 0);
+    assert.ok(world.events.some(event => event.type === 'shieldBlocked'));
+});

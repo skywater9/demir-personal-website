@@ -27,13 +27,15 @@ test('endpoint selection supports secure class URLs and explicit localhost testi
 
 // Acknowledged world state and actions are driven exclusively by server messages.
 test('browser transport restores private credentials, sequences commands and waits for confirmation', async () => {
-    const data = new Map(); const worlds = [];
+    const data = new Map(); const worlds = [], announcements = [];
     const client = new MultiplayerClient({ url: 'wss://service.example/game', storage: { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) },
-        WebSocketClass: Socket, onWorld: world => worlds.push(world) });
+        WebSocketClass: Socket, onWorld: world => worlds.push(world), onAnnouncement: message => announcements.push(message) });
     const connecting = client.connect(); const socket = Socket.instances.at(-1); socket.open();
     assert.equal(socket.sent[0].type, 'hello');
     socket.message({ type: 'welcome', token: 'f'.repeat(64), lastActionId: 4, world: { player: { id: 'test-pilot' } } });
     await connecting;
+    socket.message({ type: 'announcement', text: 'Pilot 2 joined the galaxy.', color: '#ff9fb8' });
+    assert.equal(announcements[0].text, 'Pilot 2 joined the galaxy.');
     const result = client.action('rocketUpgrade');
     const command = socket.sent.at(-1);
     assert.equal(command.actionId, 5);

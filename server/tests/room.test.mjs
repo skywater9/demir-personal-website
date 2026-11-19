@@ -89,7 +89,7 @@ test('rocket purchases and one-tier death loss are authoritative and idempotent'
     assert.equal(room.world.planets.moon.owner, a.playerId);
 });
 
-// Hidden ships and other pilots' hacking challenges never appear in a client's snapshot.
+// Full distant ship details and other pilots' hacking challenges stay out of snapshots.
 test('views hide distant pilots and never include reconnect credentials or other hack digits', () => {
     const room = new GameRoom(null, 1000);
     const a = room.join('', 1000), b = room.join('', 1000);
@@ -170,4 +170,71 @@ test('home selection falls back safely and retargets a relay that becomes a prot
     assert.equal(room.world.players[b.playerId].player.homeId, 'moon');
     assert.notEqual(room.world.players[a.playerId].target.bodyId, 'moon');
     assert.equal(room.world.planets.moon.home, true);
+});
+
+// Turret aim and recovery are shared state, not inferred separately for each viewer.
+test('turret owner and attacker see the same tracking head and disabled turrets stop firing', () => {
+    const room = new GameRoom(null, 1000);
+    const a = room.join('', 1000), b = room.join('', 1000);
+    const body = bodies[1], planet = room.world.planets[body.id];
+    Object.assign(planet, { owner: a.playerId, level: 2 });
+    const owner = room.world.players[a.playerId], enemy = room.world.players[b.playerId];
+    space(owner, body.x - 500);
+    Object.assign(owner.player, { y: body.y - 500 });
+    Object.assign(enemy.player, { x: body.x + 500, y: body.y - body.radius - 400, landedOn: null });
+    room.tick(tuning.fixedStep, 1000);
+    const firstAngle = planet.turretAngle;
+    assert.ok(Number.isFinite(firstAngle));
+    assert.notEqual(firstAngle, -Math.PI / 2);
+    assert.equal(room.view(a.playerId).planets.moon.turretAngle, room.view(b.playerId).planets.moon.turretAngle);
+    enemy.player.x -= 100;
+    room.tick(tuning.fixedStep, 1000);
+    assert.notEqual(planet.turretAngle, firstAngle);
+    // Model the server-confirmed disable state and verify no gunfire until recovery completes.
+    planet.turretHealth = 0;
+    planet.turretDisabledUntil = room.world.elapsed + 10;
+    room.world.projectiles = [];
+    for (let index = 0; index < 5; index++) room.tick(1, 1000);
+    assert.equal(room.world.projectiles.filter(shot => shot.source === 'turret').length, 0);
+    assert.ok(planet.turretHealth > 2 && planet.turretHealth < 3);
+});
+
+// Every spawn slot should direct a newcomer toward a capturable relay near its home system.
+test('all eight home slots begin with a neutral relay target, not just Earth', () => {
+    const room = new GameRoom(null, 1000);
+    for (let index = 0; index < 8; index++) {
+        const joined = room.join('', 1000);
+        const view = room.view(joined.playerId);
+        assert.equal(view.target.type, 'relay');
+        assert.notEqual(view.target.bodyId, view.player.homeId);
+        assert.equal(view.planets[view.target.bodyId].owner, null);
+        assert.equal(view.planets[view.target.bodyId].home, false);
+    }
+});
+
+// Distant map markers contain only public identity and position, while flight views retain proximity limits.
+test('map snapshots reveal all pilot positions without exposing cargo, fuel or credentials', () => {
+    const room = new GameRoom(null, 1000);
+    const a = room.join('', 1000), b = room.join('', 1000);
+    const pa = room.world.players[a.playerId], pb = room.world.players[b.playerId];
+    space(pa); space(pb, 90000);
+    const view = room.view(a.playerId);
+    assert.ok(!view.others.some(player => player.id === b.playerId));
+    const marker = view.mapPlayers.find(player => player.id === b.playerId);
+    assert.equal(marker.x, pb.player.x);
+    assert.equal(marker.fuel, undefined); assert.equal(marker.cargo, undefined); assert.equal(marker.token, undefined);
+});
+
+// Attribution is emitted only when a shot is fatal, so chat can name the correct generated pilot.
+test('fatal projectile identifies its attacker for the shared death announcement', () => {
+    const room = new GameRoom(null, 1000);
+    const a = room.join('', 1000), b = room.join('', 1000);
+    space(room.world.players[a.playerId], 49000); space(room.world.players[b.playerId]);
+    room.world.players[b.playerId].player.fuel = 4;
+    room.world.projectiles.push({ id: 'kill', owner: a.playerId, source: 'player', x: 49900, y: 50000,
+        vx: 20000, vy: 0, radius: 3, expiresAt: 5 });
+    room.tick(tuning.fixedStep, 1000);
+    const death = room.world.events.find(event => event.type === 'died' && event.playerId === b.playerId);
+    assert.equal(death.attackerId, a.playerId); assert.equal(death.source, 'player');
+    assert.equal(room.saved().notices, undefined);
 });

@@ -470,3 +470,48 @@ test('overheated cursor shows remaining cooldown and steam is absent for all pil
     renderer.updateExhaust(world, { burn: true }, .1, false, false);
     assert.ok(renderer.particles.some(particle => particle.kind === 'main'));
 });
+
+// Starting outside Sol must not hide the first-capture explanation or reduce its arrow.
+test('non-Earth home pilots get the same large capture and cargo guidance', () => {
+    const { renderer, calls } = makeRenderer();
+    const world = createWorld();
+    const home = bodies.find(body => body.id === 'aster');
+    Object.assign(world.player, { homeId: home.id, x: home.x, y: home.y - home.radius - 20 });
+    world.target = { bodyId: 'cobalt', type: 'relay' };
+    renderer.camera = { x: world.player.x, y: world.player.y, zoom: .95 };
+    const labels = [];
+    renderer.label = (...args) => labels.push(args);
+    renderer.drawGuidance(world);
+    assert.ok(calls.some(call => call[0] === 'moveTo' && call[1] === 20 && call[2] === 0));
+    assert.ok(labels.some(args => args[0] === 'CAPTURE PLANETS TO GAIN CARGO'));
+    world.stats.captures = 1; labels.length = 0;
+    renderer.drawGuidance(world);
+    assert.ok(!labels.some(args => args[0].includes('CAPTURE PLANETS')));
+});
+
+// A turret's head reads the authoritative aim for its owner, and its bar appears only after damage.
+test('visible turret uses shared aim and displays a refilling disable health bar', () => {
+    const { renderer, calls } = makeRenderer();
+    const world = createWorld();
+    const body = bodies[1];
+    const state = world.planets[body.id];
+    Object.assign(state, { owner: world.player.id, level: 2, turretAngle: -.7, turretHealth: 3 });
+    renderer.drawTurret(body, world, '#8cdeb0');
+    assert.ok(calls.some(call => call[0] === 'rotate' && call[1] === -.7));
+    assert.ok(calls.some(call => call[0] === 'fillRect' && call[1] === -16 && call[3] === 32 * 3 / 5));
+    calls.length = 0;
+    state.turretHealth = 5;
+    renderer.drawTurret(body, world, '#8cdeb0');
+    assert.ok(!calls.some(call => call[0] === 'strokeRect' && call[1] === -17));
+});
+
+// Far-away pilots stay visible as colored map-edge direction markers even when their hull is hidden.
+test('map draws distant public pilot markers independently of nearby flight ships', () => {
+    const { renderer, calls, map } = makeRenderer();
+    const world = createWorld();
+    world.others = [];
+    world.mapPlayers = [{ id: 'distant', label: 'Pilot 2', color: '#ff9fb8', x: 50000, y: world.player.y, angle: .4, deadUntil: 0, connected: true }];
+    renderer.drawMap(world);
+    assert.ok(calls.some(call => call[0] === 'fillText' && call[1] === 'Pilot 2'));
+    assert.ok(calls.some(call => call[0] === 'translate' && call[1] === map.width - 8));
+});

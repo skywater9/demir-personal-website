@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-feedback';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-turrets';
 
 export const conquestKey = 'orbital.conquest.v2';
 export const reconnectWindow = 30000;
@@ -30,6 +30,10 @@ export function validWorld(world) {
             || !Number.isInteger(state.level) || state.level < 0 || state.level > 3
             || !Number.isFinite(state.stock) || state.stock < 0 || state.stock > 1e6) return false;
         if (state.nextCargoAt !== undefined && (!Number.isFinite(state.nextCargoAt) || Math.abs(state.nextCargoAt) > 1e8)) return false;
+        if (state.turretHealth !== undefined && (!Number.isFinite(state.turretHealth) || state.turretHealth < 0 || state.turretHealth > tuning.turretHealth)) return false;
+        for (const key of ['turretAngle', 'turretDisabledUntil']) {
+            if (state[key] !== undefined && (!Number.isFinite(state[key]) || Math.abs(state[key]) > 1e8)) return false;
+        }
     }
     if (world.planets[player.homeId].owner !== player.id) return false;
     if (!world.stats || !['captures', 'deaths', 'cargoCollected', 'shots'].every(key => Number.isFinite(world.stats[key]) && world.stats[key] >= 0)) return false;

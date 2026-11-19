@@ -3,8 +3,16 @@
 An open-world pixel-art conquest game with local practice and a shared multiplayer server. Explore three scattered star systems,
 hack relays to capture planets, collect cargo, refuel, and upgrade your territory.
 This replaces the finite story journey. A configured server hosts one shared galaxy;
-without an endpoint the game runs locally. The class-box service has not been
-deployed by this implementation. See [server setup](server/README.md).
+without an endpoint the game runs locally. The shared class-box service is live; its URL is configured in the frontend. See [server setup](server/README.md).
+
+## Combat and room activity
+
+- Turret heads share one server-controlled aim for owners and attackers. Bright bases and outlined barrels make them easier to spot.
+- Five hostile player-bullet hits disable a turret for 10 seconds. Enter its bullet shield before shooting it. A small bar appears on damage and refills while disabled; full health reactivates it. Friendly shots do not damage turrets, and hits during recovery do not extend the timer.
+- New pilots at every home get a large flashing relay arrow and “CAPTURE PLANETS TO GAIN CARGO” guidance until their first capture. Earth prefers Moon when neutral; other homes target nearby neutral relays.
+- The map shows every pilot using generated labels and ownership colors. Distant off-map pilots get edge direction markers; disconnected pilots dim during their grace window. The flight view still reveals nearby or recently firing ships only.
+- Room chat announces joins, disconnects, returns, departures, and deaths, including the attacker for projectile kills. Activity messages are transient and do not save chat text or credentials.
+- Fuel-empty, respawn and other notifications appear directly above the map. At the empty-fuel warning, release and press **Space** to self-destruct, or click the matching button. Holding fire never accepts the warning automatically. Space otherwise fires normally.
 
 ## Local conquest
 

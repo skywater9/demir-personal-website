@@ -65,7 +65,7 @@ releases it immediately. The world does not advance during a service outage.
 Reconnect tokens are random, stored in the player's session storage, and hashed
 on disk. They never appear in URLs, analytics, chat, or application logs. Messages
 are transient room broadcasts: no chat history is written to the save file or
-analytics. Pilot labels and colors are generated, not personal names.
+analytics. Pilot labels and colors are generated, not personal names. Transient `announcement` messages report joins, disconnects, rejoins, departures and deaths, with attacker attribution for projectile kills.
 
 ## Simulation and protocol
 
@@ -75,8 +75,7 @@ selection is synchronous; shared entities are integrated only once per tick.
 
 Inputs expire after 300 ms without updates. Snapshots are sent at up to 20 Hz;
 clients smooth visible ship poses without applying authoritative resource changes.
-Distant ships are withheld unless recently firing. Planet ownership colors remain
-public. One pilot can occupy a relay receiver at a time.
+Full distant ship state is withheld unless recently firing. The map receives a separate public list of generated pilot labels, colors, positions, headings and connection status; it contains no fuel, cargo, upgrade or reconnect data. Planet ownership colors remain public. One pilot can occupy a relay receiver at a time.
 
 Messages have size/rate limits, slow-client buffering is bounded, origins are
 checked, and heartbeat detects broken sockets. Monotonic command IDs survive
@@ -88,6 +87,8 @@ and braking. Tier 1 adds speed-fading acceleration, faster fire and lower heat;
 tier 2 fires pairs; tier 3 reduces powered-control fuel use by 20%; tier 4 alternates
 faster barrels and increases bullet speed by 30%. Death removes one tier, at most
 once, and the death notice identifies the loss. These are initial playtest values.
+
+Turrets choose their nearest eligible enemy in the shared simulation, so the owner's barrel moves identically to the attacker's. Five hostile player shots disable one for ten seconds. Its shared health refills during recovery; friendly shots cannot damage it, and hits during recovery do not extend the timer. Capture and departure reset turret state. Existing saves without turret fields remain supported.
 
 ## Local verification
 

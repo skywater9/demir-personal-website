@@ -150,23 +150,42 @@ test('menu keeps the world alive and reset requires confirmation', () => {
     assert.equal(app.store.records().length, 1);
 });
 
-test('self-destruct is explicit, leaves dropped cargo, and respawns without losing ownership', () => {
-    const { app, nodes } = harness();
+test('fresh Space on the fuel warning self-destructs without firing or accepting held repeats', () => {
+    const { app, nodes, page } = harness();
     app.newSession();
     Object.assign(app.world.player, { fuel: 0, cargo: 12, landedOn: null, x: 5000, y: -5000 });
     app.updateHud({});
     assert.equal(nodes.get('fuelPrompt').hidden, false);
-    app.requestSelfDestruct();
+    page.fire('keydown', { code: 'Space', repeat: true });
     assert.equal(app.world.stats.deaths, 0);
-    nodes.get('cancelButton').fire('click');
+    app.keys.add('Space');
+    page.fire('keydown', { code: 'Space', repeat: false });
     assert.equal(app.world.stats.deaths, 0);
-    app.requestSelfDestruct(); nodes.get('confirmButton').fire('click');
+    app.keys.delete('Space');
+    page.fire('keydown', { code: 'Space', repeat: false, target: nodes.get('chatInput') });
+    assert.equal(app.world.stats.deaths, 0);
+    page.fire('keydown', { code: 'Space', repeat: false });
     assert.equal(app.world.stats.deaths, 1);
+    assert.equal(app.world.projectiles.length, 0);
     assert.equal(app.world.pickups.length, 1);
+    page.fire('keydown', { code: 'Space', repeat: true });
+    assert.equal(app.world.stats.deaths, 1);
     stepWorld(app.world, {}, 1);
     assert.equal(app.world.player.deadUntil, 0);
     assert.equal(app.world.player.fuel, 100);
     assert.equal(app.ownedCount(), 1);
+});
+
+// The same action remains available without a keyboard and never runs while refueling at home.
+test('self-destruct button accepts a visible empty-fuel warning only', () => {
+    const { app, nodes } = harness();
+    app.newSession();
+    app.requestSelfDestruct();
+    assert.equal(app.world.stats.deaths, 0);
+    Object.assign(app.world.player, { fuel: 0, landedOn: null, x: 5000, y: -5000 });
+    app.updateHud({});
+    nodes.get('selfDestructButton').fire('click');
+    assert.equal(app.world.stats.deaths, 1);
 });
 
 test('refresh can resume within thirty seconds but expires after the reconnect allowance', () => {
@@ -512,4 +531,15 @@ test('death notice identifies the lost rocket tier and never reports a tier belo
     killPlayer(app.world); app.drainEvents(); app.updateHud({});
     assert.equal(app.world.player.rocketTier, 0);
     assert.equal(nodes.get('respawnNotice').textContent.includes('TIER'), false);
+});
+
+// System activity shares the bounded chat feed without adding a fake speaker prefix or logging text.
+test('room announcements display literal safe text in the generated pilot color', () => {
+    const { app, nodes, logs } = harness();
+    const count = logs.length;
+    app.appendChat('Pilot 2 rejoined the galaxy.', false, { system: true, color: '#ff9fb8' });
+    const row = nodes.get('chatMessages').children.at(-1);
+    assert.equal(row.textContent, 'Pilot 2 rejoined the galaxy.');
+    assert.equal(row.style.color, '#ff9fb8');
+    assert.equal(logs.length, count);
 });
