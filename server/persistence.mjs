@@ -47,7 +47,7 @@ export function validateSave(data) {
         if (homes.has(actor.player.homeId) || world.planets[actor.player.homeId].owner !== id || !world.planets[actor.player.homeId].home) throw new Error('Invalid home reservation.');
         homes.add(actor.player.homeId);
         if (actor.hack && (!bodies.some(body => body.id === actor.hack.bodyId) || !Number.isInteger(actor.hack.digit)
-            || actor.hack.digit < 0 || actor.hack.digit > 9 || !Number.isInteger(actor.hack.progress)
+            || actor.hack.digit < 0 || actor.hack.digit > 9 || !Number.isFinite(actor.hack.progress)
             || !Number.isInteger(actor.hack.required) || actor.hack.required < 1 || actor.hack.required > 100
             || actor.hack.progress < 0 || actor.hack.progress >= actor.hack.required)) throw new Error('Invalid saved challenge.');
     }

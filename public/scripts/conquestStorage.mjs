@@ -1,6 +1,6 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-vector-brakes';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-station-prototype';
 
-export const conquestKey = 'orbital.conquest.v2';
+export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
 const bodyIds = new Set(bodies.map(body => body.id));
 

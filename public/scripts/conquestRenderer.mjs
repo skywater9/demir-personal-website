@@ -1,6 +1,6 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions
-} from './conquestPhysics.mjs?v=20261119-vector-brakes';
+} from './conquestPhysics.mjs?v=20261119-station-prototype';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -171,6 +171,7 @@ export class ConquestRenderer {
         let nearest = null;
         let nearestDistance = 10;
         for (const body of bodies) {
+            if (body.station && !this.lastMapWorld.planets[body.id]?.owner) continue;
             const point = this.mapPoint(body.x, body.y, layout);
             const x = bounds.left + point.x / layout.width * bounds.width;
             const y = bounds.top + point.y / layout.height * bounds.height;
@@ -322,6 +323,7 @@ export class ConquestRenderer {
 
     // Preserve the textured planet and upright pad sprite while labeling the local economy.
     drawBody(body, world) {
+        if (body.station) return;
         const ctx = this.context;
         const center = this.screen(body.x, body.y);
         const scale = this.camera.zoom / 2;
@@ -364,9 +366,9 @@ export class ConquestRenderer {
         if (home) {
             this.label(`⌂ HOME BASE — ${body.name.toUpperCase()}`, pad.x, pad.y + 32, color, 'center');
         } else {
-            const status = !state.owner ? 'NEUTRAL / HACK RELAY'
+            const status = !state.owner ? 'UNCAPTURED · AIM + HOLD E'
                 : `${state.owner === world.player.id ? 'OWN' : 'HOSTILE'} / L${state.level} / ${Math.floor(state.stock)} CARGO`;
-            this.label(`${body.name.toUpperCase()} PAD`, pad.x, pad.y + 21, color, 'center');
+            this.label(body.name.toUpperCase(), pad.x, pad.y + 21, color, 'center');
             this.label(status, pad.x, pad.y + 32, color, 'center');
         }
         if (state.owner) for (const turret of turretPositions(body, state.level)) this.drawTurret(body, world, color, turret.index);
@@ -405,7 +407,7 @@ export class ConquestRenderer {
 
     // Draw station geometry at its physical scale, its receiver, and the turret refuge boundary.
     drawStation(body, world) {
-        if (body.id === world.player.homeId || world.planets[body.id]?.home) return;
+        if (!body.station || !world.planets[body.id]?.owner) return;
         const ctx = this.context;
         const station = stationFor(body);
         const point = this.screen(station.x, station.y);
@@ -434,8 +436,8 @@ export class ConquestRenderer {
         ctx.restore();
         ctx.strokeStyle = color; ctx.lineWidth = 1;
         ctx.strokeRect(receiver.x - 3, receiver.y - 6, 6, 12);
-        this.label(`${body.name.toUpperCase()} RELAY`, point.x, point.y - Math.max(12, 44 * this.camera.zoom), color, 'center');
-        this.label('TURRET REFUGE', receiver.x, receiver.y + refugeRadius + 11, '#9dc4cd', 'center');
+        this.label('STARTER STATION · REFUEL · ROCKET SHOP', point.x, point.y - Math.max(12, 44 * this.camera.zoom), color, 'center');
+        this.label('SHIELDED · +1 CARGO / MIN', receiver.x, receiver.y + refugeRadius + 11, '#9dc4cd', 'center');
     }
 
     // Show cargo orbiting near planetary surfaces and swept-looking shot trails.
@@ -714,6 +716,22 @@ export class ConquestRenderer {
         const status = dockingStatus(world, body.id);
         if (status.distance > tuning.dockingAssistDistance) return;
         const dock = dockingPoint(body);
+        if (!body.station) {
+            const center = this.screen(body.x, body.y);
+            const radius = body.radius * this.camera.zoom / 2 + 5;
+            const ctx = this.context;
+            ctx.save();
+            ctx.strokeStyle = status.ready ? '#8cdeb0' : '#ffce72';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(center.x, center.y, radius, 0, fullCircle); ctx.stroke();
+            if (world.hack?.bodyId === body.id) {
+                ctx.strokeStyle = '#e4fff0'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, -Math.PI / 2,
+                    -Math.PI / 2 + fullCircle * world.hack.progress / world.hack.required); ctx.stroke();
+            }
+            ctx.restore();
+            return;
+        }
         const ghost = { ...player, x: dock.x, y: dock.y, angle: 0 };
         const point = this.screen(dock.x, dock.y);
         const color = status.ready ? ownColor : neutralColor;
@@ -741,10 +759,10 @@ export class ConquestRenderer {
         const distance = Math.hypot(player.x - target.x, player.y - target.y);
         const distanceText = distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
         const relay = target.type === 'relay' || target.type === 'station';
-        const moonRelay = relay && target.body.id === 'moon';
-        const explainCargo = relay && world.stats.captures === 0;
+        const moonRelay = target.body.id === 'moon';
+        const explainCargo = !target.body.station && world.stats.captures === 0;
         const largeArrow = moonRelay || explainCargo;
-        const text = `${target.body.name.toUpperCase()} ${relay ? 'RELAY' : 'PAD'} / ${distanceText}`;
+        const text = `${target.body.name.toUpperCase()} ${target.body.station ? 'STATION' : 'PLANET'} / ${distanceText}`;
         const width = this.canvas.width;
         const height = this.canvas.height;
         const visible = point.x >= 22 && point.x <= width - 22 && point.y >= 28 && point.y <= height - 28;
@@ -764,7 +782,7 @@ export class ConquestRenderer {
             captionX = point.x; captionY = point.y + size + 20;
             this.label(text, point.x, point.y - size - 6, color, 'center', true);
             if (!relay && distance < 300) {
-                this.label('LAND UPRIGHT / LOW SPEED', point.x, point.y + size + 12, color, 'center', true);
+                this.label('AIM AT PLANET · HOLD E', point.x, point.y + size + 12, color, 'center', true);
             }
         } else {
             const centerX = width / 2;
@@ -781,7 +799,7 @@ export class ConquestRenderer {
             this.label(text, x, y - 12, color, 'center', true);
         }
         if (explainCargo) {
-            const lines = width >= 320 ? ['CAPTURE PLANETS TO GAIN CARGO'] : ['CAPTURE PLANETS', 'TO GAIN CARGO'];
+            const lines = width >= 320 ? ['AIM AT A PLANET + HOLD E TO CAPTURE'] : ['CAPTURE PLANETS', 'TO GAIN CARGO'];
             for (let index = 0; index < lines.length; index++) {
                 this.label(lines[index], captionX, Math.min(height - 6 - (lines.length - 1) * 15, captionY) + index * 15,
                     '#fff0b1', 'center', true, 12);
@@ -815,6 +833,7 @@ export class ConquestRenderer {
         }
         const player = this.mapPoint(world.player.x, world.player.y, layout);
         for (const body of bodies) {
+            if (body.station && !world.planets[body.id]?.owner) continue;
             const point = this.mapPoint(body.x, body.y, layout);
             const x = Math.round(point.x);
             const y = Math.round(point.y);

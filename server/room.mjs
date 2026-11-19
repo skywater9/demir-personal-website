@@ -41,7 +41,7 @@ export class GameRoom {
 
     // Start each home near useful neutral territory, keeping Moon as Earth's first destination when free.
     starterRelay(player) {
-        const neutral = bodies.filter(body => !this.world.planets[body.id].owner && !this.world.planets[body.id].home);
+        const neutral = bodies.filter(body => !body.station && !this.world.planets[body.id].owner && !this.world.planets[body.id].home);
         if (player.homeId === 'earth' && neutral.some(body => body.id === 'moon')) return bodies.find(body => body.id === 'moon');
         return neutral.sort((a, b) => {
             const first = dockingPoint(a), second = dockingPoint(b);
@@ -61,11 +61,11 @@ export class GameRoom {
             }
         }
         if (Object.keys(this.sessions).length >= playerLimit) throw new Error('Room full. Try again shortly.');
-        const homeIds = ['earth', 'aster', 'ash', 'mars', 'lumen', 'flint', 'mercury', 'vale'];
+        const homeIds = bodies.filter(body => body.station).map(body => body.id);
         const freeHome = body => !this.world.planets[body.id].owner
             && !Object.values(this.world.players).some(actor => actor.player.docked === body.id);
         const home = homeIds.map(id => bodies.find(body => body.id === id)).find(freeHome)
-            || bodies.filter(body => body.id !== 'moon').find(freeHome) || bodies.find(freeHome);
+            ;
         if (!home) throw new Error('No free home planet.');
         const id = `p-${randomUUID()}`;
         const seed = createWorld(randomUUID(), now);
@@ -131,11 +131,13 @@ export class GameRoom {
     // Accept only bounded controls, never position, velocity, resources, or client hit claims.
     setInput(id, value, now = Date.now()) {
         if (!this.sessions[id]?.connected || !value || typeof value !== 'object' || Array.isArray(value)) return false;
-        if (Object.keys(value).some(key => !['burn', 'rcsX', 'rcsY', 'aimAngle', 'fire'].includes(key))) return false;
+        if (Object.keys(value).some(key => !['burn', 'rcsX', 'rcsY', 'aimAngle', 'fire', 'capture', 'captureBody'].includes(key))) return false;
         if (typeof value.burn !== 'boolean' || typeof value.fire !== 'boolean'
             || !Number.isFinite(value.rcsX) || Math.abs(value.rcsX) > 1
             || !Number.isFinite(value.rcsY) || value.rcsY < 0 || value.rcsY > 1
             || (value.aimAngle !== null && (!Number.isFinite(value.aimAngle) || Math.abs(value.aimAngle) > 10000))) return false;
+        if (value.capture !== undefined && typeof value.capture !== 'boolean') return false;
+        if (value.captureBody != null && !bodies.some(body => body.id === value.captureBody)) return false;
         const controls = { ...value };
         if (controls.aimAngle === null) delete controls.aimAngle;
         this.inputs[id] = { value: controls, at: now };
@@ -147,7 +149,7 @@ export class GameRoom {
         if (!this.sessions[id]?.connected) return { ok: false, reason: 'Not connected.' };
         return withPlayer(this.world, id, () => {
             switch (message.action) {
-                case 'interact': return interact(this.world);
+                case 'interact': return interact(this.world, typeof message.bodyId === 'string' ? message.bodyId : null);
                 case 'digit': {
                     if (!Number.isInteger(message.digit) || message.digit < 0 || message.digit > 9
                         || !Number.isInteger(message.challengeId)) return { ok: false, reason: 'Invalid code.' };

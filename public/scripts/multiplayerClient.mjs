@@ -103,7 +103,7 @@ export class MultiplayerClient {
         if (now - this.lastInputAt < 50) return;
         this.lastInputAt = now;
         this.send({ type: 'input', input: { burn: Boolean(value.burn), fire: Boolean(value.fire),
-            rcsX: value.rcsX || 0, rcsY: Math.max(0, value.rcsY || 0), aimAngle: Number.isFinite(value.aimAngle) ? value.aimAngle : null } });
+            capture: Boolean(value.capture), captureBody: value.captureBody || null, rcsX: value.rcsX || 0, rcsY: Math.max(0, value.rcsY || 0), aimAngle: Number.isFinite(value.aimAngle) ? value.aimAngle : null } });
     }
 
     // Resolve each requested action once, only after the server responds to its unique command ID.

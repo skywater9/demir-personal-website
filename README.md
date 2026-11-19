@@ -5,6 +5,27 @@ hack relays to capture planets, collect cargo, refuel, and upgrade your territor
 This replaces the finite story journey. A configured server hosts one shared galaxy;
 without an endpoint the game runs locally. The shared class-box service is live; its URL is configured in the frontend. See [server setup](server/README.md).
 
+## Starter station prototype
+
+- Rollback checkpoint before this prototype: `f19dd66`.
+- Preview with `python3 -m http.server 8080 --directory public`, then open
+  `http://localhost:8080/?prototype=stations`. This preview explicitly uses local practice,
+  preserving the configured multiplayer endpoint for a later coordinated server update.
+- Players start at a small protected station, owning no planet. The station refuels,
+  provides one cargo per minute directly to its pilot, and sells rocket upgrades.
+- Planets are 20% smaller and have no separate relays. Aim the cursor at a planet,
+  approach within 100 m of its surface, slow below 20 m/s, and hold E for four seconds.
+  Active turrets prevent capture; disable every turret first. Releasing E, losing aim,
+  leaving range, or exceeding capture speed cancels progress.
+- Captured planets produce orbiting cargo and offer defense upgrades through E.
+  Return to the starter station for rocket upgrades. Planet ownership excludes stations.
+- Prototype saves use a separate local storage key. Existing multiplayer save files
+  require migration before running this version against production; no live server or
+  Firebase deployment is included in this prototype.
+- Focused checks: `node --test tests/stationPrototype.test.mjs`. Legacy relay and
+  initial-Earth UI tests still describe the previous design and need revision before release.
+
+
 ## Combat and room activity
 
 - Each of the three planet upgrades adds one turret in a fixed slot around the planet (one, two, then three total), keeping the existing shield effects and prices. Each turret aims, fires, takes damage, and recovers independently.
