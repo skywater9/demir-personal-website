@@ -999,3 +999,38 @@ ok i made a folder called rocket-game and below it public and server
 161.
 
 yes
+
+162.
+
+[Personal terminal identity, shared-account paths, and student service-name prefixes redacted to comply with the assignment's privacy and no-login-in-repository rules. Public service URL and assigned port retained.]
+
+<STUDENT>@<SERVER>:~/projects/rocket-game$ git init
+git remote add origin https://github.com/skywater9/demir-personal-website.git
+git fetch origin
+git checkout -b main --track origin/main
+npm ci --prefix server
+svc start game "node server/server.mjs"
+svc logs game
+Reinitialized existing Git repository in <PRIVATE-STUDENT-WORKSPACE>/projects/rocket-game/.git/
+remote: Enumerating objects: 366, done.
+remote: Counting objects: 100% (366/366), done.
+remote: Compressing objects: 100% (276/276), done.
+remote: Total 366 (delta 110), reused 327 (delta 71), pack-reused 0 (from 0)
+Receiving objects: 100% (366/366), 557.83 KiB | 6.97 MiB/s, done.
+Resolving deltas: 100% (110/110), done.
+From https://github.com/skywater9/demir-personal-website
+ * [new branch]      main       -> origin/main
+branch 'main' set up to track 'origin/main'.
+Switched to a new branch 'main'
+
+added 1 package, and audited 2 packages in 234ms
+
+found 0 vulnerabilities
+● <STUDENT>-game.service - <STUDENT> / game
+     Loaded: loaded (<SHARED-ACCOUNT-SERVICE-PATH>/<STUDENT>-game.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-11-19 07:13:27 UTC; 1s ago
+ Invocation: a120b556d197417f8d3c942170166e59
+   Main PID: 102509 (node)
+-> https://demirg.api.codehw.net  (port 20090)
+Nov 19 07:13:27 localhost systemd[39092]: Started <STUDENT>-game.service - <STUDENT> / game.
+Nov 19 07:13:27 localhost bash[102509]: [game] Shared galaxy ready. Public address is $STUDENT_URL.

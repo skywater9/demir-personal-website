@@ -1,4 +1,4 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261118-multiplayer';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-multiplayer-live';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
     killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261118-multiplayer';
@@ -73,7 +73,10 @@ export class ConquestApp {
             },
             onDeath: event => this.renderer.beginRemoteDeath?.(event),
             onStatus: status => {
-                if (status === 'reconnecting') {
+                if (status === 'replaced') {
+                    this.running = false; this.hasSession = false; this.clearInput(); this.showScreen('menu', false);
+                    this.text('saveNote', 'That pilot is active in another tab. Press Play to join as a new pilot.');
+                } else if (status === 'reconnecting') {
                     this.running = false; this.clearInput(); this.showScreen('menu', false);
                     this.text('saveNote', 'Connection lost. Reconnecting; your place is reserved for 30 seconds.');
                 } else if (status !== 'connected') this.message(status);

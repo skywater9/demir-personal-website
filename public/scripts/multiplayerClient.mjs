@@ -69,13 +69,18 @@ export class MultiplayerClient {
                 else if (message.type === 'left') socket.close();
             });
             socket.addEventListener('error', () => { if (!welcomed) reject(new Error('Cannot reach the game server.')); });
-            socket.addEventListener('close', () => {
+            socket.addEventListener('close', event => {
                 if (this.socket !== socket) { clearTimeout(timeout); return; }
                 clearTimeout(timeout); this.connected = false;
                 for (const pending of this.pending.values()) {
                     clearTimeout(pending.timeout); pending.resolve({ ok: false, reason: 'Connection lost.' });
                 }
                 this.pending.clear();
+                if (event.code === 1000 && event.reason === 'Replaced by a new connection.') {
+                    this.stopped = true; this.token = '';
+                    try { this.storage?.removeItem(this.key); } catch { /* The stale in-memory credential is already cleared. */ }
+                    this.onStatus('replaced');
+                }
                 if (!welcomed) reject(new Error('Connection closed before joining.'));
                 if (!this.stopped) {
                     this.onStatus('reconnecting');

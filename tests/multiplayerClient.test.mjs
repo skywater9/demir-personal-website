@@ -47,3 +47,20 @@ test('browser transport restores private credentials, sequences commands and wai
     assert.equal(socket.sent.at(-1).input.cargo, undefined);
     client.suspend();
 });
+
+// A copied tab credential must yield to the new connection instead of causing a takeover loop.
+test('replaced tab forgets its copied credential and does not reconnect automatically', async () => {
+    const data = new Map(), statuses = [];
+    const client = new MultiplayerClient({ url: 'wss://service.example/game', WebSocketClass: Socket,
+        storage: { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) },
+        onStatus: status => statuses.push(status) });
+    const connecting = client.connect(); const socket = Socket.instances.at(-1); socket.open();
+    socket.message({ type: 'welcome', token: 'e'.repeat(64), world: { player: { id: 'test-pilot' } } });
+    await connecting;
+    const event = new Event('close');
+    Object.defineProperties(event, { code: { value: 1000 }, reason: { value: 'Replaced by a new connection.' } });
+    socket.readyState = 3; socket.dispatchEvent(event);
+    assert.equal(client.stopped, true); assert.equal(client.connected, false);
+    assert.equal(client.token, ''); assert.equal(data.size, 0);
+    assert.equal(statuses.at(-1), 'replaced');
+});
