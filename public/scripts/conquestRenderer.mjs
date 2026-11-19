@@ -1,6 +1,6 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions
-} from './conquestPhysics.mjs?v=20261119-turret-rings';
+} from './conquestPhysics.mjs?v=20261119-vector-brakes';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -476,15 +476,19 @@ export class ConquestRenderer {
         if (dead || player.docked || player.fuel <= 0) return [];
         const jets = [];
         if (input.burn) jets.push({ id: 'main', x: 0, y: 10, dx: 0, dy: 1, kind: 'main' });
-        const braking = input.rcsY > 0;
-        const noseSpeed = Math.abs(player.vx * Math.sin(player.angle) - player.vy * Math.cos(player.angle));
-        const power = braking ? Math.min(6, noseSpeed / 50) : 0;
-        const diagonal = Math.SQRT1_2;
-        if (braking && power > 0) {
-            jets.push({ id: 'frontLeft', x: -6, y: -8, dx: -diagonal, dy: -diagonal, kind: 'attitude', power });
-        }
-        if (braking && power > 0) {
-            jets.push({ id: 'frontRight', x: 6, y: -8, dx: diagonal, dy: -diagonal, kind: 'attitude', power });
+        if (input.rcsY > 0) {
+            const cosine = Math.cos(player.angle), sine = Math.sin(player.angle);
+            const localX = player.vx * cosine + player.vy * sine;
+            const localY = -player.vx * sine + player.vy * cosine;
+            const thrusters = [
+                { id: 'brakeFront', x: 0, y: -13, dx: 0, dy: -1, speed: -localY },
+                { id: 'brakeBack', x: 0, y: 10, dx: 0, dy: 1, speed: localY },
+                { id: 'brakeLeft', x: -8, y: 0, dx: -1, dy: 0, speed: -localX },
+                { id: 'brakeRight', x: 8, y: 0, dx: 1, dy: 0, speed: localX }
+            ];
+            for (const { speed, ...thruster } of thrusters) {
+                if (speed > 0.001) jets.push({ ...thruster, kind: 'attitude', power: Math.min(6, speed / 50) });
+            }
         }
         return jets;
     }

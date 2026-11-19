@@ -892,19 +892,19 @@ function turnTowardAim(player, aimAngle, dt, power) {
     player.angle = normalizeAngle(player.angle + player.rotationVelocity * dt);
 }
 
-// Remove only axial velocity, easing near rest and clamping the change so braking never reverses motion.
-function brakeAlongNose(player, dt, power) {
-    const noseX = Math.sin(player.angle);
-    const noseY = -Math.cos(player.angle);
-    const speed = player.vx * noseX + player.vy * noseY;
-    const speedMultiplier = 1 + Math.min(2, Math.abs(speed) / 300);
+// Cancel the full velocity vector, easing near rest without overshooting or depending on hull heading.
+function brakeVelocity(player, dt, power) {
+    const speed = Math.hypot(player.vx, player.vy);
+    if (speed === 0 || power <= 0) return;
+    const speedMultiplier = 1 + Math.min(2, speed / 300);
     const effectivePower = power * speedMultiplier * (1 + (player.rocketTier || 0) * .08);
-    const amount = Math.min(Math.abs(speed), tuning.brakeAcceleration * dt * effectivePower,
-        Math.abs(speed) * (1 - Math.exp(-tuning.brakeResponse * dt * effectivePower)));
-    let change = Math.sign(speed) * amount;
-    if (power > 0 && Math.abs(speed - change) < 0.05) change = speed;
-    player.vx -= noseX * change;
-    player.vy -= noseY * change;
+    const maximumChange = tuning.brakeAcceleration * dt * effectivePower;
+    const amount = speed <= maximumChange ? speed : Math.min(maximumChange,
+        speed * (1 - Math.exp(-tuning.brakeResponse * dt * effectivePower)));
+    const remaining = speed - amount;
+    const scale = remaining < 0.05 ? 0 : remaining / speed;
+    player.vx *= scale;
+    player.vy *= scale;
 }
 
 // Preserve full main thrust, local RCS, and ramped rotation while allowing powerless coasting.
@@ -959,7 +959,7 @@ function movePlayer(world, input, dt) {
         + axialThrust * Math.cos(player.angle) * tuning.rcsAcceleration) * power;
     player.vx += (gravity.ax + Math.sin(player.angle) * thrust * power + rcsAx) * dt;
     player.vy += (gravity.ay - Math.cos(player.angle) * thrust * power + rcsAy) * dt;
-    if (rcsY > 0) brakeAlongNose(player, dt, power * rcsY);
+    if (rcsY > 0) brakeVelocity(player, dt, power * rcsY);
     repelRockets(world, dt);
     const start = { x: player.x, y: player.y };
     const end = { x: player.x + player.vx * dt, y: player.y + player.vy * dt };

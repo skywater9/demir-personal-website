@@ -82,7 +82,7 @@ test('steering emits no jets while main and moving brake effects remain active',
     const input = { aimAngle: -Math.PI / 2 + Math.PI / 360, burn: true, rcsY: 1 };
     let jets = renderer.exhaustJets(player, input, false);
     assert.ok(jets.some(jet => jet.kind === 'main'));
-    assert.equal(jets.filter(jet => jet.kind === 'attitude').length, 2, 'Braking keeps both front jets active even with tiny heading error.');
+    assert.equal(jets.filter(jet => jet.kind === 'attitude').length, 1, 'Straight flight activates the front brake thruster regardless of heading error.');
     input.rcsY = 0;
     assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'attitude').length, 0);
     input.aimAngle = 0;
@@ -157,39 +157,41 @@ test('camera zoom easing is independent of frame rate and retains close-up servi
 });
 
 
-test('braking retains two forward nozzles while rotation produces none', () => {
+test('four fixed brake thrusters respond to rocket-local velocity and rotation', () => {
     const { renderer } = makeRenderer();
-    const world = createWorld();
-    const player = world.player;
-    Object.assign(player, { landedOn: null, angle: 0, rotationVelocity: 0, vx: 0, vy: -50 });
-    const brakingJets = renderer.exhaustJets(player, { rcsY: 1 }, false);
-    assert.deepEqual(brakingJets.map(jet => jet.id), ['frontLeft', 'frontRight']);
-    const [left, right] = brakingJets;
-    assert.equal(left.x, -right.x);
-    assert.ok(left.x < 0 && left.y < 0 && left.y === right.y);
-    assert.ok(left.dx < 0 && right.dx > 0 && left.dy < 0 && left.dy === right.dy);
-    assert.equal(left.dx, -right.dx);
-    for (const jet of brakingJets) {
-        assert.equal(jet.kind, 'attitude');
-        assert.equal(jet.power, 1);
-        assert.ok(Math.abs(Math.hypot(jet.dx, jet.dy) - 1) < 1e-10);
+    const player = createWorld().player;
+    Object.assign(player, { landedOn: null });
+    const directions = [
+        { vx: 0, vy: -50, id: 'brakeFront', dx: 0, dy: -1 },
+        { vx: 0, vy: 50, id: 'brakeBack', dx: 0, dy: 1 },
+        { vx: -50, vy: 0, id: 'brakeLeft', dx: -1, dy: 0 },
+        { vx: 50, vy: 0, id: 'brakeRight', dx: 1, dy: 0 }
+    ];
+    for (const angle of [0, Math.PI / 2, Math.PI, -.7]) for (const direction of directions) {
+        const cosine = Math.cos(angle), sine = Math.sin(angle);
+        Object.assign(player, { angle, vx: direction.vx * cosine - direction.vy * sine,
+            vy: direction.vx * sine + direction.vy * cosine });
+        const jets = renderer.exhaustJets(player, { rcsY: 1 }, false);
+        assert.equal(jets.length, 1);
+        assert.equal(jets[0].id, direction.id);
+        assert.equal(jets[0].dx, direction.dx); assert.equal(jets[0].dy, direction.dy);
+        assert.ok(Math.abs(jets[0].power - 1) < 1e-9);
     }
-    player.vy = -200;
-    assert.ok(renderer.exhaustJets(player, { rcsY: 1 }, false).every(jet => jet.power > 1));
-    player.vy = 0;
+    Object.assign(player, { angle: 0, vx: 100, vy: -50 });
+    const diagonal = renderer.exhaustJets(player, { rcsY: 1 }, false);
+    assert.deepEqual(diagonal.map(jet => jet.id), ['brakeFront', 'brakeRight']);
+    assert.equal(diagonal[0].power, 1); assert.equal(diagonal[1].power, 2);
+    const combined = renderer.exhaustJets(player, { rcsY: 1, burn: true }, false);
+    assert.equal(combined.length, 3);
+    assert.deepEqual(combined.filter(jet => jet.kind === 'attitude'), diagonal);
+    Object.assign(player, { vx: 0, vy: 0 });
     assert.deepEqual(renderer.exhaustJets(player, { rcsY: 1 }, false), []);
-    player.vy = -50;
-    for (const direction of [-1, 1]) {
-        player.rotationVelocity = direction;
-        const turningJets = renderer.exhaustJets(player, { aimAngle: 0 }, false);
-        assert.deepEqual(turningJets, []);
-        const combined = renderer.exhaustJets(player, { aimAngle: 0, rcsY: 1, burn: true }, false);
-        assert.equal(combined.length, 3);
-        assert.equal(new Set(combined.map(jet => jet.id)).size, 3);
-        assert.deepEqual(combined.filter(jet => jet.kind === 'attitude'), brakingJets);
-    }
+    assert.deepEqual(renderer.exhaustJets(player, { aimAngle: 1 }, false), []);
+    player.vx = 100;
+    assert.deepEqual(renderer.exhaustJets(player, { rcsY: 1 }, true), []);
+    player.fuel = 0;
+    assert.deepEqual(renderer.exhaustJets(player, { rcsY: 1 }, false), []);
 });
-
 
 test('turning emits no particles while main and brake effects remain active', () => {
     const { renderer } = makeRenderer();
@@ -532,4 +534,16 @@ test('planet renders one turret per upgrade at its shared world position without
         assert.deepEqual(positions, turretPositions(body, level));
         assert.deepEqual(world, before);
     }
+});
+
+// Remote brake effects use the same local-coordinate decomposition as the controlled ship.
+test('other pilots show rotation-correct brake jets from their replicated velocity', () => {
+    const { renderer } = makeRenderer();
+    const world = createWorld();
+    world.others = [{ ...world.player, id: 'other', landedOn: null, angle: Math.PI / 2,
+        vx: 50, vy: 50, braking: true, thrusting: false }];
+    const emitted = [];
+    renderer.emitJet = (player, jet) => emitted.push(jet);
+    renderer.updateRemoteExhaust(world, .1, false);
+    assert.deepEqual(emitted.map(jet => jet.id), ['brakeFront', 'brakeRight']);
 });

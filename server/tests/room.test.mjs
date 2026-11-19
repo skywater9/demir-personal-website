@@ -240,3 +240,20 @@ test('fatal projectile identifies its attacker for the shared death announcement
     assert.equal(death.attackerId, a.playerId); assert.equal(death.source, 'player');
     assert.equal(room.saved().notices, undefined);
 });
+
+// Online pilots use the same full-vector brake while the snapshot exposes the remote plume cue.
+test('authoritative braking cancels sideways drift at arbitrary heading', () => {
+    const room = new GameRoom(null, 1000);
+    const joined = room.join('', 1000);
+    const actor = room.world.players[joined.playerId];
+    space(actor);
+    Object.assign(actor.player, { vx: 80, vy: -60, angle: .7 });
+    room.setInput(joined.playerId, { burn: false, fire: false, rcsX: 0, rcsY: 1, aimAngle: null }, 1000);
+    room.tick(.1, 1000);
+    assert.ok(actor.player.vx < 80 && actor.player.vx > 0);
+    assert.ok(actor.player.vy > -60 && actor.player.vy < 0);
+    assert.ok(Math.abs(actor.player.vx / actor.player.vy + 4 / 3) < 1e-9);
+    assert.equal(actor.player.braking, true);
+    for (let frame = 0; frame < 20; frame++) room.tick(.1, 1000);
+    assert.equal(actor.player.vx, 0); assert.equal(actor.player.vy, 0);
+});

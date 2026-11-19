@@ -565,24 +565,21 @@ test('continued thrust accelerates beyond 500 m/s and coasting preserves speed',
     close(world.player.vy, velocity.vy);
 });
 
-test('axis braking stops rapidly without reversal, preserving sideways drift at every heading', () => {
+test('vector braking stops all drift without reversal at every rocket heading', () => {
     for (const angle of [0, Math.PI / 2, -Math.PI / 2, Math.PI, .7]) {
-        for (const forwardSpeed of [100, -100, 0, .01]) {
+        for (const velocity of [{ vx: 100, vy: 25 }, { vx: -100, vy: -40 }, { vx: 0, vy: 100 }, { vx: 80, vy: 0 }, { vx: .01, vy: -.01 }]) {
             const world = inSpace();
-            const nose = { x: Math.sin(angle), y: -Math.cos(angle) };
-            const side = { x: Math.cos(angle), y: Math.sin(angle) };
-            Object.assign(world.player, { angle,
-                vx: nose.x * forwardSpeed + side.x * 25,
-                vy: nose.y * forwardSpeed + side.y * 25 });
+            Object.assign(world.player, { angle, ...velocity });
             for (let frame = 0; frame < 240; frame++) {
-                const before = world.player.vx * nose.x + world.player.vy * nose.y;
+                const before = { vx: world.player.vx, vy: world.player.vy };
                 stepWorld(world, { rcsY: 1 });
-                const after = world.player.vx * nose.x + world.player.vy * nose.y;
-                assert.ok(Math.abs(after) <= Math.abs(before) + 1e-9);
-                assert.ok(before * after >= -1e-9);
-                close(world.player.vx * side.x + world.player.vy * side.y, 25);
-                if (frame === 119) assert.ok(Math.abs(after) < .1);
+                const after = world.player;
+                assert.ok(Math.hypot(after.vx, after.vy) <= Math.hypot(before.vx, before.vy) + 1e-9);
+                assert.ok(before.vx * after.vx >= -1e-9 && before.vy * after.vy >= -1e-9);
+                close(before.vx * after.vy - before.vy * after.vx, 0);
+                if (frame === 119) assert.ok(Math.hypot(after.vx, after.vy) < .1);
             }
+            close(world.player.vx, 0); close(world.player.vy, 0);
         }
     }
 });
@@ -859,4 +856,20 @@ test('legacy saved turret health and recovery migrate without resetting the orig
     assert.ok(planet.turrets[0].health > 2.49 && planet.turrets[0].health < 2.52);
     assert.equal(planet.turrets[1].health, 5);
     assert.equal(planet.turretHealth, undefined);
+});
+
+// Once the remaining speed is within engine authority, braking holds zero instead of creeping under gravity.
+test('braking reaches a complete stop near gravity and holds while powered', () => {
+    const world = inSpace();
+    const body = bodies[1];
+    Object.assign(world.player, { x: body.x + body.radius + 600, y: body.y, vx: 10, vy: -5, angle: 1.2 });
+    advance(world, 2, { rcsY: 1 });
+    close(world.player.vx, 0); close(world.player.vy, 0);
+    const position = { x: world.player.x, y: world.player.y };
+    advance(world, .5, { rcsY: 1 });
+    close(world.player.x, position.x); close(world.player.y, position.y);
+    const fuel = world.player.fuel;
+    assert.ok(fuel < 100);
+    stepWorld(world, {});
+    assert.ok(Math.hypot(world.player.vx, world.player.vy) > 0);
 });

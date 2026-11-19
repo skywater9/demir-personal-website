@@ -159,7 +159,7 @@ flowchart TD
 
 ## Continuous rules
 
-- W burns at full thrust; S brakes only along the nose axis, preserving sideways drift without reversing motion. Mouse/trackpad steering follows the cursor
+- W burns at full thrust; S brakes the full velocity vector until stopped, with four rocket-fixed thrusters responding to velocity and heading. Mouse/trackpad steering follows the cursor
   with an acceleration-limited turn. Space fires; E attaches/detaches. Number
   keys 1–0 enter relay challenges. Double-tap W/A/S/D for rocket-relative dashes.
 - The top-right map shows all planets, their ownership, home, stars, and target.

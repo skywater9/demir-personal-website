@@ -29,7 +29,7 @@ The conquest tests use the shipped page/controller and real simulation:
 - Renderer geometry for all systems/planet types/shield tiers, map hit tests,
   centered nozzle particles, death frames and reduced-motion dash cues. Rotation
   jets stop for sub-degree corrections and turn rates below 0.4 rad/s without suppressing
-  main-engine or brake exhaust. Braking fires both forward V-shaped jets; turning
+  main-engine or brake exhaust. Braking selects among four fixed front/back/left/right jets according to local velocity; turning
   uses one of the same two nozzles, without duplicates when controls overlap.
   Braking increases plume density, speed and particle size over ordinary turning.
 - Camera zoom changes continuously across former speed thresholds, eases during
@@ -175,3 +175,9 @@ proxy/service deployment have not been performed.
 - Shoot each turret from inside the shield: only that turret loses health and disables. Other turrets keep aiming and firing if they have line of sight.
 - Upgrade while a turret is damaged or recovering: its state and position must remain intact. Capture or owner departure clears all turret state.
 - Restore a legacy single-turret save: preserve that gun's health/aim/recovery and create the additional turrets for the saved tier. Restart and recover the new independent turret state.
+
+## Braking in all directions
+
+- At several headings, hold S while moving forward, backward, sideways, and diagonally. Both velocity components must fall to zero without reversing; release S to coast or fall again.
+- Front/back/left/right nozzles remain fixed to the hull. Only the one or two needed to oppose current motion emit particles, with stronger emission for faster components. Rotation alone emits none.
+- Check another pilot sees the same velocity-dependent brake plumes. Braking on a serviced ship must not launch or detach it, and an empty tank cannot provide braking.

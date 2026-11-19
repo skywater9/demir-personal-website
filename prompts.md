@@ -1066,3 +1066,14 @@ continue
 170.
 
 make each planet upgrade to add a turret around the planet
+
+171.
+
+[Personal terminal identity and shared-server login details redacted to follow the class privacy and no-login-in-repository rules.]
+
+server says: (base) <LOCAL-USER>@<LOCAL-COMPUTER> ~ % ssh <CLASS-LOGIN>@<SERVER-ADDRESS>
+ssh: connect to host <SERVER-ADDRESS> port 22: Operation timed out
+
+172.
+
+have the brake button apply breaks in all directions and thre are four brake thrusters around the rocket and they fire dynamically based on velocity and rotation to fully stop the rocket in all directions

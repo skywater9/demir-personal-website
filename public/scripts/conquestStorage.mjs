@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-turret-rings';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-vector-brakes';
 
 export const conquestKey = 'orbital.conquest.v2';
 export const reconnectWindow = 30000;
