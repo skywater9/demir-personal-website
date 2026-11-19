@@ -1,0 +1,299 @@
+:root { color-scheme: dark; --line:#344951; --muted:#91a6aa; --amber:#edb368; --green:#96cdb0; font:12px ui-monospace,SFMono-Regular,Consolas,monospace; background:#09121a; color:#dbe5dd; }
+* { box-sizing:border-box; }
+body { margin:0; min-width:340px; }
+[hidden] { display:none!important; }
+button,input,select { font:inherit; color:inherit; border:1px solid #52656c; border-radius:0; background:#22343e; padding:8px; }
+button { cursor:pointer; } button:hover { border-color:var(--amber); background:#31464f; } button:disabled { opacity:.45; cursor:default; } button.is-held,button:active { background:#4b6555; border-color:var(--green); }
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,canvas:focus-visible { outline:2px solid var(--amber); outline-offset:3px; }
+kbd { font:inherit; color:#bac8c7; font-size:8px; }
+.muted { color:var(--muted); } .small { font-size:9px; line-height:1.7; } .eyebrow { color:var(--amber); font-size:9px; letter-spacing:1px; }
+#gameShell { height:100svh; min-height:520px; display:grid; grid-template-rows:minmax(340px,1fr) 180px; position:relative; }
+.viewport { position:relative; overflow:hidden; background:#08101b; min-height:0; }
+#flightCanvas { width:100%; height:100%; display:block; image-rendering:pixelated; touch-action:none; }
+.galaxy-map { position:absolute; top:12px; right:12px; width:260px; border:1px solid var(--line); background:#10212aea; padding:7px; }
+.map-heading { display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:7px; letter-spacing:.3px; }.map-heading button { font-size:8px; padding:4px; }
+#mapCanvas { width:100%; height:136px; display:block; image-rendering:pixelated; cursor:crosshair; }
+.map-legend { display:flex; justify-content:space-between; color:var(--muted); font-size:7px; }
+.notifications { position:absolute; bottom:10px; right:12px; width:min(300px,calc(100% - 24px)); max-height:calc(100% - 24px); overflow-y:auto; display:grid; gap:6px; scrollbar-width:thin; }
+.flight-message,.interaction-card { margin:0; padding:10px; background:#13232cef; border:1px solid var(--line); font-size:10px; line-height:1.5; }
+.interaction-card { border-color:var(--amber); }.interaction-card h2 { margin:0; font-size:12px; }.interaction-card p { margin:7px 0; }.card-heading { display:flex; justify-content:space-between; align-items:center; gap:5px; }.card-heading>span { font-size:8px; color:var(--green); }
+.interaction-card ul { padding:0; margin:7px 0; list-style:none; display:grid; gap:5px; font-size:9px; }.interaction-card li { color:#e6b981; }.interaction-card li.is-ready { color:var(--green); }
+.interaction-card button { width:100%; margin-top:5px; font-size:10px; }.interaction-card .digit-button { font-size:36px; padding:3px; color:var(--amber); font-weight:bold; }
+.hack-track { height:9px; background:#081722; border:1px solid var(--line); margin-top:8px; }.hack-track span { display:block; height:100%; width:0; background:var(--green); }
+.notifications>p:not([hidden]),.notifications>section:not([hidden]) { animation:rise 180ms ease-out; } @keyframes rise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+.respawn-notice { position:absolute; top:45%; left:50%; transform:translate(-50%,-50%); background:#0b1522d9; padding:15px 24px; border:1px solid var(--amber); text-align:center; pointer-events:none; }
+.control-panel { display:grid; grid-template-columns:1fr; background:#17272f; border-top:1px solid #65767c; min-width:0; }
+.control-panel>section { min-width:0; border-right:1px solid var(--line); padding:10px 12px; overflow:auto; scrollbar-width:thin; }.control-panel>section:last-child { border-right:0; }
+.readout-label { display:flex; justify-content:space-between; gap:5px; align-items:baseline; font-size:11px; color:#adbdbe; }
+.meter { height:22px; margin:8px 0; background:#0b171f; border:1px solid #516364; padding:3px; }
+.fuel-panel { margin:0; }.fuel-meter { height:34px; }.fuel-panel output { color:#d9e8d1; }
+#fuelFill { --fuel-use-color:#f0fff4; display:block; position:relative; overflow:hidden; height:100%; width:100%; background:repeating-linear-gradient(to right,#9bc8a7 0 7px,transparent 7px 9px); transition:width 160ms ease-out; }
+#fuelUsageFill { position:absolute; inset:0; background:var(--fuel-use-color); mask-image:repeating-linear-gradient(to right,#000 0 7px,transparent 7px 9px); -webkit-mask-image:repeating-linear-gradient(to right,#000 0 7px,transparent 7px 9px); clip-path:inset(0 0 0 100%); transition:clip-path 160ms ease-out; }
+.boost-gauge { height:3px; margin-top:3px; overflow:hidden; background:#263b43; }
+.boost-gauge span { display:block; height:100%; width:100%; background:#9edcb5; transition:width 100ms linear; }
+.flight-status.is-low #fuelFill { --fuel-use-color:#fff0df; background:repeating-linear-gradient(to right,#e69966 0 7px,transparent 7px 9px); }.flight-status.is-low #fuelValue { color:#e69966; }
+.control-panel>.motion { display:grid; grid-template-columns:190px minmax(0,1fr); padding:0 0 0 2px; gap:3px; overflow:hidden; align-items:stretch; }
+#velocityDial { width:190px; height:172px; align-self:center; overflow:visible; } .velocity-ring { fill:#0c1d25; stroke:#5b756d; stroke-width:1.3; }.velocity-inner { fill:none; stroke:#28444a; stroke-dasharray:2 5; }.velocity-axes { stroke:#34565b; fill:none; }.velocity-ticks { stroke:#7f9d92; fill:none; stroke-width:2; }#velocityDial text { fill:#8ca5a0; font-size:9px; }.velocity-components { stroke:#85a59d; stroke-width:1.5; opacity:.4; fill:none; }.velocity-projection { stroke:#85a59d; stroke-dasharray:3 4; opacity:.25; fill:none; }.velocity-vector { stroke:var(--amber); stroke-width:3; }.velocity-arrow { fill:var(--amber); }.velocity-rocket { fill:#e2ead9; stroke:#0c1d25; stroke-width:1.5; }.rocket-window { fill:#618c9d; stroke:none; }
+.motion-readouts { border-left:1px solid var(--line); display:grid; grid-template-columns:max-content 1fr; grid-template-rows:1fr 1fr; gap:0 10px; padding:0 10px; position:relative; }.motion-readouts::after { content:''; position:absolute; top:50%; left:0; right:0; border-top:1px solid var(--line); pointer-events:none; }.speed { align-self:end; padding-bottom:7px; }.speed .readout-label { font-size:10px; }.speed output { font-size:25px; font-variant-numeric:tabular-nums; }.vector { display:grid; gap:5px; align-self:end; padding-bottom:12px; font-size:8px; color:#87a39b; }.vector b { font-weight:normal; }.rotation { grid-column:1/-1; padding-top:10px; }.rotation output { display:block; color:var(--amber); font-size:18px; margin-top:4px; }
+.flight-controls { display:grid; grid-template-columns:120px 100px; gap:10px; align-content:start; }.engine-controls button { width:100%; }.burn-button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-height:59px; background:#674431; border-color:#bd8f62; font-size:20px; }.burn-button span { font-size:7px; }.rotation-buttons { display:flex; gap:5px; margin-top:6px; }.rotation-buttons button { display:flex; flex-direction:column; align-items:center; gap:3px; min-height:40px; font-size:20px; padding:3px; }.fire-button { margin-top:6px; font-size:10px; padding:6px; }.hold-button { touch-action:none; user-select:none; -webkit-user-select:none; }.control-caption { font-size:6px; color:#98adae; display:block; }.rcs-buttons { display:grid; grid-template-columns:repeat(3,30px); grid-template-rows:repeat(3,30px); gap:3px; margin:8px 0; }.rcs-buttons button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:2px; font-size:16px; }.rcs-up { grid-area:1/2; }.rcs-left { grid-area:2/1; }.rcs-center { grid-area:2/2; place-self:center; font-size:18px; color:#88a6a6; }.rcs-right { grid-area:2/3; }.rcs-down { grid-area:3/2; }
+.flight-controls { grid-column:1; display:flex; justify-content:center; align-items:center; gap:14px; padding:8px; }.engine-controls { display:flex; align-items:center; gap:6px; }.engine-controls button { width:110px; }.flight-controls .brake-button { width:110px; margin:0; }
+.overlay { position:absolute; inset:0; z-index:10; background:linear-gradient(90deg,#0b1724fa,#0b1724ec 45%,#0b17248c); display:flex; align-items:center; padding:35px 45px; overflow-y:auto; }.menu-card { width:430px; max-width:100%; outline:none; }.menu-card h1 { font-size:62px; line-height:.95; letter-spacing:-3px; margin:24px 0; text-shadow:3px 3px #304c59; }.menu-card h1 span { color:var(--amber); }.menu-intro { font-size:17px; }.menu-card>p { line-height:1.7; }.menu-card>button { width:100%; margin-top:8px; text-align:left; }.primary-button { background:var(--amber); color:#18232a; font-weight:bold; padding:13px; }.primary-button:hover { background:#f6cc8c; }.menu-secondary { display:flex; gap:8px; margin-top:8px; }.menu-secondary button { flex:1; }.privacy-note { font-size:9px; color:#a5b9bb; border-top:1px solid var(--line); padding-top:12px; } details { font-size:10px; line-height:1.8; color:#afc2c3; }summary { cursor:pointer; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:10px 0; }#galaxyPanel label { display:grid; gap:6px; margin:18px 0; font-size:9px; }#galaxyListing { display:grid; gap:12px; border:1px solid var(--line); padding:15px; }#galaxyListing span { font-size:10px; color:var(--muted); }.records-card { width:650px; }.record { padding:12px 0; border-top:1px solid var(--line); font-size:11px; line-height:1.8; }.records-card h3 { color:var(--amber); font-size:12px; }.storage-warning { position:fixed; left:12px; bottom:8px; max-width:600px; z-index:20; background:#423121; border:1px solid var(--amber); padding:10px; font-size:10px; }.noscript { position:fixed; inset:0; z-index:30; display:grid; place-items:center; background:#0b1724; }
+@media(max-width:900px) { #gameShell { height:auto; min-height:100svh; grid-template-rows:minmax(380px,62svh) auto; }.control-panel { grid-template-columns:minmax(210px,1fr) 385px; }.flight-controls { grid-column:1/-1; }.control-panel>section { min-height:160px; }.control-panel>.motion { min-height:180px; }.overlay { position:fixed; align-items:flex-start; }.menu-card { margin:auto 0; } }
+@media(max-width:650px) { .flight-objective { width:170px; top:7px; left:7px; padding:6px; }.flight-objective strong { font-size:10px; }.galaxy-map { width:150px; top:7px; right:7px; padding:4px; }#mapCanvas { height:96px; }.map-heading>span { font-size:5px; }.map-heading button { font-size:7px; }.map-legend { font-size:5px; }.control-panel { grid-template-columns:minmax(0,1fr); }.control-panel>section { grid-column:1; }.control-panel>.motion { grid-template-columns:170px minmax(0,1fr); }#velocityDial { width:170px; height:156px; }.motion-readouts { padding:0 7px; gap:0 7px; }.speed output { font-size:22px; }.flight-controls { grid-template-columns:120px 130px; }.rcs-buttons { grid-template-columns:repeat(3,38px); grid-template-rows:repeat(3,34px); }.notifications { width:260px; right:7px; }.overlay { padding:24px; }.menu-card h1 { font-size:54px; }.menu-secondary { flex-wrap:wrap; } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; scroll-behavior:auto!important; } }
+
+.brake-button { display:flex; flex-direction:column; gap:6px; width:100%; min-height:59px; margin:8px 0; align-items:center; justify-content:center; font-size:10px; }
+
+#flightCanvas { cursor:none; }
+
+@media(prefers-reduced-motion:reduce) { #fuelFill,#fuelUsageFill,#boostFill { transition:none; } }
+
+#gameShell { grid-template-rows:minmax(340px,1fr); }
+.control-panel { position:absolute; z-index:2; left:256px; right:8px; bottom:8px; height:112px; display:flex; justify-content:flex-end; min-height:0; overflow:visible; border:0; background:transparent; }
+.control-panel>section { min-height:0; padding:8px; }
+.flight-status { position:absolute; z-index:2; top:auto; left:8px; bottom:8px; transform:none; width:240px; display:grid; gap:6px; padding:8px 10px; background:#14242cde; border:1px solid var(--line); }
+.status-unit { color:var(--muted); font-size:9px; }.flight-status .fuel-meter { height:22px; margin:5px 0 0; }.status-cargo { display:flex; align-items:baseline; justify-content:space-between; border-top:1px solid var(--line); padding-top:4px; }.status-cargo output { color:var(--amber); font-size:14px; }
+.relay-card { position:absolute; z-index:4; left:50%; top:50%; transform:none; width:min(220px,calc(100% - 16px)); max-height:calc(100% - 16px); overflow-y:auto; padding:7px; pointer-events:none; }
+.relay-card button { pointer-events:auto; }
+.relay-card .card-heading h2 { font-size:10px; }
+.relay-card .card-heading>span { font-size:7px; }
+.relay-card ul { margin:5px 0; gap:2px; }
+.relay-card li { font-size:8px; line-height:1.35; }
+.relay-card .dock-speed-check { font-size:14px; line-height:1.25; font-weight:bold; }
+.relay-card #interactButton { margin-top:5px; padding:6px; font-size:14px; font-weight:bold; letter-spacing:.5px; }
+.dock-speed-check.is-warning { color:#f16d65; }
+.dock-speed-check.is-ready { color:var(--green); }
+.dock-orientation { display:flex; align-items:center; gap:7px; border-top:1px solid var(--line); padding-top:5px; }
+.dock-orientation svg { width:44px; height:44px; flex:0 0 44px; overflow:visible; }
+.dock-angle-ring { fill:#0b1720; stroke:#41545b; stroke-width:1; stroke-dasharray:2 3; }
+.dock-arrow { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; transition:stroke .12s ease; }
+.dock-target-arrow { stroke:#8ea8a5; opacity:.42; }
+.dock-player-arrow { stroke:#f16d65; }
+.dock-orientation.is-aligned .dock-player-arrow { stroke:#85d2a0; }
+.dock-orientation.is-aligned .dock-target-arrow { stroke:#85d2a0; opacity:.9; }
+.dock-orientation output { color:#b7c8c6; font-size:7px; line-height:1.3; }
+.flight-controls { grid-column:1; width:max-content; min-height:0!important; display:grid; grid-template-columns:110px 110px; justify-content:center; align-items:center; gap:14px; background:#14242cde; border:1px solid var(--line); }
+.engine-controls { display:grid; gap:0; }.engine-controls button { width:110px; }
+@media(max-width:900px) { #gameShell { height:100svh; min-height:520px; grid-template-rows:minmax(340px,1fr); }.control-panel { left:256px; right:8px; bottom:8px; width:auto; height:112px; display:flex; justify-content:flex-end; border:0; background:transparent; }.control-panel>section { min-height:0; }.flight-controls { width:max-content; background:#14242cde; border:1px solid var(--line); } }
+@media(max-width:650px) { #gameShell { height:auto; min-height:100svh; grid-template-rows:minmax(380px,62svh) 112px; }.control-panel { position:relative; left:auto; right:auto; bottom:auto; width:auto; height:auto; display:grid; justify-content:stretch; border-top:1px solid #65767c; background:#17272f; }.flight-controls { width:auto; background:transparent; border:0; }.flight-status { top:112px; left:7px; right:7px; bottom:auto; transform:none; width:auto; }.relay-card { width:min(210px,calc(100% - 12px)); max-height:calc(100% - 12px); } }
+
+/* Keep status and controls in one centered cockpit panel across screen sizes. */
+#gameShell { grid-template-rows:minmax(340px,1fr); }
+.control-panel { position:absolute; z-index:3; left:50%; right:auto; bottom:8px; transform:translateX(-50%); width:max-content; max-width:calc(100% - 16px); height:112px; display:flex; align-items:stretch; justify-content:center; overflow:visible; border:1px solid var(--line); background:#14242cde; }
+.control-panel>section { min-width:0; min-height:0; padding:6px 8px; overflow:visible; }
+.flight-status { position:relative; top:auto; left:auto; bottom:auto; transform:none; width:220px; display:grid; grid-template-rows:auto 1fr auto; gap:3px; padding:6px 8px; background:transparent; border:0; border-right:1px solid var(--line); }
+.flight-status .fuel-meter { height:22px; margin:4px 0 0; }
+.flight-controls { grid-column:auto; width:max-content; min-height:0!important; display:grid; grid-template-columns:110px 110px; justify-content:center; align-items:center; gap:14px; background:transparent; border:0; }
+@media(max-width:900px) { .control-panel { left:50%; right:auto; width:max-content; height:112px; display:flex; justify-content:center; border:1px solid var(--line); background:#14242cde; }.control-panel>section { min-height:0; }.flight-controls { width:max-content; background:transparent; border:0; } }
+@media(max-width:650px) { #gameShell { height:100svh; min-height:520px; grid-template-rows:minmax(340px,1fr); }.control-panel { left:50%; right:auto; bottom:8px; width:calc(100% - 16px); height:auto; display:grid; grid-template-columns:1fr; justify-content:stretch; }.control-panel>section { padding:6px 8px; }.flight-status { width:auto; grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) minmax(0,.8fr); grid-template-rows:auto; align-items:center; border-right:0; border-bottom:1px solid var(--line); }.flight-status .fuel-meter { height:18px; }.status-cargo { border-top:0; padding-top:0; }.flight-controls { width:max-content; justify-self:center; background:transparent; border:0; } }
+
+.controls-hint { position:absolute; z-index:3; display:grid; gap:6px; padding:10px 12px; border:1px solid #52656c; background:#101d25e8; color:#dbe5dd; font-size:12px; opacity:.88; pointer-events:none; white-space:nowrap; }
+.controls-hint kbd { display:inline-block; min-width:28px; padding:4px 6px; border:1px solid #718487; color:#fff; text-align:center; }
+.controls-hint-line { display:flex; align-items:center; gap:5px; opacity:1; transition:opacity 260ms ease-out; }
+.controls-hint-line kbd { transition:background-color 180ms ease-out,border-color 180ms ease-out,color 180ms ease-out,box-shadow 180ms ease-out; }
+.controls-hint-line.is-pressed kbd { background:#d9f3e5; border-color:#fff; color:#101d25; box-shadow:0 0 8px #d9f3e5aa; }
+.controls-hint-line.is-leaving { opacity:0; }
+@media(prefers-reduced-motion:reduce) { .controls-hint-line,.controls-hint-line kbd { transition:none; } }
+
+/* Keep flight readouts visible without bringing back the removed button controls. */
+.flight-status { position:absolute; z-index:2; top:auto; left:50%; bottom:8px; transform:translateX(-50%); width:min(220px,calc(100% - 16px)); display:grid; gap:4px; padding:7px 9px; background:#14242cde; border:1px solid var(--line); }
+.flight-status .fuel-meter { height:22px; margin:4px 0 0; }
+@media(max-width:650px) { .flight-status { top:auto; left:50%; right:auto; bottom:8px; width:min(220px,calc(100% - 16px)); transform:translateX(-50%); grid-template-columns:1fr; grid-template-rows:auto auto auto; border:1px solid var(--line); } }
+
+/* Anchor the enlarged navigation map and opaque flight readout together at lower right. */
+.galaxy-map { top:auto; right:12px; bottom:136px; width:min(360px,calc(100% - 24px)); padding:9px; background:#10212a; }
+.map-heading { font-size:9px; }
+.map-heading button { font-size:9px; padding:5px 7px; }
+#mapCanvas { height:auto; aspect-ratio:5 / 3; }
+.map-legend { font-size:8px; }
+.flight-status { top:auto; left:auto; right:12px; bottom:8px; transform:none; width:min(360px,calc(100% - 24px)); display:grid; grid-template-columns:1fr; gap:8px; padding:10px 12px; background:#14242c; border:1px solid #64777c; }
+.status-resources { display:grid; grid-template-columns:minmax(0,1fr) 84px; align-items:stretch; gap:12px; }
+.flight-status .fuel-meter { height:22px; margin:5px 0 0; }
+.status-cargo { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:4px; border-top:0; border-left:1px solid var(--line); padding:0 0 0 10px; }
+.status-cargo .readout-label { font-size:8px; }
+.cargo-count { display:flex; align-items:center; gap:5px; color:var(--amber); }
+.cargo-count output { font-size:23px; line-height:1; font-variant-numeric:tabular-nums; }
+.cargo-icon { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:square; stroke-linejoin:miter; }
+.notifications { left:12px; right:auto; }
+@media(max-width:650px) {
+    .galaxy-map { right:8px; bottom:130px; width:min(340px,calc(100% - 16px)); padding:7px; }
+    .flight-status { left:auto; right:8px; bottom:8px; width:min(340px,calc(100% - 16px)); padding:8px 9px; }
+    .status-resources { grid-template-columns:minmax(0,1fr) 74px; gap:8px; }
+    .status-cargo { padding-left:7px; }
+    .cargo-count output { font-size:20px; }
+    .cargo-icon { width:16px; height:16px; }
+    .notifications { left:8px; right:auto; width:min(260px,calc(100% - 16px)); }
+}
+
+/* Keep both panels bottom-aligned, with the flight readout just left of the map. */
+.galaxy-map { bottom:12px; }
+.flight-status { right:calc(12px + 360px + 12px); bottom:12px; width:min(340px,calc(100% - 396px)); }
+@media(max-width:760px) {
+    .galaxy-map { right:8px; bottom:130px; width:min(360px,calc(100% - 16px)); }
+    .flight-status { right:8px; bottom:8px; width:min(360px,calc(100% - 16px)); }
+}
+#fuelUsageFill { z-index:1; }
+#fuelDamageFill { position:absolute; z-index:2; inset:0; background:#f0444b; opacity:.96; mask-image:repeating-linear-gradient(to right,#000 0 7px,transparent 7px 9px); -webkit-mask-image:repeating-linear-gradient(to right,#000 0 7px,transparent 7px 9px); clip-path:inset(0 0 0 100%); transition:clip-path 160ms ease-out; }
+@media(prefers-reduced-motion:reduce) { #fuelDamageFill { transition:none; } }
+
+.flight-status { width:min(420px,calc(100% - 396px)); padding:14px 16px; gap:12px; }
+.status-resources { grid-template-columns:minmax(0,1fr) 112px; gap:16px; }
+.flight-status .fuel-meter { height:28px; margin:6px 0 0; }
+.fuel-panel .readout-label { font-size:12px; }
+.fuel-panel output { font-size:15px; }
+.status-cargo .readout-label { font-size:10px; }
+.cargo-count output { display:inline-block; font-size:34px; transform-origin:center; }
+.cargo-count output.is-collected { animation:cargo-count-collect 520ms cubic-bezier(.2,.8,.25,1); }
+.cargo-icon { width:25px; height:25px; }
+@keyframes cargo-count-collect {
+    0% { transform:scale(1); color:var(--amber); text-shadow:none; }
+    35% { transform:scale(1.35); color:#fff1bd; text-shadow:0 0 12px #edb368; }
+    100% { transform:scale(1); color:var(--amber); text-shadow:none; }
+}
+@media(max-width:760px) {
+    .flight-status { width:min(420px,calc(100% - 16px)); padding:12px 14px; }
+    .status-resources { grid-template-columns:minmax(0,1fr) 108px; gap:12px; }
+    .cargo-count output { font-size:30px; }
+    .cargo-icon { width:22px; height:22px; }
+}
+
+/* Make startup guidance easy to scan and show compact docking instruments. */
+.controls-hint { gap:9px; padding:15px 18px; font-size:17px; border-color:#71878b; background:#101d25ed; }
+.controls-hint kbd { min-width:42px; padding:7px 9px; font-size:14px; }
+.controls-hint-line { gap:9px; }
+.relay-card { width:min(300px,calc(100% - 20px)); padding:10px; border-color:var(--line); }
+.relay-card .card-heading h2 { font-size:13px; }
+.dock-checks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:8px 0; }
+.dock-check { display:grid; justify-items:center; align-content:start; gap:5px; min-width:0; }
+.dock-check-label { min-height:2.5em; display:flex; align-items:center; justify-content:center; color:#b7c8c6; font-size:10px; font-weight:bold; text-align:center; letter-spacing:.3px; }
+.dock-orientation { width:96px; height:96px; border:0; padding:0; display:grid; place-items:center; }
+.dock-orientation svg { width:96px; height:96px; overflow:visible; }
+.dock-angle-ring { fill:#0b1720; stroke:#41545b; stroke-width:1; stroke-dasharray:2 3; }
+.dock-rocket { transition:opacity .16s ease,fill .16s ease; }
+.dock-target-rocket { fill:#8bd9ac; opacity:.42; }
+.dock-target-rocket rect { fill:#315c4a; }
+.dock-current-rocket { fill:#f16d65; opacity:.96; }
+.dock-current-rocket rect { fill:#782f38; }
+.dock-orientation.is-aligned .dock-current-rocket { opacity:0; }
+.dock-speed-readout { width:100%; min-height:76px; align-self:center; display:grid; align-content:center; gap:10px; padding:9px 8px; border:1px solid var(--line); background:#0d1b22; }
+.dock-speed-readout>div { display:flex; justify-content:space-between; align-items:baseline; gap:5px; }
+.dock-speed-readout span { color:#91a6aa; font-size:8px; }
+.dock-speed-readout output { color:#dbe5dd; font-size:11px; font-weight:bold; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.dock-velocity.is-ready output { color:var(--green); }
+.relay-card #interactButton { margin-top:8px; padding:12px 8px; font-size:21px; letter-spacing:1px; }
+.relay-card #interactButton.is-ready { color:#102219; border-color:#d9f4e2; background:#79cb97; animation:dock-ready-flash 620ms ease-in-out infinite alternate; }
+@keyframes dock-ready-flash { from { color:#102219; background:#79cb97; box-shadow:0 0 5px #79cb9750; } to { color:#173725; background:#f1fff5; box-shadow:0 0 12px #c8f5d6aa; } }
+.status-cargo { position:relative; }
+.cargo-prompt { position:absolute; right:-3px; bottom:calc(100% + 9px); z-index:5; padding:7px 9px; border:1px solid #8fc9ab; background:#10221eeF; color:#b9f0ce; font-size:11px; font-weight:bold; letter-spacing:.5px; white-space:nowrap; }
+.cargo-prompt::after { content:''; position:absolute; right:20px; top:100%; width:8px; height:8px; background:#10221e; border-right:1px solid #8fc9ab; border-bottom:1px solid #8fc9ab; transform:translateY(-4px) rotate(45deg); }
+.cargo-flight-icon { position:absolute; z-index:8; width:26px; height:26px; pointer-events:none; filter:drop-shadow(0 0 6px #f4d997); }
+#fuelGauge { position:relative; }
+.fuel-damage-particle { position:absolute; z-index:4; width:3px; height:3px; pointer-events:none; background:#fff; box-shadow:0 0 5px 2px #ffb5a9,0 0 9px #fff; }
+.cargo-count.is-arriving output { animation:cargo-number-flash 1s ease-out; }
+.cargo-count.is-arriving .cargo-icon { animation:cargo-icon-arrival 1s ease-out; }
+@keyframes cargo-number-flash { 0%,25% { color:#fff6d5; text-shadow:0 0 8px #edb368; } 100% { color:var(--amber); text-shadow:none; } }
+@keyframes cargo-icon-arrival { 0% { transform:scale(1); filter:none; } 25% { transform:scale(1.6); filter:drop-shadow(0 0 8px #fff1bd); } 100% { transform:scale(1); filter:none; } }
+@media(max-width:650px) {
+    .controls-hint { gap:7px; padding:11px 13px; font-size:14px; }
+    .controls-hint kbd { min-width:34px; padding:5px 7px; font-size:12px; }
+    .relay-card { width:min(290px,calc(100% - 16px)); }
+    .dock-orientation,.dock-orientation svg { width:84px; height:84px; }
+    .dock-speed-readout { min-height:70px; padding:7px 5px; }
+    .dock-speed-readout span { font-size:7px; }
+}
+@media(prefers-reduced-motion:reduce) {
+    .relay-card #interactButton.is-ready { animation:none; }
+    .dock-rocket { transition:none; }
+    .cargo-count.is-arriving output,.cargo-count.is-arriving .cargo-icon { animation:none; }
+}
+
+.relay-card .dock-error { color:#ff6666; font-size:11px; font-weight:600; margin:8px 0 0; padding-top:7px; border-top:1px solid #ff666655; }
+
+/* Keep the lower status panel tight and give the player-centered map a square viewport. */
+.flight-status { padding-bottom:6px; gap:8px; }
+.flight-status .fuel-meter { margin-bottom:0; }
+.galaxy-map { width:min(360px,calc(100% - 24px)); }
+#mapCanvas { width:100%; height:auto; aspect-ratio:1; }
+@media(max-width:760px) {
+    .galaxy-map { width:min(340px,calc(100% - 16px)); }
+    #mapCanvas { aspect-ratio:1; }
+    .flight-status { padding-bottom:6px; }
+}
+
+/* A small station prompt replaces the approach checklist; attached relay actions stay available. */
+.relay-card.station-dock { width:max-content; max-width:min(240px,calc(100% - 12px)); padding:6px 8px; overflow:visible; }
+.relay-card.station-dock .card-heading { display:none; }
+.relay-card.station-dock #interactButton { margin:0; padding:2px; border:0; background:transparent; color:#dbe5dd; font-size:14px; font-weight:normal; letter-spacing:0; animation:none; }
+.relay-card.station-dock #interactButton.is-ready { color:#8cdeb0; }
+.relay-card #interactButton kbd { display:inline-grid; place-items:center; width:22px; height:22px; padding:0; border:1px solid currentColor; margin-right:3px; font:inherit; line-height:1; }
+.relay-card.station-dock .dock-error { max-width:220px; font-size:12px; color:#ff5555; }
+
+/* Docking readiness tints the entire station prompt, not only its keycap. */
+.relay-card.station-dock:has(#interactButton.is-ready) {
+    border:1px solid #8cdeb0;
+    background:#173729ed;
+    box-shadow:0 0 9px #8cdeb060;
+    animation:dock-dialog-ready-pulse 900ms ease-in-out infinite alternate;
+}
+.relay-card.station-dock:has(#interactButton.is-ready) #interactButton kbd {
+    border-color:#d8ffe5;
+    background:#32734c;
+    color:#fff;
+}
+@keyframes dock-dialog-ready-pulse {
+    from { background-color:#153325ed; border-color:#75c89a; box-shadow:0 0 6px #8cdeb045; }
+    to { background-color:#28553bed; border-color:#c7f5d8; box-shadow:0 0 15px #8cdeb080; }
+}
+@media(prefers-reduced-motion:reduce) {
+    .relay-card.station-dock:has(#interactButton.is-ready) { animation:none; }
+}
+
+/* Keep the compact resources and map in opposite lower corners. */
+.flight-status { left:12px; right:auto; bottom:12px; width:min(340px,calc(100% - 24px)); }
+.galaxy-map { left:auto; right:12px; bottom:12px; width:min(300px,calc(100% - 24px)); transition:width 180ms ease,box-shadow 180ms ease; }
+.galaxy-map.is-expanded { z-index:6; width:min(520px,calc(100% - 24px)); box-shadow:0 0 0 1px #8cdeb080,0 8px 28px #000a; }
+@media(max-width:760px) {
+    .flight-status { left:8px; right:auto; bottom:8px; width:min(340px,calc(100% - 16px)); }
+    .galaxy-map { right:8px; bottom:8px; width:min(230px,calc(100% - 16px)); }
+    .galaxy-map.is-expanded { bottom:120px; width:min(420px,calc(100% - 16px)); }
+}
+@media(prefers-reduced-motion:reduce) {
+    .galaxy-map { transition:none; }
+}
+
+/* Shop choices share a row, with a pixel preview above each keyboard-labelled purchase. */
+.upgrade-options { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin:8px 0; }
+.upgrade-option { min-width:0; text-align:center; }
+.upgrade-preview { display:block; width:100%; height:90px; background:#0c1920; border:1px solid #344951; shape-rendering:crispEdges; }
+.upgrade-option button { min-height:46px; margin-top:6px; padding:6px 3px; font-size:11px; line-height:1.4; }
+.upgrade-option kbd { display:inline-grid; place-items:center; width:20px; height:20px; padding:0; border:1px solid currentColor; font:inherit; }
+.upgrade-option .upgrade-name { color:#edb368; font-size:10px; margin:6px 0 3px; }
+.upgrade-option p { font-size:10px; line-height:1.4; }
+
+/* Pair the price with the familiar cargo crate instead of a repeated resource word. */
+.upgrade-cost { display:inline-flex; align-items:center; justify-content:center; gap:4px; color:#f4d76c; margin-left:5px; }
+.upgrade-cost svg { width:13px; height:13px; flex:none; }
+
+.relay-card .shop-title { margin:10px 0 8px; color:#dbe5dd; font-size:24px; line-height:1.1; font-weight:800; letter-spacing:1px; }
+
+/* The local server feed floats above fuel without a panel border or background. */
+.server-chat { position:absolute; left:12px; bottom:110px; z-index:3; width:min(340px,calc(100% - 24px)); font-size:12px; text-shadow:0 1px 3px #000; }
+.chat-messages { max-height:150px; overflow-y:auto; scrollbar-width:thin; overflow-wrap:anywhere; }
+.chat-messages p { margin:4px 0; font:inherit; line-height:18px; }
+.chat-compose { display:grid; margin-top:6px; min-height:32px; }
+.chat-hint,#chatForm { grid-area:1 / 1; margin:0; }
+.chat-hint { display:flex; align-items:center; padding:0; color:#b2c6c6; font:inherit; line-height:18px; }
+.chat-compose:has(#chatForm:not([hidden])) .chat-hint { visibility:hidden; }
+#chatInput { display:block; width:calc(100% + 14px); height:32px; margin-left:-7px; padding:6px; background:#101d2533; border:1px solid #91a6aa40; font:inherit; line-height:18px; }
+#chatInput:focus-visible { outline:none; border-color:#91a6aa70; }
+@media(max-width:650px) { .server-chat { left:8px; width:min(300px,calc(100% - 16px)); } }
+
+/* A square, pulsing keyboard key is the single hacking action. */
+.relay-card.is-hacking .card-heading h2 { font-size:22px; line-height:1.2; letter-spacing:.5px; }
+.relay-card.is-hacking #dockState { display:none; }
+.relay-card.is-hacking .hack-instruction { margin:7px 0 14px; font-size:14px; }
+.relay-card.is-hacking .digit-button { display:grid; place-items:center; width:76px; height:76px; margin:0 auto 16px; padding:0; border:2px solid #71878b; font-size:40px; line-height:1; animation:hack-key-pulse 1s ease-in-out infinite alternate; }
+.relay-card.is-hacking .hack-track { margin:0 0 10px; height:9px; }
+.relay-card.is-hacking #interactButton { padding:8px; font-size:15px; letter-spacing:0; }
+@keyframes hack-key-pulse { from { box-shadow:0 0 0 0 #edb36800; } to { box-shadow:0 0 10px 2px #edb36855; } }
+@media(prefers-reduced-motion:reduce) { .relay-card.is-hacking .digit-button { animation:none; } }

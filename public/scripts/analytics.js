@@ -1,6 +1,6 @@
-import { analyticsConfig } from './analyticsConfig.js?v=20261116-spark';
-import { useFirebaseEmulators } from './firebaseConfig.js?v=20261116-spark';
-import { createAnalyticsTransport } from './analyticsTransport.js?v=20261116-spark';
+import { analyticsConfig } from './analyticsConfig.js?v=20261116-visit-log';
+import { useFirebaseEmulators } from './firebaseConfig.js?v=20261116-visit-log';
+import { createAnalyticsTransport } from './analyticsTransport.js?v=20261116-visit-log';
 
 // Debug always stays local; a separate opt-in enables collection on the local Hosting emulator.
 const query = new URLSearchParams(window.location.search);

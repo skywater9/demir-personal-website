@@ -3,83 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="game-server" content="">
     <meta name="theme-color" content="#101921">
-    <meta name="description" content="Orbital Freight: a pixel art rocket flight game. Launch, dock, deliver, and cross the solar system on a limited fuel supply.">
-    <title>Orbital Freight — Rocket flight game</title>
-    <link rel="stylesheet" href="style.css?v=20261116-spark">
-    <script type="module" src="scripts/rocketApp.mjs?v=20261116-spark"></script>
-    <script type="module" src="scripts/analytics.js?v=20261116-spark"></script>
-    <script type="module" src="scripts/siteAnalytics.js?v=20261116-spark"></script>
+    <meta name="description" content="Orbital Freight: explore three star systems, hack relays, collect cargo, and build a planetary empire. A local pixel-art conquest game.">
+    <title>Orbital Freight — Conquest</title>
+    <link rel="stylesheet" href="conquest.css?v=20261118-chat-aligned">
+    <script type="module" src="scripts/visitLog.mjs?v=20261118-fuel-damage"></script>
+    <script type="module" src="scripts/conquestApp.mjs?v=20261118-multiplayer"></script>
+    <script type="module" src="scripts/siteAnalytics.js?v=20261118-fuel-damage"></script>
 </head>
 <body>
-    <header class="topbar">
-        <a class="wordmark" href="./" aria-label="Orbital Freight home">
-            <svg width="24" height="30" viewBox="0 0 16 20" aria-hidden="true"><path fill="currentColor" d="M7 0h2v2h2v12H5V2h2zM3 11h2v6H3zm8 0h2v6h-2z"/><path fill="#e8ac62" d="M7 14h2v6H7z"/><path fill="#101921" d="M7 4h2v3H7z"/></svg>
-            <span>ORBITAL<span class="wordmark-sub">FREIGHT / FLIGHT SYSTEMS</span></span>
-        </a>
-        <div class="topbar-status"><span class="status-light"></span><span id="systemStatus">AWAITING PILOT</span><span class="separator">/</span><span>LOCAL FLIGHT RECORDER</span></div>
-        <button id="menuButton" class="quiet-button" type="button" data-analytics-id="gameMenu">MENU <kbd>ESC</kbd></button>
-    </header>
-    <main id="gameShell" class="game-shell" data-analytics-section="game">
-        <section class="viewport" aria-label="Flight view">
-            <canvas id="flightCanvas" aria-label="Pixel art rocket flight scene. Use cockpit instruments and the destination indicator for navigation.">Your browser needs canvas support to display this game.</canvas>
-            <div class="view-label"><span class="status-light"></span> FLIGHT CAMERA <span class="muted">/ 2D INERTIAL VIEW</span></div>
-            <div class="objective-strip"><span class="eyebrow" id="objectiveType">CURRENT OBJECTIVE / RELAY</span><strong id="objectiveName">EARTH RELAY</strong><span id="objectiveDistance">671 m</span></div>
-            <div class="viewport-map"><div class="panel-heading map-heading"><span>02 / NAVIGATION</span><span id="routePosition">STOP 01 / 10</span></div>
-            <canvas id="mapCanvas" width="268" height="55" aria-label="Solar system navigation map. Highlighted destination is the current target."></canvas>
-            <div class="navigation-caption"><span class="legend-dot"></span> TARGET <span class="legend-dot ship-dot"></span> SHIP <span class="muted">L = MOON</span></div></div>
-            <div class="view-bottom"><span id="environmentLabel">EARTH / SURFACE OPERATIONS</span><span>WORLD DISTANCES NOT TO SCALE</span></div>
-            <section id="dockDialog" class="docking-dialog" role="dialog" aria-modal="false" aria-labelledby="dockDialogTitle" hidden>
-                <div class="docking-dialog-header"><h2 id="dockDialogTitle">Docking checklist</h2><span id="dockState">ALIGNING</span></div>
-                <p>Right-side bay → amber marker. Nose <strong>straight up ↑</strong>.</p>
-                <ul class="docking-requirements">
-                    <li id="dockRangeCheck">○ Move within 32 m of the bay marker</li>
-                    <li id="dockSpeedCheck">○ Slow down to 5 m/s or less</li>
-                    <li id="dockAngleCheck">○ Point the nose up: 0° ±12°</li>
-                </ul>
-                <button id="dockButton" type="button" class="dock-button" data-analytics-id="gameDock">ATTACH &amp; DELIVER <kbd>E</kbd></button>
-            </section>
-            <p id="flightMessage" class="flight-message" role="status" aria-live="polite"></p>
-        </section>
-        <aside id="instrumentPanel" class="instruments" data-analytics-section="cockpit" aria-label="Rocket instruments">
-            <div class="panel-heading"><span>01 / TELEMETRY</span><span class="status-light"></span></div>
-            <div class="fuel-panel"><div class="readout-label">PROPELLANT <span id="fuelState">NOMINAL</span></div><div class="fuel-number"><strong id="fuelValue">100.0</strong><span>%</span></div><div class="fuel-track" role="progressbar" aria-label="Remaining fuel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" id="fuelGauge"><span id="fuelFill"></span></div><div class="small muted">MAIN + ATTITUDE + TRANSLATION</div></div>
-            <dl class="telemetry-grid">
-                <div><dt>FLIGHT TIME</dt><dd id="timeValue">00:00.0</dd></div><div><dt>DELIVERIES</dt><dd><span id="deliveryValue">00</span><span class="unit"> / 10</span></dd></div>
-                <div><dt>ALTITUDE <span class="unit">m</span></dt><dd id="altitudeValue">0.0</dd></div><div><dt>RELAY DIST. <span class="unit">m</span></dt><dd id="stationValue">—</dd></div>
-                <div><dt>VELOCITY <span class="unit">m/s</span></dt><dd id="speedValue">0.0</dd></div><div><dt>GRAVITY <span class="unit">m/s²</span></dt><dd id="gravityValue">9.81</dd></div>
-                <div><dt>ROTATION <span class="unit">deg</span></dt><dd id="rotationValue">0.0</dd></div><div><dt>PAYLOAD</dt><dd class="payload-value" id="payloadValue">LOADED</dd></div>
-            </dl>
-            <div class="vector-readout"><span>Vx <b id="vxValue">+0.0</b></span><span>Vy <b id="vyValue">+0.0</b></span><span>+Y DOWN</span></div>
-
-
-            <p class="pilot-note" id="pilotNote">Launch upright. Feather the main engine, then use small thrusters near the relay.</p>
+<main id="gameShell" data-screen="menu" data-analytics-section="game">
+    <section class="viewport" aria-label="Galaxy flight view">
+        <canvas id="flightCanvas" tabindex="0" aria-label="Rocket flight view. W thrusts forward, S brakes along the nose axis, mouse aims, Space fires, and E interacts.">Canvas support is required to play.</canvas>
+        <div id="controlsHint" class="controls-hint" role="note" hidden><span class="controls-hint-line" data-control-hint="KeyW"><kbd>W</kbd> = FORWARD</span><span class="controls-hint-line" data-control-hint="KeyS"><kbd>S</kbd> = BRAKE</span><span class="controls-hint-line" data-control-hint="Space"><kbd>SPACE</kbd> = SHOOT</span></div>
+        <aside id="galaxyMap" class="galaxy-map" aria-label="Galaxy map">
+            <div class="map-heading"><span id="mapModeLabel">MILKY WAY / LOCAL</span><button id="menuButton" type="button" data-analytics-id="gameMenu">MENU <kbd>ESC</kbd></button></div>
+            <canvas id="mapCanvas" width="300" height="300" tabindex="0" aria-label="Player-centered galaxy map. Click a planet to select its relay or landing pad."></canvas>
+            <div class="map-legend"><span>● OWNED</span><span>○ NEUTRAL</span><span>◆ HOME</span></div>
         </aside>
-        <section id="controlPanel" class="control-panel" data-analytics-section="cockpit" aria-label="Rocket control panel">
-            <div class="control-group propulsion-controls"><div class="panel-heading">03 / MAIN PROPULSION</div><div class="engine-controls"><button type="button" id="burnButton" class="burn-button hold-button" data-control="burn" data-analytics-id="gameBurn">▲<span>HOLD TO BURN</span><kbd>SPACE / ↑</kbd></button><div class="throttle-control"><label for="throttleSlider">THROTTLE <output id="throttleValue" for="throttleSlider">85%</output></label><input id="throttleSlider" type="range" min="0" max="100" step="1" value="85" data-analytics-id="gameThrottle"><div class="throttle-buttons"><button type="button" id="throttleDownButton" data-analytics-id="gameThrottleDown" aria-label="Decrease throttle">− <kbd>S</kbd></button><button type="button" id="throttleUpButton" data-analytics-id="gameThrottleUp" aria-label="Increase throttle">+ <kbd>W</kbd></button></div></div></div></div>
-            <div class="control-group attitude-controls"><div class="panel-heading">04 / ATTITUDE</div><div class="rotation-buttons"><button type="button" class="hold-button" data-control="rotateLeft" data-analytics-id="gameRotateLeft" aria-label="Rotate counterclockwise">↶<kbd>A / ←</kbd></button><div class="attitude-display" aria-hidden="true"><span id="attitudeNeedle">↑</span><span>UPRIGHT 0°</span></div><button type="button" class="hold-button" data-control="rotateRight" data-analytics-id="gameRotateRight" aria-label="Rotate clockwise">↷<kbd>D / →</kbd></button></div></div>
-            <div class="control-group translation-controls"><div class="panel-heading">05 / TRANSLATION <span class="muted">LOW FUEL USE</span></div><div class="rcs-buttons"><button type="button" class="hold-button rcs-up" data-control="rcsUp" data-analytics-id="gameRcsUp" aria-label="Thrust upward">↑ <kbd>I</kbd></button><button type="button" class="hold-button rcs-left" data-control="rcsLeft" data-analytics-id="gameRcsLeft" aria-label="Thrust left">← <kbd>J</kbd></button><span class="rcs-center" aria-hidden="true">✛</span><button type="button" class="hold-button rcs-right" data-control="rcsRight" data-analytics-id="gameRcsRight" aria-label="Thrust right">→ <kbd>L</kbd></button><button type="button" class="hold-button rcs-down" data-control="rcsDown" data-analytics-id="gameRcsDown" aria-label="Thrust downward">↓ <kbd>K</kbd></button></div></div>
-
-        </section>
-        <div id="menuOverlay" class="overlay menu-overlay" data-analytics-section="menu">
-            <section id="mainMenu" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="menuTitle" tabindex="-1">
-                <div class="eyebrow menu-kicker"><span class="status-light"></span> INTERPLANETARY CARGO OPERATIONS</div>
-                <h1 id="menuTitle">ORBITAL<br><span>FREIGHT</span><span class="title-square" aria-hidden="true"></span></h1>
-                <p class="menu-intro">Ten deliveries. One continuous flight.<br>Make every burn count.</p>
-                <div class="menu-objectives"><span>01 <b>LAUNCH</b></span><i>→</i><span>02 <b>DOCK</b></span><i>→</i><span>03 <b>DELIVER</b></span></div>
-                <p class="menu-description">Carry payloads from planetary landing pads to orbital relays. Cross the solar system, adapt to changing gravity, and keep fuel in the tank.</p>
-                <div class="menu-actions"><button id="continueButton" class="primary-button" type="button" data-analytics-id="gameContinue" hidden>CONTINUE FLIGHT <span>→</span></button><button id="startButton" class="primary-button" type="button" data-analytics-id="gameStart">START FLIGHT <span>→</span></button><button id="historyButton" class="secondary-button" type="button" data-analytics-id="gameHistory">FLIGHT RECORDS <span id="historyCount">00</span></button></div>
-                <p id="savedRunNote" class="saved-note">Start on Earth with a full tank and your first payload.</p>
-                <details class="manual"><summary>PRE-FLIGHT BRIEFING / CONTROLS</summary><div><p><kbd>SPACE / ↑</kbd> Hold main engine. <kbd>W / S</kbd> Adjust throttle.<br><kbd>A / D / ← / →</kbd> Rotate. <kbd>I J K L</kbd> Small world-direction thrusters.<br><kbd>E</kbd> Attach when bay checks are green. <kbd>ESC</kbd> Save and menu.</p><p>Land upright on the next pad at ≤ 8 m/s to receive fuel and payload. Dock with the nose pointing UP (0°), within ±12°, and slow to ≤ 5 m/s. Station bumps below 20 m/s are survivable. Your bay is on the rocket’s right side. After delivering, use left RCS (J) to back away from the receiver before accelerating.</p><p>Refueling is limited to one grant per route stop. Empty fuel or a high-speed collision ends the run. Leaving the page suspends and saves your flight.</p></div></details>
-                <div class="menu-footer"><span>EARTH → MOON → THE OUTER PLANETS</span><span>PIXEL FLIGHT / V1.0</span></div>
-            </section>
-            <section id="confirmPanel" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="-1" hidden><span class="eyebrow">FLIGHT RECORDER</span><h2 id="confirmTitle">Start over on Earth?</h2><p>Your unfinished flight will be recorded as abandoned. Previous flight records will remain available.</p><div class="stack-actions"><button type="button" id="confirmNewButton" class="primary-button" data-analytics-id="gameConfirmNewRun">CONFIRM NEW FLIGHT</button><button type="button" id="cancelNewButton" class="secondary-button" data-analytics-id="gameCancelNewRun">KEEP CURRENT FLIGHT</button></div></section>
-            <section id="historyPanel" class="history-card" role="dialog" aria-modal="true" aria-labelledby="historyTitle" tabindex="-1" data-analytics-section="history" hidden><div class="history-header"><div><span class="eyebrow">LOCAL FLIGHT RECORDER</span><h2 id="historyTitle">Flight records</h2></div><button type="button" id="historyBackButton" class="secondary-button" data-analytics-id="gameHistoryBack">← MENU</button></div><p class="muted">Saved in this browser. Expand a flight to see departures, returns, and deliveries.</p><div id="historyRows" class="history-rows"></div><p class="small muted">Up to 100 previous flights are retained. The unfinished flight is shown separately.</p></section>
-            <section id="resultPanel" class="modal-card result-card" role="dialog" aria-modal="true" aria-labelledby="resultTitle" tabindex="-1" data-analytics-section="results" hidden><span id="resultEyebrow" class="eyebrow">FLIGHT ENDED</span><h2 id="resultTitle">Signal lost.</h2><p id="resultReason"></p><dl class="result-stats"><div><dt>FLIGHT TIME</dt><dd id="resultTime">00:00.0</dd></div><div><dt>FUEL REMAINING</dt><dd id="resultFuel">0.0%</dd></div><div><dt>PAYLOADS DELIVERED</dt><dd id="resultDeliveries">0 / 10</dd></div><div><dt>LAST DESTINATION</dt><dd id="resultPlanet">EARTH</dd></div></dl><div class="stack-actions"><button id="retryButton" type="button" class="primary-button" data-analytics-id="gameRetry">RETRY FROM EARTH <span>→</span></button><button id="resultMenuButton" type="button" class="secondary-button" data-analytics-id="gameMenu">RETURN TO MENU</button></div></section>
+        <div class="notifications">
+            <p id="flightMessage" class="flight-message" role="status" aria-live="polite" hidden></p>
+            <section id="fuelPrompt" class="interaction-card" hidden><h2>Fuel depleted</h2><p>You can coast to an owned pad to refuel, or self-destruct and respawn at home. Carried cargo will drop here.</p><button id="selfDestructButton" type="button" data-analytics-id="conquestSelfDestruct">SELF-DESTRUCT…</button></section>
         </div>
-    </main>
-    <footer class="page-footer"><span>ORBITAL FREIGHT <span class="muted">/ ARCADE PHYSICS. REAL INERTIA.</span></span><span id="saveStatus">AUTOSAVE / LOCAL</span></footer>
-    <p id="storageWarning" class="storage-warning" role="alert" hidden></p>
-    <noscript><div class="noscript">Orbital Freight needs JavaScript to run. Enable JavaScript, then reload this page.</div></noscript>
+        <section id="dockDialog" class="interaction-card relay-card" role="region" aria-labelledby="dockTitle" hidden>
+            <div class="card-heading"><h2 id="dockTitle">Relay approach</h2><span id="dockState"></span></div>
+            <div id="dockChecks" class="dock-checks">
+                <div class="dock-check"><output id="dockAngleValue" class="dock-check-label">ALIGN UPRIGHT</output><div id="dockOrientation" class="dock-orientation"><svg id="dockOrientationGraph" viewBox="0 0 60 60" role="img" aria-label="Faint green rocket shows the upright target; red rocket shows your current heading when misaligned."><circle class="dock-angle-ring" cx="30" cy="30" r="28"></circle><g id="dockTargetRocket" class="dock-rocket dock-target-rocket"><path d="M30 6 L34 14 L34 36 L40 42 L40 48 L34 45 L34 52 L26 52 L26 45 L20 48 L20 42 L26 36 L26 14 Z"></path><rect x="28" y="17" width="4" height="8" rx="1"></rect></g><g id="dockCurrentRocket" class="dock-rocket dock-current-rocket"><path d="M30 6 L34 14 L34 36 L40 42 L40 48 L34 45 L34 52 L26 52 L26 45 L20 48 L20 42 L26 36 L26 14 Z"></path><rect x="28" y="17" width="4" height="8" rx="1"></rect></g></svg></div></div>
+                <div class="dock-check dock-speed"><output id="dockSpeedCheck" class="dock-check-label">SLOW DOWN</output><div id="dockVelocity" class="dock-speed-readout" role="img" aria-label="Current and target docking speeds."><div><span>CURRENT SPEED</span><output id="dockCurrentSpeed">0.0 m/s</output></div><div><span>TARGET SPEED</span><output id="dockTargetSpeed">20.0 m/s</output></div></div></div>
+            </div>
+            <div id="hackPanel" hidden><p class="hack-instruction">Enter code</p><button id="digitButton" class="digit-button" type="button" data-analytics-id="conquestDigit" aria-label="Enter the displayed hacking digit">1</button><div class="hack-track" role="progressbar" aria-label="Relay hack progress" id="hackGauge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="hackFill"></span></div></div>
+            <div id="upgradePanel" hidden>
+                <h2 class="shop-title">BUY UPGRADE</h2>
+                <div class="upgrade-options">
+                    <div class="upgrade-option">
+                        <svg class="upgrade-preview" viewBox="0 0 96 80" role="img" aria-label="Standard rocket">
+                            <path d="M44 11 H52 V17 H56 V57 H52 V65 H44 V57 H40 V17 H44 Z" fill="#dbe2d5"/>
+                            <path d="M40 43 H34 V59 H38 V53 H40 M56 43 H62 V59 H58 V53 H56" fill="#879e9e"/>
+                            <rect x="44" y="23" width="8" height="10" fill="#315f76"/>
+                            <rect x="40" y="45" width="16" height="5" fill="#8cdeb0"/>
+                            <rect x="45" y="65" width="6" height="4" fill="#627b83"/>
+                        </svg>
+                        <button id="rocketUpgradeButton" type="button" aria-keyshortcuts="R"><kbd>R</kbd> <span id="rocketUpgradeLabel">ROCKET</span><span id="rocketUpgradeCost" class="upgrade-cost"><output id="rocketUpgradeCostValue">8</output><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10" fill="#283f43" stroke="currentColor"/><rect x="4.5" y="4.5" width="3" height="3" fill="currentColor"/></svg></span></button>
+                        <p id="rocketUpgradeName" class="upgrade-name"></p>
+                    </div>
+                    <div class="upgrade-option">
+                        <svg class="upgrade-preview" viewBox="0 0 96 80" role="img" aria-label="Planet protected by force fields and defense turrets">
+                            <circle cx="48" cy="42" r="35" fill="none" stroke="#8cdeb0" stroke-dasharray="3 3" opacity=".65"/>
+                            <circle cx="48" cy="42" r="27" fill="#173c2c" stroke="#8cdeb0" stroke-width="2"/>
+                            <path d="M34 23 H60 V27 H66 V57 H60 V61 H34 V57 H28 V27 H34 Z" fill="#487d94"/>
+                            <path d="M34 27 H46 V35 H40 V43 H30 V31 H34 Z M52 43 H64 V55 H58 V59 H48 V51 H52 Z" fill="#86a77b"/>
+                            <path d="M36 23 V17 H42 V23 M38 17 V10 H42 V17 M60 57 H66 V63 H60 M66 59 H74 V63 H66" fill="#becdc7"/>
+                            <rect x="37" y="10" width="6" height="3" fill="#edb368"/>
+                            <rect x="72" y="58" width="3" height="6" fill="#edb368"/>
+                        </svg>
+                        <button id="upgradeButton" type="button" data-analytics-id="conquestUpgrade" aria-keyshortcuts="T"><kbd>T</kbd> <span id="planetUpgradeLabel">PLANET</span><span id="planetUpgradeCost" class="upgrade-cost"><output id="planetUpgradeCostValue">0</output><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10" fill="#283f43" stroke="currentColor"/><rect x="4.5" y="4.5" width="3" height="3" fill="currentColor" stroke="none"/></svg></span></button>
+                        <p id="upgradeName" class="upgrade-name"></p>
+                        <p id="upgradeDescription"></p>
+                    </div>
+                </div>
+            </div>
+            <button id="interactButton" type="button" data-analytics-id="conquestInteract"><kbd>E</kbd> <span id="interactLabel">to dock</span></button>
+            <p id="dockError" class="dock-error" role="status" aria-live="polite" hidden></p>
+        </section>
+        <div id="respawnNotice" class="respawn-notice" role="status" hidden></div>
+        <section id="serverChat" class="server-chat" aria-label="Local server chat">
+            <div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+            <div class="chat-compose">
+                <form id="chatForm" hidden autocomplete="off"><input id="chatInput" type="text" maxlength="160" aria-label="Local chat message" autocomplete="off"></form>
+                <span class="chat-hint">Press / to chat.</span>
+            </div>
+        </section>
+        <section id="flightStatus" class="flight-status" aria-label="Flight status">
+            <div class="status-resources"><div class="fuel-panel"><div class="readout-label"><span>FUEL</span><output id="fuelValue">100.0%</output></div><div id="fuelGauge" class="meter fuel-meter" role="progressbar" aria-label="Remaining fuel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span id="fuelFill"><span id="fuelUsageFill" aria-hidden="true"></span><span id="fuelDamageFill" aria-hidden="true"></span></span></div></div>
+            <div class="status-cargo"><span class="readout-label">CARGO</span><div class="cargo-count"><output id="cargoValue">0</output><svg id="cargoIcon" class="cargo-icon" viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10" fill="#283f43" stroke="#e8c57b"/><rect x="4.5" y="4.5" width="3" height="3" fill="#f4d997" stroke="none"/></svg></div><div id="cargoPrompt" class="cargo-prompt" hidden>COLLECT CARGO</div></div></div>
+        </section>
+    </section>
+    <div id="menuOverlay" class="overlay" data-analytics-section="menu">
+        <section id="mainMenu" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="menuTitle" tabindex="-1">
+            <div id="gameModeLabel" class="eyebrow">LOCAL CONQUEST / THREE STAR SYSTEMS</div><h1 id="menuTitle">ORBITAL<br><span>FREIGHT</span></h1>
+            <p class="menu-intro">Build your corner of the galaxy.</p><p id="menuDescription" class="muted">Hack relays. Collect cargo. Upgrade your planets.<br>One pilot, one protected home, an open galaxy.</p>
+            <button id="continueButton" class="primary-button" type="button" data-analytics-id="gameContinue" hidden>CONTINUE GALAXY →</button>
+            <button id="playButton" class="primary-button" type="button" data-analytics-id="gameStart">PLAY →</button>
+            <button id="leaveGalaxyButton" type="button" hidden>LEAVE GALAXY</button>
+            <div class="menu-secondary"><button id="galaxiesButton" type="button" data-analytics-id="conquestGalaxies">LOCAL GALAXY</button><button id="recordsButton" type="button" data-analytics-id="gameHistory">FLIGHT RECORDS</button></div>
+            <p id="saveNote" class="small muted">Your home is protected. All other planets start neutral.</p>
+            <details id="briefing" class="manual"><summary>FLIGHT BRIEFING / CONTROLS</summary><p><kbd>W</kbd> forward thrust. Mouse/trackpad turns the rocket toward the cursor with gradual rotation. <kbd>S</kbd> rapidly brakes along the nose axis; sideways drift remains. Mouse aims, <kbd>SPACE</kbd> fires. <kbd>E</kbd> attaches/detaches. You cannot shoot while docked.</p><p>Click the map or choose a destination. Hack any neutral relay by entering the displayed number. Owned non-home planets release cargo pods from their surfaces into close orbits just beyond the surface; collect them in flight, then land to refuel. Refueling is fast when empty and slower near full. Home refills faster but produces no cargo and has no relay. Follow the flashing arrow to the Moon relay to begin.</p><p>Spend cargo at any owned non-home relay to buy its next defense with <kbd>T</kbd> or press <kbd>R</kbd> to buy the next rocket tier: bullet barrier → turret → outer field. Detaching resets a hack. Turret shots cannot enter the relay refuge, but player shots can. Your home is uncapturable. Shots and fast impacts consume fuel and release white fuel-leak particles; harder impacts cost more fuel. Damage greater than remaining fuel destroys the rocket. Equal damage leaves zero fuel, and another hit at zero is fatal. Star contact remains lethal. Cargo drops on death and you respawn at home.</p><p>Zero fuel leaves you coasting. The menu does not pause the galaxy. Refresh/reopen this tab within 30 seconds to recover; longer absences start fresh. Press <kbd>/</kbd> for chat and <kbd>ENTER</kbd> to send. Capture announcements use your color. Chat messages are not included in analytics. With a multiplayer server configured, all pilots share one galaxy and room chat; otherwise this is local practice. Use made-up labels and do not share personal information.</p></details>
+            <p class="privacy-note">This site logs anonymous clicks, choices, game actions, and timing for the owner. No names, passwords, typed text, or aim positions are recorded.</p><p id="eventLogStatus" class="small muted" role="status">EVENT LOG / CONNECTING</p>
+        </section>
+        <section id="galaxyPanel" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="galaxyTitle" tabindex="-1" hidden><h2 id="galaxyTitle">Local galaxy</h2><p class="muted">A galaxy on this device. No network server or other players.</p><label>FIND GALAXY <input id="galaxySearch" type="search" autocomplete="off" maxlength="60" placeholder="Search local galaxy" aria-label="Search local galaxy"></label><div id="galaxyListing"><strong>MILKY WAY — LOCAL</strong><span>3 systems · 24 planets · 1 pilot</span><button id="joinGalaxyButton" class="primary-button" type="button" data-analytics-id="conquestJoin">JOIN →</button></div><p id="galaxyEmpty" hidden>No matching local galaxy.</p><button id="galaxyBackButton" type="button" data-analytics-id="gameHistoryBack">BACK</button></section>
+        <section id="recordsPanel" class="menu-card records-card" role="dialog" aria-modal="true" aria-labelledby="recordsTitle" tabindex="-1" hidden><h2 id="recordsTitle">Flight records</h2><div id="recordsList"></div><button id="recordsBackButton" type="button" data-analytics-id="gameHistoryBack">BACK</button></section>
+        <section id="confirmPanel" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="-1" hidden><h2 id="confirmTitle">Start a new galaxy?</h2><p id="confirmDescription"></p><button id="confirmButton" class="primary-button" type="button" data-analytics-id="gameConfirmNewRun">CONFIRM</button><button id="cancelButton" type="button" data-analytics-id="gameCancelNewRun">CANCEL</button></section>
+    </div>
+</main>
+<p id="storageWarning" class="storage-warning" role="alert" hidden></p>
+<noscript><p class="noscript">Enable JavaScript to explore the galaxy.</p></noscript>
 </body>
 </html>

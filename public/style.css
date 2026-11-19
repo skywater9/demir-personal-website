@@ -26,107 +26,118 @@ button kbd { pointer-events: none; }
 .muted { color: var(--muted); }
 .small { font-size: 9px; line-height: 1.6; }
 .eyebrow { font-size: 10px; letter-spacing: 1.5px; color: var(--amber); }
-.topbar { height: 70px; padding: 0 26px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); background: #131d24; }
-.wordmark { display: flex; align-items: center; gap: 12px; text-decoration: none; font-size: 19px; font-weight: 800; letter-spacing: 3px; line-height: 1.25; }
-.wordmark-sub { display: block; font-size: 8px; color: #aab9b7; letter-spacing: 1.8px; font-weight: 400; margin-top: 4px; }
-.topbar-status { display: flex; align-items: center; gap: 9px; font-size: 9px; color: #adbbb9; letter-spacing: 1px; }
-.status-light { display: inline-block; width: 5px; height: 5px; background: var(--green); box-shadow: 0 0 8px #8ac4a82b; flex-shrink: 0; }
-.separator { color: #50636c; margin: 0 8px; }
-.quiet-button { background: transparent; font-size: 10px; letter-spacing: 1px; padding: 8px 10px; }
-.quiet-button kbd { margin-left: 12px; }
-.game-shell { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 292px; grid-template-rows: minmax(430px, 1fr) 178px; height: calc(100svh - 100px); min-height: 650px; max-height: 1200px; border-bottom: 1px solid var(--line); }
-.viewport { position: relative; overflow: hidden; min-width: 0; background: #080f19; }
+
+.wordmark { display: flex; align-items: center; gap: 6px; text-decoration: none; font-size: 10px; font-weight: 800; letter-spacing: 1px; line-height: 1.3; }
+.wordmark svg { width: 14px; height: 18px; }
+.wordmark-sub { display: block; font-size: 5px; color: #8fa5a6; letter-spacing: .5px; }
+.status-light { display: inline-block; width: 5px; height: 5px; background: var(--green); flex-shrink: 0; }
+.quiet-button { background: transparent; font-size: 8px; padding: 5px 7px; }
+.quiet-button kbd { font-size: 7px; margin-left: 4px; }
+.game-shell { position: relative; display: grid; grid-template-rows: minmax(340px, 1fr) 180px; height: 100svh; min-height: 520px; border-bottom: 1px solid var(--line); }
+.viewport { position: relative; overflow: hidden; min-width: 0; min-height: 0; background: #080f19; }
 #flightCanvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-.view-label { position: absolute; left: 22px; top: 19px; display: flex; align-items: center; gap: 7px; font-size: 8px; letter-spacing: 1px; color: #afc0c6; pointer-events: none; }
-.objective-strip { position: absolute; left: 22px; top: 53px; border-left: 2px solid var(--amber); background: #0b1622db; padding: 9px 13px; display: grid; gap: 5px; pointer-events: none; min-width: 160px; }
-.objective-strip .eyebrow { font-size: 8px; letter-spacing: 1px; }
-.objective-strip strong { font-size: 13px; letter-spacing: 1px; }
-#objectiveDistance { color: #b8c5c7; font-size: 10px; }
-.view-bottom { position: absolute; bottom: 15px; left: 22px; right: 20px; display: flex; justify-content: space-between; gap: 10px; font-size: 8px; letter-spacing: 1px; color: #93a8b6; pointer-events: none; }
-.view-bottom span:first-child { color: #b4c8c4; }
-.flight-message { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%); margin: 0; background: #102324eb; border: 1px solid #416056; padding: 10px 15px; color: #bddbc9; font-size: 11px; width: max-content; max-width: 85%; line-height: 1.6; text-align: center; pointer-events: none; }
-.flight-message:empty { display: none; }
-.instruments { grid-column: 2; grid-row: 1; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 18px 18px 14px; scrollbar-width: thin; }
-.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #94a7a9; font-size: 9px; letter-spacing: 1.1px; }
-.fuel-panel { padding-top: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.readout-label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 9px; letter-spacing: 1px; color: #a9b8b8; }
-.readout-label span { color: var(--green); font-size: 8px; }
-.fuel-number { display: flex; align-items: baseline; gap: 8px; margin: 3px 0 8px; color: #d6e2cc; }
-.fuel-number strong { font-size: 40px; font-weight: 500; line-height: 1.2; letter-spacing: -3px; }
-.fuel-number > span { font-size: 20px; }
-.fuel-track { height: 10px; border: 1px solid #4a5e5d; background: #0b131a; padding: 2px; margin-bottom: 7px; }
-.fuel-track span { display: block; height: 100%; width: 100%; background: repeating-linear-gradient(to right, #9dc8a6 0, #9dc8a6 7px, #0b131a 7px, #0b131a 9px); }
-.fuel-panel.is-low .fuel-number, .fuel-panel.is-low #fuelState { color: #f1aa79; }
-.fuel-panel.is-low .fuel-track span { background: #d78b61; }
-.telemetry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
-.telemetry-grid > div { border-bottom: 1px solid #2c3a42; padding: 10px 0 8px; }
-.telemetry-grid > div:nth-child(even) { padding-left: 13px; border-left: 1px solid #2c3a42; }
-.telemetry-grid dt { font-size: 8px; letter-spacing: 0.6px; color: #91a5a8; }
-.telemetry-grid dd { margin: 6px 0 0; font-size: 19px; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.unit { font-size: 9px; color: #8c9da1; letter-spacing: 0; }
-.telemetry-grid .payload-value { font-size: 13px; line-height: 22px; letter-spacing: 0.8px; color: var(--green); }
-.vector-readout { display: flex; justify-content: space-between; gap: 5px; padding: 9px 0; font-size: 8px; color: #8ea2a6; }
-.vector-readout b { color: #b2c1bf; font-weight: normal; }
-.map-heading { border-top: 1px solid var(--line); padding: 13px 0 8px; }
-.map-heading span:last-child { font-size: 8px; letter-spacing: 0; }
-.viewport-map { position: absolute; top: 18px; right: 20px; width: 220px; padding: 8px; background: #0b1622e8; border: 1px solid #30424d; pointer-events: none; }
-.viewport-map .map-heading { border: 0; padding: 0 0 7px; font-size: 8px; }
-.viewport-map .navigation-caption { margin-bottom: 0; }
-#mapCanvas { width: 100%; height: 55px; display: block; image-rendering: pixelated; border: 1px solid #263a44; }
-.navigation-caption { display: flex; align-items: center; gap: 5px; font-size: 7px; margin: 7px 0 15px; color: #b4c0b6; }
-.navigation-caption > .muted { margin-left: auto; }
-.legend-dot { display: inline-block; width: 4px; height: 4px; background: var(--amber); }
-.ship-dot { background: #e2e6d7; margin-left: 8px; }
-.dock-button { width: 100%; font-size: 9px; padding: 10px 8px; display: flex; justify-content: space-between; align-items: center; }
-.dock-button.is-ready { background: #284b3d; border-color: #8ac4a8; }
-.pilot-note { color: #a9b7b7; font-size: 9px; line-height: 1.6; margin: 12px 0 0; }
-.control-panel { display: grid; grid-template-columns: minmax(250px, 1.15fr) minmax(230px, 1fr) minmax(220px, 1fr); grid-column: 1 / -1; border-top: 1px solid #536168; background: #1a272e; }
-.docking-dialog { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(420px, calc(100% - 24px)); padding: 10px 14px; background: #13232cf5; border: 1px solid var(--amber); box-shadow: 0 4px 14px #0008; z-index: 2; }
-.docking-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.docking-dialog h2 { font-size: 15px; letter-spacing: 0; margin: 0; }
-.docking-dialog #dockState { color: var(--green); font-size: 9px; }
-.docking-dialog p { font-size: 10px; line-height: 1.4; margin: 6px 0; color: #c3d1d2; }
-.docking-requirements { list-style: none; margin: 7px 0 8px; padding: 0; display: grid; gap: 5px; font-size: 10px; color: #e5bc8a; }
-.docking-requirements .is-ready { color: #a5dab4; }
-.docking-dialog .dock-button { min-height: 32px; padding: 6px 8px; font-size: 10px; }
-.viewport:has(.docking-dialog:not([hidden])) .flight-message { display: none; }
-.control-group { padding: 15px 20px; border-right: 1px solid #3d4b52; min-width: 0; position: relative; }
-.control-group:last-child { border-right: 0; }
-.control-group::before, .control-group::after { content: "+"; position: absolute; font-size: 10px; color: #52616a; top: 5px; }
-.control-group::before { left: 5px; }
-.control-group::after { right: 5px; }
-.engine-controls { display: flex; align-items: center; gap: 16px; margin-top: 15px; }
-.burn-button { background: #5b382b; border: 1px solid #a87955; color: #f0c48c; width: 118px; min-height: 92px; font-size: 22px; box-shadow: inset 0 0 0 3px #392d27; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
-.burn-button span { font-size: 8px; letter-spacing: 0.5px; }
-.burn-button kbd { font-size: 8px; color: #e4c08e; border-color: #886348; }
-.burn-button:hover { background: #69412e; border-color: #dca76b; }
+.flight-navigation-corner { position: absolute; z-index: 2; top: 14px; left: 14px; width: min(286px, 42vw); padding: 9px; border: 1px solid #334851; background: #101c24e8; pointer-events: none; }
+.flight-navigation-corner .environment-label { margin-bottom: 0; }
+.flight-top-actions { position: absolute; z-index: 3; top: 14px; right: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; max-width: min(430px, 46vw); }
+.flight-menu-button { font-size: 9px; padding: 7px 9px; background: #14232ceb; }
+.flight-status-corner { position: static; width: min(390px, 44vw); padding: 9px; border: 1px solid #334851; background: #101c24e8; text-align: right; pointer-events: none; }
+.flight-status-corner:empty { display: none; }
+.control-panel { display: grid; grid-template-columns: minmax(270px, 1.3fr) minmax(360px, max-content) minmax(420px, 1.6fr) 260px; min-width: 0; border-top: 1px solid #536168; background: #17252d; overflow-x: auto; }
+.propulsion-controls { grid-column: 1; grid-row: 1; }
+.velocity-instrument { grid-column: 2; grid-row: 1; }
+.console-aux { grid-column: 3; grid-row: 1; }
+.flight-controls { grid-column: 4; grid-row: 1; }
+#controlPanel > .console-aux { border-right: 1px solid #3d4b52; }
+#controlPanel > .flight-controls { border-right: 0; }
+.console-column { min-width: 0; padding: 9px 13px; border-right: 1px solid #3d4b52; overflow-y: auto; scrollbar-width: thin; }
+.console-column:last-child { border-right: 0; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin: 0; color: #94a7a9; font-size: 8px; font-weight: normal; letter-spacing: .8px; }
+.readout-label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 8px; letter-spacing: .6px; color: #a9b8b8; }
+.readout-label span { color: var(--green); font-size: 7px; }
+.usage-control { margin-top: 0; }
+.usage-control .readout-label output { color: #f3b46a; font-size: 18px; font-variant-numeric: tabular-nums; }
+.usage-meter, .fuel-track { height: 22px; margin: 8px 0; border: 1px solid #4a5e5d; background: #0b131a; padding: 3px; }
+.usage-meter { border-color: #76533b; }
+.usage-meter::before { content: ''; position: absolute; inset: 3px; background: repeating-linear-gradient(to right, #2f302b 0 7px, transparent 7px 9px); }
+.usage-meter { position: relative; }
+.usage-meter span { position: relative; display: block; width: 100%; height: 100%; background: linear-gradient(to right, #eaa044 0%, #f07f36 50%, #e75939 78%, #d43c3e 100%); mask-image: repeating-linear-gradient(to right, #000 0 7px, transparent 7px 9px); -webkit-mask-image: repeating-linear-gradient(to right, #000 0 7px, transparent 7px 9px); clip-path: inset(0 100% 0 0); }
+.fuel-panel { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.fuel-number { display: flex; align-items: baseline; gap: 3px; margin: 0; color: #d6e2cc; }
+.fuel-number strong { font-size: 18px; font-weight: normal; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.fuel-number > span { font-size: 12px; }
+.fuel-track { margin-bottom: 7px; }
+.fuel-track span { display: block; height: 100%; width: 100%; background: repeating-linear-gradient(to right, #9dc8a6 0 7px, transparent 7px 9px); }
+.fuel-panel.is-low .fuel-number { color: #f1aa79; }
+.fuel-panel.is-low .fuel-track span { background: repeating-linear-gradient(to right, #d78b61 0 7px, transparent 7px 9px); }
+.velocity-instrument { display: grid; grid-template-columns: 190px max-content; grid-template-rows: 1fr; align-items: center; column-gap: 8px; }
+.velocity-dial { display: block; width: 190px; max-width: 100%; height: auto; overflow: visible; }
+.velocity-ring { fill: #0e1c23; stroke: #526660; stroke-width: 1.5; }
+.velocity-inner-ring { fill: none; stroke: #273b42; stroke-dasharray: 2 5; }
+.velocity-axes { fill: none; stroke: #344b50; stroke-width: 1; }
+.velocity-ticks { fill: none; stroke: #7f9994; stroke-width: 2; }
+.velocity-axis-label { font-size: 9px; fill: #809591; }
+.velocity-components { fill: none; stroke: #88aaa2; stroke-width: 1.5; opacity: .5; }
+.velocity-projection { fill: none; stroke: #88aaa2; stroke-width: 1; stroke-dasharray: 3 4; opacity: .28; }
+.velocity-vector { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
+.velocity-arrow-head { fill: var(--amber); }
+.velocity-rocket { fill: #e1e8d9; stroke: #0e1c23; stroke-width: 1.5; stroke-linejoin: miter; }
+.velocity-rocket-window { fill: #668d9b; stroke: none; }
+.motion-readouts { display: grid; width: max-content; max-width: 100%; grid-template-columns: max-content max-content; align-content: center; gap: 6px 12px; }
+.motion-stat { min-width: 0; }
+.motion-rotation { grid-column: 1 / -1; grid-row: 2; }
+.velocity-speed { margin: 3px 0 6px; }
+.velocity-speed output { font-size: 25px; color: #e1e8d9; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+.rotation-value { display: block; margin-top: 2px; color: var(--amber); font-size: 16px; font-variant-numeric: tabular-nums; }
+.vector-readout { display: grid; grid-column: 2; grid-row: 1; align-self: center; grid-template-columns: max-content; gap: 6px; margin-top: 2px; font-size: 8px; color: #7e9694; font-variant-numeric: tabular-nums; }
+.vector-readout b { color: #9bb0aa; font-weight: normal; }
+.velocity-caption { margin: 0; font-size: 6px; letter-spacing: .4px; color: #7e9694; text-align: center; }
+.controls-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.flight-buttons { display: grid; width: min(100%, 230px); grid-template-columns: minmax(0, 120px) 100px; align-items: start; gap: 10px; margin-top: 12px; }
+.burn-button { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 70px; gap: 5px; padding: 6px; background: #5b382b; border-color: #a87955; color: #f0c48c; font-size: 21px; box-shadow: inset 0 0 0 2px #392d27; }
+.burn-button span, .burn-button kbd { font-size: 7px; }
+.burn-button kbd { border: 0; padding: 0; color: #e4c08e; }
+.burn-button:hover { background: #69412e; }
 .burn-button.is-held { background: #9c6338; color: #fff2c8; border-color: #ffd190; }
-.throttle-control { flex: 1; min-width: 75px; }
-.throttle-control label { display: flex; justify-content: space-between; font-size: 8px; gap: 8px; color: #a9b8b8; }
-.throttle-control output { color: #e1c18c; }
-input[type="range"] { width: 100%; accent-color: var(--amber); margin: 13px 0; cursor: pointer; }
-.throttle-buttons { display: flex; gap: 7px; }
-.throttle-buttons button { flex: 1; padding: 7px 4px; white-space: nowrap; }
-.throttle-buttons kbd { border: 0; padding: 0; }
-.rotation-buttons { display: flex; gap: 11px; align-items: center; justify-content: center; margin-top: 19px; }
-.rotation-buttons button { width: 49px; height: 78px; font-size: 25px; display: flex; align-items: center; flex-direction: column; justify-content: center; gap: 13px; padding: 4px; }
-.rotation-buttons kbd { font-size: 8px; border: 0; padding: 0; }
-.attitude-display { border: 1px solid #526660; border-radius: 50%; width: 76px; height: 76px; background: #0e1c23; display: flex; flex-direction: column; justify-content: center; align-items: center; flex-shrink: 0; position: relative; }
-.attitude-display::after { content: ""; position: absolute; width: 64px; border-top: 1px dashed #3a4f4c; top: 37px; }
-.attitude-display > span:first-child { font-size: 33px; color: #cddac5; height: 43px; position: relative; z-index: 1; }
-.attitude-display > span:last-child { font-size: 6px; color: #9baea6; }
-.rcs-buttons { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 28px); gap: 3px; width: max-content; margin: 8px auto 0; }
-.rcs-buttons button { padding: 2px; font-size: 15px; }
-.rcs-buttons kbd { border: 0; padding: 0; font-size: 8px; }
-.rcs-up { grid-area: 1 / 2; }
-.rcs-left { grid-area: 2 / 1; }
-.rcs-center { grid-area: 2 / 2; display: grid; place-items: center; font-size: 20px; color: #899b9e; }
-.rcs-right { grid-area: 2 / 3; }
-.rcs-down { grid-area: 3 / 2; }
+.rotation-buttons { display: flex; gap: 6px; margin-top: 10px; }
+.rotation-buttons button { flex: 1; min-height: 51px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px; font-size: 23px; }
+.rotation-buttons kbd { font-size: 7px; border: 0; padding: 0; }
+.brake-controls { display: grid; gap: 10px; }
+.brake-controls button { min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 4px; font-size: 20px; }
+.brake-controls span { font-size: 6px; }
+.brake-controls kbd { border: 0; padding: 0; font-size: 7px; }
 .hold-button { touch-action: none; user-select: none; -webkit-user-select: none; }
-.flight-rules p { font-size: 9px; line-height: 2.1; color: #acbbba; margin: 14px 0 8px; }
-.flight-rules b { float: right; font-weight: normal; color: #d6dfcf; }
-.flight-rules > .muted { font-size: 8px; }
+.console-aux { grid-column: 3; grid-row: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr; align-content: start; gap: 10px 13px; }
+.console-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; grid-column: 1 / -1; }
+.objective-strip { border-left: 2px solid var(--amber); padding: 2px 0 3px 8px; display: grid; gap: 4px; }
+.objective-strip .eyebrow { font-size: 6px; letter-spacing: .5px; }
+.objective-strip strong { font-size: 10px; letter-spacing: .5px; }
+.telemetry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 6px; margin: 10px 0; }
+.telemetry-grid dt { font-size: 6px; color: #91a5a8; }
+.telemetry-grid dd { margin: 5px 0 0; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.unit { font-size: 8px; color: #8c9da1; }
+.telemetry-grid .unit { font-size: 6px; }
+.telemetry-grid .payload-value { font-size: 8px; line-height: 15px; color: var(--green); }
+.map-heading { padding: 0 0 5px; font-size: 7px; letter-spacing: .4px; }
+.map-heading span:last-child { font-size: 6px; letter-spacing: 0; }
+#mapCanvas { width: 100%; height: auto; aspect-ratio: 268 / 55; display: block; image-rendering: pixelated; border: 1px solid #263a44; }
+.navigation-caption { display: flex; align-items: center; gap: 4px; font-size: 5px; margin-top: 4px; color: #b4c0b6; }
+.navigation-caption > .muted { margin-left: auto; }
+.legend-dot { width: 4px; height: 4px; background: var(--amber); }
+.ship-dot { background: #e2e6d7; margin-left: 6px; }
+.environment-label { margin: 7px 0 0; font-size: 6px; color: #9fb9b3; }
+.console-events { min-width: 0; }
+.docking-dialog { padding: 9px; border: 1px solid var(--amber); background: #13232c; }
+.docking-dialog-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; }
+.docking-dialog h2 { font-size: 11px; margin: 0; letter-spacing: 0; }
+#dockState { color: var(--green); font-size: 7px; }
+.docking-dialog p { font-size: 8px; line-height: 1.5; margin: 7px 0; color: #c3d1d2; }
+.docking-requirements { list-style: none; margin: 7px 0; padding: 0; display: grid; gap: 6px; font-size: 8px; line-height: 1.4; color: #e5bc8a; }
+.docking-requirements .is-ready { color: #a5dab4; }
+.dock-button { width: 100%; font-size: 8px; padding: 7px 4px; display: flex; justify-content: space-between; align-items: center; gap: 3px; min-height: 32px; }
+.dock-button kbd { font-size: 7px; }
+.dock-button.is-ready { background: #284b3d; border-color: #8ac4a8; }
+.flight-message { margin: 0 0 9px; color: #bddbc9; font-size: 9px; line-height: 1.6; }
+.flight-message:empty { display: none; }
 .overlay { position: absolute; inset: 0; z-index: 5; background: linear-gradient(90deg, #0b141dfc 0%, #0b141df5 30%, #0b141db3 60%, #0b141d45 100%); overflow-y: auto; overscroll-behavior: contain; display: flex; align-items: center; padding: 34px 48px; }
 .menu-card { width: 420px; max-width: 100%; outline: 0; }
 .menu-kicker { display: flex; gap: 9px; align-items: center; font-size: 9px; letter-spacing: 1px; }
@@ -175,92 +186,93 @@ h2 { font-size: 28px; letter-spacing: -1px; margin: 12px 0 18px; }
 .page-footer { height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 22px; font-size: 7px; letter-spacing: 1px; color: #a4b5b3; }
 .storage-warning { position: fixed; left: 12px; right: 12px; bottom: 8px; margin: 0; background: #412d22; border: 1px solid #d6a16a; color: #ffdcaa; padding: 12px; z-index: 20; font-size: 11px; line-height: 1.6; }
 .noscript { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: #101921; padding: 30px; text-align: center; }
-@media (min-width: 1550px) {
-    .game-shell { grid-template-columns: minmax(0, 1fr) 320px; }
-    .instruments { padding: 22px; }
-    .telemetry-grid > div { padding-top: 16px; padding-bottom: 14px; }
-    .menu-card { width: 460px; }
-    .overlay { padding-left: 6vw; }
+
+@media (max-width: 1299px) {
+    .game-shell { height: auto; min-height: 100svh; grid-template-rows: minmax(340px, 55svh) auto; }
+    .control-panel { grid-template-columns: minmax(200px, .8fr) minmax(330px, max-content) minmax(320px, 1.1fr); overflow: visible; }
+    .propulsion-controls { grid-column: 1; grid-row: 1; }
+    .velocity-instrument { grid-column: 2; grid-row: 1; }
+    .console-aux { grid-column: 3; grid-row: 1; grid-template-columns: minmax(0, 1fr); }
+    .flight-controls { grid-column: 1 / -1; grid-row: 2; }
+    #controlPanel > .console-aux { border-right: 0; }
+    .console-data { display: block; }
+    .overlay { position: fixed; inset: 0; align-items: flex-start; padding: 28px; }
+    .menu-card, .modal-card, .history-card { margin: auto; }
 }
-@media (max-width: 1100px) {
-    .topbar-status > span:last-child, .topbar-status .separator { display: none; }
-    .game-shell { grid-template-columns: minmax(0, 1fr) 266px; }
-    .instruments { padding: 14px; }
-    .control-panel { grid-template-columns: 1.2fr 1fr 1fr; }
-    .flight-rules { display: none; }
-    .control-group { padding: 15px; }
-    .control-group .panel-heading { font-size: 8px; letter-spacing: 0.5px; }
-    .control-group .panel-heading .muted { display: none; }
-    .engine-controls { gap: 10px; }
-    .burn-button { width: 102px; }
-    .rotation-buttons { gap: 5px; }
-    .rotation-buttons button { width: 40px; }
-    .attitude-display { width: 64px; height: 64px; }
-    .attitude-display::after { width: 54px; top: 31px; }
-    .attitude-display > span:first-child { font-size: 28px; height: 36px; }
-    .overlay { padding: 28px 35px; }
-    .view-bottom span:last-child { display: none; }
+@media (max-width: 850px) {
+    .control-panel { grid-template-columns: minmax(220px, .8fr) minmax(330px, max-content); }
+    .console-aux { grid-column: 1 / -1; grid-row: 2; }
+    .flight-controls { grid-column: 1 / -1; grid-row: 3; }
 }
-@media (max-width: 760px) {
-    .topbar { height: 60px; padding: 0 14px; gap: 10px; }
-    .wordmark { font-size: 15px; letter-spacing: 2px; gap: 9px; }
-    .wordmark-sub { font-size: 6px; letter-spacing: 1px; }
-    .topbar-status { display: none; }
-    .game-shell { height: auto; min-height: 0; max-height: none; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(330px, 52svh) auto auto; }
-    .viewport { grid-column: 1; grid-row: 1; }
-    .instruments { grid-column: 1; grid-row: 3; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 18px; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
-    .instruments > .panel-heading:first-child { grid-column: 1 / -1; }
-    .fuel-panel { grid-column: 1; grid-row: 2; padding-bottom: 12px; }
-    .telemetry-grid { grid-column: 2; grid-row: 2 / 6; }
-    .telemetry-grid > div { padding-top: 10px; padding-bottom: 10px; }
-    .telemetry-grid dd { font-size: 16px; }
-    .telemetry-grid dt { font-size: 7px; }
-    .telemetry-grid .payload-value { font-size: 10px; }
-    .vector-readout { grid-column: 2; }
-    .map-heading { grid-column: 1; }
-    #mapCanvas, .navigation-caption { grid-column: 1; }
-    .dock-button { min-height: 44px; }
-    .pilot-note { grid-column: 1 / -1; }
-    .control-panel { grid-row: 2; grid-column: 1; grid-template-columns: 1.1fr .95fr .95fr; }
-    .control-group { padding: 14px 8px 12px; }
-    .engine-controls { gap: 8px; flex-direction: column; margin-top: 10px; }
-    .burn-button { min-height: 62px; width: 100%; font-size: 16px; gap: 4px; }
-    .burn-button kbd { display: none; }
-    .throttle-control { width: 100%; }
-    .throttle-control input { margin: 8px 0; }
-    .throttle-buttons button { padding: 4px; min-height: 30px; }
-    .rotation-buttons { gap: 4px; margin-top: 14px; flex-wrap: wrap; }
-    .attitude-display { order: -1; width: 58px; height: 58px; margin: 0 calc((100% - 58px) / 2) 0; }
-    .attitude-display::after { width: 48px; top: 28px; }
-    .attitude-display > span:first-child { font-size: 24px; height: 31px; }
-    .attitude-display > span:last-child { font-size: 5px; }
-    .rotation-buttons button { width: calc(50% - 3px); height: 60px; font-size: 22px; gap: 7px; }
-    .rotation-buttons kbd { font-size: 7px; }
-    .rcs-buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, 36px); width: 100%; gap: 2px; margin-top: 14px; }
-    .rcs-buttons button { font-size: 16px; }
-    .rcs-buttons kbd { display: none; }
-    .control-group .panel-heading { font-size: 7px; letter-spacing: 0; }
-    .overlay { position: fixed; inset: 0; min-height: 0; max-height: 100svh; padding: 26px 22px; align-items: flex-start; background: #0b141df2; }
-    .menu-card { width: 100%; max-width: 440px; margin: 15px auto; }
+@media (max-width: 680px) {
+    body { min-width: 340px; }
+    .control-panel { grid-template-columns: minmax(0, 1fr); }
+    .console-column { padding: 12px; }
+    .propulsion-controls { grid-column: 1; grid-row: 1; }
+    .velocity-instrument { grid-column: 1; grid-row: 2; grid-template-columns: 190px max-content; gap: 7px; }
+    .velocity-dial { width: 190px; }
+    .velocity-speed output { font-size: 20px; }
+    .rotation-value { font-size: 15px; }
+    .velocity-caption { font-size: 5px; }
+    .flight-controls { grid-column: 1; grid-row: 4; }
+    .flight-buttons { width: min(100%, 260px); grid-template-columns: 120px 130px; margin-top: 12px; }
+    .console-aux { grid-column: 1; grid-row: 3; grid-template-columns: minmax(0, 1fr); }
+    .flight-navigation-corner { left: 8px; top: 8px; width: min(268px, 48vw); }
+    .flight-top-actions { right: 8px; top: 8px; max-width: 48vw; }
+    .flight-status-corner { width: min(330px, 46vw); }
+    .console-status, .console-data { grid-column: 1; }
+    .console-data { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .objective-strip, .telemetry-grid { grid-column: 1; }
+    .console-events { grid-column: 1; }
+    .docking-dialog { padding: 12px; }
+    .docking-requirements, .docking-dialog p { font-size: 10px; }
+    .dock-button { min-height: 44px; font-size: 10px; }
+    .overlay { padding: 22px; background: #0b141df2; }
+    .menu-card { width: 100%; max-width: 440px; }
     h1 { font-size: 56px; }
-    .modal-card, .history-card { margin: 30px auto; padding: 22px; }
-    .history-card { max-height: 80svh; }
+    .modal-card, .history-card { padding: 22px; }
+    .history-card { max-height: 85svh; }
     .history-row summary { grid-template-columns: 64px 1fr; gap: 9px; }
-    .page-footer { padding: 0 12px; height: 34px; font-size: 6px; letter-spacing: 0; }
-    .view-label { left: 14px; top: 14px; }
-    .objective-strip { left: 14px; top: 40px; }
-    .docking-dialog { bottom: 8px; padding: 10px 12px; }
-    .docking-dialog h2 { font-size: 14px; }
-    .docking-dialog p { font-size: 9px; margin: 5px 0; }
-    .docking-requirements { font-size: 9px; gap: 5px; margin: 7px 0; }
-    .docking-dialog .dock-button { font-size: 10px; min-height: 34px; padding: 6px 8px; }
-    .viewport-map { top: auto; bottom: 38px; right: 12px; width: 174px; padding: 6px; }
-    .viewport-map .map-heading { font-size: 6px; }
-    .viewport-map .map-heading span:last-child { font-size: 6px; }
-}
-@media (min-width: 761px) and (max-height: 850px) {
-    .pilot-note { display: none; }
+    .page-footer { padding: 0 10px; font-size: 6px; letter-spacing: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; }
 }
+
+.flight-bottom-notifications { position: absolute; bottom: 8px; right: 12px; z-index: 3; width: min(300px, calc(100% - 24px)); max-height: calc(100% - 20px); overflow-y: auto; display: grid; gap: 6px; scrollbar-width: thin; }
+.flight-bottom-notifications .flight-message { width: auto; margin: 0; text-align: left; }
+.flight-bottom-notifications .docking-dialog:not([hidden]), .flight-bottom-notifications .flight-message:not(:empty) { animation: rise-notification 180ms ease-out; }
+@keyframes rise-notification { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .flight-bottom-notifications .docking-dialog, .flight-bottom-notifications .flight-message { animation: none !important; } }
+
+#controlPanel > .velocity-instrument { padding-top: 4px; padding-bottom: 4px; }
+
+/* Keep motion values together and separate their two reading levels. */
+#controlPanel > .velocity-instrument { padding-left: 2px; column-gap: 4px; }
+.motion-readouts { border-left: 1px solid var(--line); padding-left: 12px; }
+.motion-rotation { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.console-data { display: block; }
+.telemetry-grid { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 18px 14px; margin: 0; align-content: start; }
+.telemetry-grid > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0; }
+.telemetry-grid dt { font-size: 8px; }
+.telemetry-grid dd { margin: 0; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.telemetry-grid #payloadValue { color: var(--green); }
+@media (max-width: 680px) { .telemetry-grid { gap: 14px 10px; } }
+
+/* Stretch the instrument dividers to the enclosing console borders. */
+#controlPanel > .velocity-instrument { padding: 0 0 0 2px; grid-template-columns: 190px minmax(0, 1fr); align-items: stretch; column-gap: 4px; }
+.velocity-dial { align-self: center; }
+.motion-readouts { width: auto; max-width: none; align-self: stretch; grid-template-rows: 1fr 1fr; align-content: stretch; row-gap: 0; padding: 0 12px; }
+.motion-readouts > .motion-stat:not(.motion-rotation) { align-self: end; padding-bottom: 8px; }
+.motion-readouts > .vector-readout { align-self: end; padding-bottom: 14px; }
+.motion-readouts > .motion-rotation { margin: 0 -12px; padding: 10px 12px; border-top: 1px solid var(--line); }
+
+/* Draw the horizontal rule across the entire readout area, beyond the text columns. */
+.motion-readouts { position: relative; }
+.motion-readouts::after { content: ''; position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid var(--line); pointer-events: none; }
+.motion-readouts > .motion-rotation { border-top: 0; }
+
+/* Make the four primary instrument labels easier to read at a glance. */
+.usage-control > .readout-label,
+.fuel-panel > .readout-label,
+.motion-stat > .readout-label { font-size: 11px; }

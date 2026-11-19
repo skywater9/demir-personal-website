@@ -1,124 +1,152 @@
-# Game verification
+# Local conquest verification
 
 ## Automated checks
 
-Run with Node.js 22 or newer:
+Run from the repository root using the already-installed Node.js runtime:
 
 ```sh
-node --test tests/*.test.mjs
+node --experimental-vm-modules --test tests/*.test.mjs
 npm --prefix functions test
 ```
 
-- Physics tests cover destination order, gravity falloff, Earth/Jupiter launch,
-  fuel use and depletion, unsafe impacts, docking gates, payload transitions,
-  one-time refueling, all ten deliveries, alignment after a stationary landing,
-  station structure impacts, and fast glancing collisions.
-- A complete-route controller test uses only throttle, translation thrusters,
-  and the attach action. It verifies that all ten deliveries are reachable with
-  cumulative fuel and automatic pad refueling; no position, velocity, or fuel
-  shortcuts are allowed. This is a feasibility check, not a measure of human difficulty.
-- Storage tests cover refresh recovery, results, duplicate archival, malformed
-  saves, blocked storage, semantic progression invariants, and stale-tab checkpoint
-  rejection, including an interleaved takeover/archival under a shared lock.
-  Expected warning logs exercise failure paths.
-- App tests parse IDs and controls from the actual homepage, then exercise its
-  event handlers with a small DOM fixture: launch, mixed controls, suspension,
-  offline time exclusion, Continue, New Flight confirmation, retry, win, history,
-  modal keyboard focus, and transfer of flight control between tabs.
-- Renderer tests exercise canvas drawing paths and reject non-finite coordinates.
-  They verify execution, not visual composition.
-- Existing analytics tests cover strict ingestion, retry/deduplication behavior,
-  game control allowlists, owner access, inert heatmap previews, geometry guards,
-  and separation of old/new homepage layouts.
+The conquest tests use the shipped page/controller and real simulation:
 
-For backend integration, use Java 21+, the Firebase CLI, and the existing
-Functions dependencies. This command uses the demo project and temporary emulator
-data; it does not deploy to Firebase:
+- World generation, gravity, safe landings, collision sweeps, stars, fuel-empty
+  coasting, decelerating owned-pad refill, and cargo production/collection.
+- Neutral/hostile relay hacking, wrong/repeated digit rejection, cancellation,
+  ownership transfer, cargo spending, and defense tier limits.
+- Fuel damage: shot loss, speed-scaled impact loss, equal/insufficient/zero-fuel
+  boundaries, one damage event per contact, white leak particles, and single
+  death/drop/respawn. Damage outcome logs exclude contact coordinates.
+- Projectile hit, shield and turret refuge rules, drops, pickup, death and respawn.
+- Braking slows forward travel by 34 m/s per second in every heading at its
+  existing fuel rate; main thrust remains 68 m/s².
+- Cursor steering acceleration, reversal inertia, shortest angular path, fuel use,
+  actual-nose thrust, screen-scaled aim and a dashed cursor guide. A 90° turn
+  reaches within 1° of the cursor in 0.8 seconds without snapping.
+- Actual homepage IDs and button/key handlers, docking/hacking/upgrades, menus,
+  self-destruct confirmation, record retention, and 30-second refresh expiry.
+- Renderer geometry for all systems/planet types/shield tiers, map hit tests,
+  centered nozzle particles, death frames and reduced-motion dash cues. Rotation
+  jets stop for sub-degree corrections and turn rates below 0.4 rad/s without suppressing
+  main-engine or brake exhaust. Braking fires both forward V-shaped jets; turning
+  uses one of the same two nozzles, without duplicates when controls overlap.
+  Braking increases plume density, speed and particle size over ordinary turning.
+- Camera zoom changes continuously across former speed thresholds, eases during
+  camera recenters, stays consistent across frame rates, and retains service views.
+- Combined fuel display: backward usage overlay anchored to remaining fuel,
+  quarter-scale proportional draw, low/empty tanks, idle/docked/dead states, and fuel ARIA values.
+  Damage sweeps combine with active consumption, expire, and reset on new games
+  without replaying events or delaying the actual fuel readout.
+- Anonymous outcome projection, firing/hacking aggregation, readable owner logs,
+  append-only writes, and historical data compatibility.
+
+The old story modules remain for compatibility checks. `tests/fixtures/storyGame.html`
+is their archived UI fixture; the actual homepage is tested by conquestApp tests.
+The legacy route pilot uses real fixed-thrust pulses and physics without adding
+fuel, moving the rocket directly, or skipping its delivery-win assertions.
+
+Firestore integration needs Auth/Firestore emulators and Java 21+. Run with the
+existing Firebase CLI and dependencies, using a temporary config that references
+`firestore.rules` and chooses available local ports. Normal unit runs skip that
+integration check when emulator environment variables are absent. These tests use
+only `demo-website-analytics`, never production data.
+
+## Local playtest
 
 ```sh
-firebase emulators:exec --only auth,functions,firestore,hosting --project demo-website-analytics 'npm --prefix functions test'
+python3 -m http.server 8001 --directory public
 ```
 
-## Browser playtest
+Open <http://localhost:8001/>. Start a new local galaxy. There are no opponents,
+bots, game server, or account requirements. Localhost never uploads event logs to
+production. Use a private tab for independent fresh play.
 
-Start the static server described in README.md, or use the Firebase emulators for
-local analytics collection. The in-app browser was unavailable during initial
-implementation. Automated DOM/canvas fixtures do not replace visual playtesting.
+1. Verify menu/briefing/tracking notice, empty records, one searchable local galaxy,
+   failed search, and ordinary keyboard focus. At phone size, controls wrap and
+   menus/notifications scroll without hiding their buttons.
+2. Play. Earth is owned/home and every other planet is neutral. Three scattered
+   systems and their lethal stars appear on the top-right map. Choose a relay by
+   clicking its planet or using the destination selector.
+3. W burns at full power; S brakes. Mouse/trackpad steers the hull with slight lag;
+   the dashed guide and small cursor show the requested direction. Space shoots
+   without firing a thruster, including while a thruster button is focused.
+   Enter holds a focused control. A/D do not turn the hull; double-tap A/D
+   for left/right dashes, with 1% fuel and a shared two-second cooldown. Double-tap
+   W/S must only burn/brake and must not dash or spend burst fuel.
+4. Fly to a neutral relay, slow below 8 m/s, stay within 32 m and point upright
+   within 12 degrees. E attaches. Enter the displayed digits. Wrong inputs and
+   held key-repeat do not complete a hack. E detaches and resets progress. No
+   firing is possible while attached. Capturing resets level/stock and colors the planet.
+5. Select its pad and land upright at 12 m/s or less. Cargo collects automatically;
+   wait with partial fuel to see rapid early refill that slows near full. Home
+   refills faster. Neutral/hostile pad landings never grant cargo or fuel.
+6. Return to the owned relay with cargo. Check next upgrade name/effect/cost,
+   insufficient-cargo state, and purchases: bullet barrier, turret, outer field.
+   Only that planet changes. Home says protected; the final tier has no purchase.
+7. Take a fast bump with enough fuel: check fuel loss, white leak particles and
+   gentle rebound. Repeat faster and verify greater fuel loss. Damage exceeding
+   remaining fuel is fatal; equal damage leaves zero fuel. A shot at zero is fatal.
+   Contact a star while carrying cargo. Check the explosion, floating cargo,
+   home respawn, full fuel and retained territory. Recover a pickup. There are no
+   hostile ships in this version; hostile defense/shot behavior uses automated fixtures.
+8. Empty the tank. Coast/aim/fire behavior remains available as applicable; powered
+   turning and thrust stop. Cancel the self-destruct confirmation, then confirm it.
+   Confirm dropped cargo and home respawn.
+9. Open Menu while moving: input releases but the galaxy keeps running. Refresh
+   within 30 seconds: Continue restores coasting/production state. Return after
+   more than 30 seconds: the world expires and its summary remains in records.
+   New Galaxy requires confirmation. Earlier story records remain accessible.
+10. On the live site, check event-log delivery status in the menu, walk the flow,
+    then sign in to `/analytics.html` as owner and read saved events in order.
+    Confirm no typed search, hacking digits, mouse position or identity appears.
 
-1. At desktop size, confirm that the menu, flight scene, telemetry, docking
-   controls, and bottom control panel fit and remain readable. Check a narrow
-   mobile viewport, portrait and landscape, and browser zoom.
-2. Start a run. Hold Space to lift off, rotate with A/D, and release to coast.
-   Verify that I/J/K/L change velocity in world directions and use less fuel.
-3. Approach the Earth relay's amber bay marker. Brake, align upright, and press E
-   when all three checks are green. Confirm one delivery and a Moon pad target.
-4. Use left RCS (J) to clear the receiver, then fly to the Moon. Land upright at ≤ 8 m/s. Confirm automatic refuel,
-   new payload, Moon relay target, and changed gravity. Off-pad contact must not
-   refuel; the same route stop must not grant fuel twice.
-5. Check the full route, including the Earth return. Inspect floating pads,
-   reduced visibility on giant planets, and Jupiter's wind. Tune fuel, flight
-   distances, and thrust in `rocketPhysics.mjs` after human playtesting.
-6. While moving, open the menu, refresh, and Continue. Verify position, velocity,
-   fuel, and time resume. Switch tabs and switch apps; neither background physics
-   nor offline time should accrue. Pressed controls must be released on suspension.
-7. Cancel New Flight and verify saved progress remains. Confirm New Flight and
-   verify the old run appears as abandoned. Inspect the event timeline.
-8. Crash at excessive speed, then Retry. Confirm recorded time/fuel and a fresh
-   Earth start. Check final Neptune delivery produces a win and a persistent record.
-9. Navigate menus using Tab, Shift+Tab, Enter, and Escape. Focus must stay inside
-   dialogs. Test held buttons with Space/Enter and simultaneous touch controls.
-10. Load `/?analyticsDebug=1`, interact with controls, and inspect
-    `window.websiteAnalytics.getSnapshot()`. The layout must be `homepage-v2`.
-    Held pointer controls should record one press without a duplicate click.
-    Use `/analytics.html` with the emulator owner to inspect v2 heatmaps and v1
-    historical counts. The inert preview must run no visitor scripts.
+## Release checks and limits
 
-## Known limits
+Check JavaScript syntax, HTML ID uniqueness/nesting, linked asset availability,
+module MIME types, and consistent cache versions before publishing static assets.
+Deploy the updated logging rules alongside Hosting, after emulator validation.
+Keep legacy record storage unchanged. No database migration or billed backend is
+needed for this local release.
 
-- Saves are browser-local, bounded, and subject to storage availability.
-- Abrupt process termination can lose the most recent second of progress.
-- The heatmap previews the static initial UI, not moving scenery or past UI states.
-- Production analytics collection remains disabled pending the existing App Check
-  and deployment verification. Game lifecycle records are local, not backend events.
-- Human flight-feel and visual testing remain necessary when a browser is available.
+The in-app browser connection was unavailable during this implementation. Canvas
+and DOM fixtures validate code paths, not final visual composition or flight feel.
+Human playtesting is still required for difficulty, timing, readability and touch aim.
 
-## Implementation verification
+Session storage may be denied or cleared by the browser; a visible warning explains
+memory-only play. Closing a tab permanently may clear its local world. Analytics
+uploads are best effort and remain subject to the existing free Firestore quotas.
+A galaxy reaching all planets continues as a sandbox; there is no invented win screen.
 
-Verified on November 15, 2026, with Node.js 26 and Java 21:
+## November 18 local conquest release verification
 
-- 29 game tests passed, including asynchronous save transactions and a full
-  control-only journey (1,957.9 simulated seconds, 96.0 fuel remaining).
-- 29 analytics tests passed with Auth, Functions, Firestore, and Hosting emulators;
-  no tests were skipped in that emulator run. Temporary alternate Firestore,
-  Auth, and Functions ports avoided an existing service on port 8080. The tracked
-  Firebase configuration was unchanged. The emulator used the host Node.js runtime;
-  the configured deployment runtime remains Node.js 22.
-- Static HTTP checks verified the homepage, linked assets, and JavaScript module
-  MIME types. HTML tag nesting, JavaScript syntax, and Git whitespace checks passed.
-- No in-app browser connection was available; no visual browser pass is claimed.
+- 120 tests passed in the full game/event-log suite; its emulator-dependent rule
+  test was separately executed and passed against real Auth/Firestore emulators.
+- 37 analytics tests passed; two older Functions integration tests remain skipped
+  because this release uses direct Spark event logging, not Functions.
+- The conquest subset includes simulation, actual-page controller, storage,
+  renderer, and mouse steering checks. The final main thrust is 68 m/s² and the
+  speed has no cap; sustained thrust and side dashes can exceed 500 m/s.
+- Static HTTP checks cover 13 game/analytics assets and JavaScript module MIME
+  types. Homepage nesting/ID uniqueness and JavaScript syntax checks passed.
+- No browser connection was available; no visual browser playtest is claimed.
 
-November 16 playtest changes: all 30 game tests passed after adding the 20 m/s
-station crash threshold, non-fatal station bounces, failure animation timing,
-clearer upright docking cues, and larger pulsing navigation indicators. Failure
-animation frames do not add gameplay time. Visual appearance still needs browser
-playtesting.
+## Shared galaxy checks
 
-The subsequent proximity-checklist change passed 31 game tests and 27 analytics
-tests (2 emulator-only tests skipped). The checklist test verifies automatic
-appearance within 200 m, live unmet/met requirements, continued flight, and closure
-after delivery. Analytics uses layout v3 and accepts historical v1/v2 batches.
+- Frontend and existing rule regression checks: `node --experimental-vm-modules --test tests/*.test.mjs`.
+- Shared-room, protocol, and persistence checks: `node --test server/tests/*.test.mjs`.
+- Network tests use two real localhost WebSocket clients, never the class box.
+- Coverage includes one shared clock, distinct homes, exclusive docking, projectile
+  targeting, pickup ties, upgrade transactions/replay rejection, private snapshots,
+  chat non-persistence, restart recovery, and corrupt-save refusal.
+- Browser-facing checks verify endpoint validation, bounded commands, pending
+  acknowledgments, and that online UI does not simulate movement or purchases locally.
+- Real two-browser visual playtesting and class-proxy deployment verification remain
+  required after the student's box is ready. Automated network tests do not replace
+  that visual/latency check.
 
-Cache-consistency follow-up: 32 game tests passed, including a combined app and
-real-renderer test for checklist proximity and multiple explosion frames before
-results. Game entry points, transitive game module imports, and the stylesheet
-share a version token to prevent mixing earlier cached modules with new UI code.
-This verifies the render calls, not actual browser pixels; a browser connection
-was still unavailable.
-
-Spark publication verification: 32 game tests and 36 analytics tests passed;
-2 backend emulator-only tests were skipped. The free production overview makes
-no custom backend requests. GA event tests verify allowed event names, bounded
-statistics, no identity fields, no local-development collection, and graceful
-failure when the SDK is blocked. The Hosting release excludes Function rewrites;
-production custom collection remains disabled. The deployed Firestore counter
-rules were verified as already matching the tracked rules.
+Latest local multiplayer verification: 161 frontend/rule checks passed, one
+Firestore-emulator check skipped because its emulator was not running, and all
+13 shared-server checks passed. The server checks used localhost clients and
+included a real service restart. Browser/device visual testing and the class
+proxy/service deployment have not been performed.

@@ -195,7 +195,7 @@ test('preview sanitization removes active resources and handlers and adds a rest
 
 // Exercise the real dashboard script with a minimal DOM and mocked authentication boundary.
 async function createDashboardHarness({ DOMParser, useEmulators = true, customAnalytics = 'enabled' } = {}) {
-    const html = await readFile(path.resolve(__dirname, '../public/analytics.html'), 'utf8');
+    const html = await readFile(path.resolve(__dirname, '../tests/fixtures/legacyAnalytics.html'), 'utf8');
     const nodes = new Map();
 
     // Model only the DOM operations used by the dashboard, retaining text safely for assertions.
@@ -293,7 +293,7 @@ async function createDashboardHarness({ DOMParser, useEmulators = true, customAn
     return { nodes, requests, responses, signIn, settle };
 }
 
-test('Spark production page shows available analytics without requesting the inactive backend', async () => {
+test('legacy Spark overview fixture shows available analytics without requesting the inactive backend', async () => {
     const harness = await createDashboardHarness({ useEmulators: false, customAnalytics: 'disabled' });
     assert.equal(harness.nodes.get('sparkOverview').hidden, false);
     assert.equal(harness.nodes.get('signInPanel').hidden, true);
@@ -629,7 +629,7 @@ test('dashboard explains an undeployed HTML API and preserves sign-in controls',
     assert.match(harness.nodes.get('error').textContent, /billing and Functions setup/);
     assert.equal(harness.nodes.get('signOutButton').hidden, false);
     assert.equal(harness.requests[0].headers.Authorization, 'Bearer test-token');
-    const html = await readFile(path.resolve(__dirname, '../public/analytics.html'), 'utf8');
+    const html = await readFile(path.resolve(__dirname, '../tests/fixtures/legacyAnalytics.html'), 'utf8');
     assert.match(html, /click heatmap are inactive on Spark/);
 });
 

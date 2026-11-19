@@ -26,3 +26,80 @@ These choices fill gaps for the first playable version. They are intended for re
 - Fuel, velocity, elapsed time, altitude, rotation, gravity, destination guidance, and station distance are visible in the cockpit. The target changes automatically after successful landing or delivery. A minimap shows the continuous route.
 - Preserve analytics production collection as currently configured (disabled pending the existing App Check/deployment verification). Increment the homepage layout version so old and new heatmap geometry are never mixed. The script-free heatmap can preview static cockpit controls, but cannot replay moving canvas scenery or historical overlay states.
 - No browser connection was available at the start of implementation. Run automated physics/storage/integration checks and report visual playtesting as a limitation unless a browser becomes available.
+
+- November 16 event-log update (supersedes the inactive-session notes above): the user requested a complete readable log on free resources. Use the existing Standard Firestore database and Spark Hosting with anonymous visitor auth and an owner custom claim. Remote event rows are separate from browser-local run history. No paid plan, Functions deployment, dependency installation, automatic retention deletion, or historical backfill. The old heatmap remains inactive. Track only product allowlists, not typed text or identity. Keep up to 5,000 rows per visit; batch every 5 seconds, with 20-second visible-page heartbeats. Exit uploads remain best effort and the footer reports persistence status. Localhost does not upload to production.
+
+- Latest playtest tuning supersedes the earlier speed limits: safe landing speed is 12 m/s, docking speed is 8 m/s, surface impacts above 12 through 25 m/s bounce without servicing, and station impacts below 30 m/s bounce. Faster impacts still fail. Survivable rebounds damp tangential velocity, limit outward speed to 3 m/s, and cap total rebound speed at 6 m/s. Upright and proximity requirements stay the same.
+
+- Fuel balance update: halve effective tank capacity with `fuelCapacityScale: 0.5`, keeping saved/displayed fuel normalized to 0–100%. Main, attitude, and translation thrust consequently use twice the percentage of the tank for the same maneuver. Every planet grants 25 percentage points once per route stop, capped at 100%. This preserves saved run percentages and historical results without changing the save schema.
+
+- Instrument readability update: move the existing rotation value onto the attitude circle between the rotation controls. Replace the numeric velocity cell with a screen-coordinate velocity dial: a centered rocket rotates with attitude, the amber drift arrow follows actual velocity, and X/Y components are fainter. Signed components and speed remain numeric to two decimal places below the dial. Arrow length is bounded with a minimum visible drift length; it indicates direction rather than a calibrated linear speed scale. At rest the arrow is hidden. Browser visual verification was unavailable for this update.
+
+- Follow-up instrument simplification: remove the separate attitude circle and its numeric angle. Keep both rotation controls, the rotating rocket inside the velocity dial, its accessible rotation description, and the docking checklist angle requirement.
+
+- Bottom-console update: all flight instruments, controls, map, objective/status text, and the docking checklist move below the full-width view. Desktop order is throttle over fuel, motion dial with numeric speed/angle to its right, controls, and other information. Smaller screens wrap in that reading order. The throttle keeps native range semantics beneath an orange-to-red segmented meter. The checklist no longer causes an extra camera offset. Relay/pad distance is drawn beside the flashing target marker, not in a separate telemetry cell.
+- Thruster animation update: rotation was already charged attitude fuel; preserve that rate and show paired attitude jets. Exhaust particles inherit rocket velocity, eject from body-aligned nozzles, and use mild arcade drag to make trails visible at speed. Trails fade and are capped at 360 particles, reset on menus/new runs, and disabled for reduced motion. Translation exhaust follows the existing world-direction controls even when tilted. Browser visual testing remains unavailable.
+
+- Follow-up cockpit and RCS update: move the navigation map/environment label to the upper-left of the flight view and transient flight status to the upper-right. I/J/K/L accelerate along the rocket's local axes, with exhaust emitted from the corresponding local nozzles. Remove the small RCS sprite flames and strengthen their particle exhaust; retain the main engine plume. This supersedes the prior world-direction translation assumption. Browser visual testing remains unavailable.
+
+- Cockpit spacing update: remove the changing pilot guidance note from the console; the docking checklist and pre-flight briefing remain. Give desktop console columns wider proportional minimums, keep telemetry across its own row at intermediate widths, and retain the compact phone layout. Transient event feedback remains in the upper-right flight corner.
+
+- Latest cockpit request: visually place controls first, enlarged motion instrument second, wider propulsion/throttle/fuel meters third, and telemetry/checklist last. Put Menu/Esc in the upper-right flight corner. Widen the proportional desktop columns and extend the throttle/fuel bars with them. Remove the remaining static main-engine flame sprite; main and RCS thrust are represented by particles only.
+
+- Instrument spacing update: cap the main/attitude/RCS control group at 360 px on desktop (420 px on phone layouts). Use the right side of the motion panel for a two-column speed/rotation display and full-width X/Y readouts so expanded panel width contains telemetry rather than blank space.
+
+- Fixed-thrust cockpit update: remove throttle settings and force full main-engine output whenever held, including resumed older saves. Repurpose the orange segmented meter as instantaneous combined fuel draw normalized to main + two translation axes + rotation at once; the existing green meter remains fuel left. Arrange sections Propulsion, Motion, Flight Systems, Controls. Keep the motion text tightly grouped and correct the main exhaust nozzle scale/alignment.
+
+- Multiplayer implementation draft: see MULTIPLAYER_PLAN.md for proposed world/room limits, shared rules, networking, home allocation, cargo handling, and tuning. Those defaults are proposals; no multiplayer code has been implemented or deployed. The existing FLOW.md still describes the live singleplayer game.
+
+- Local conquest implementation (November 18): implement the reviewed multiplayer
+  gameplay locally, without opponents/bots or a network backend. The local galaxy
+  selector lists one real local world, not invented live servers. Twenty-four
+  planets are scattered around three stars; home is Earth. Capture requires hacking
+  every non-home relay. Home defense upgrades are disabled because its special shield
+  is already active. Session storage keeps a 30-second refresh recovery window and
+  local summaries, independently of old story records. UI and new flow replace the
+  previous story mode. Menus remain live; hidden-tab absence is simulated on return
+  only within the reconnect window. Defense interaction logic is tested using
+  explicit hostile fixtures, but no hostile ships or empires are spawned in play.
+- Coordinated control steering supersedes earlier I/J/K/L and keyboard turning:
+  W main thrust, S braking, mouse/trackpad steers with acceleration-limited lag,
+  Space fires, E interacts; A/D are lateral double-tap dashes. Preserve the stronger
+  108 m/s dash, 1% burst cost, two-second cooldown, and visible cyan directional cue.
+
+- Confirmed final control tuning: main-engine acceleration is 68 m/s²; total velocity is capped at 500 m/s after thrust/gravity/field forces and after dashes. The 108 m/s dash impulse, 1% fuel cost, and two-second cooldown are unchanged.
+
+- Relay docking guidance: show a flashing upright ghost within the existing 200 m assist radius, with a dotted guide from the rocket’s right-side bay. Keep the 100 m attachment radius, allow entry at up to 20 m/s and within ±35° of upright, and animate successful attachment for 140 ms. Failed attempts show a red reason for four gameplay seconds.
+
+- Docking UI clarification: replace the approach checklist with one compact cursor-following `[E] to dock` prompt. Hide the general keyboard hint while this prompt is visible to prevent overlap. Keep hacking/upgrade actions after attachment.
+
+- Station prompt revision: anchor the small E prompt beside its relay rather than beside the cursor; use a square keycap and short uppercase errors. Interpret “zoom out a bit” as a 20% decrease in map scale; planets and stars use circular markers proportional to their physical radii, with minimum sizes for readability.
+
+- S braking: remove axial velocity of either sign while preserving the perpendicular component. Use a 300 m/s² maximum and exponential easing at 8/s, snapping only the final 0.05 m/s to rest. Retain existing braking fuel cost and powerless coasting. S does not detach or launch a serviced ship. Turning still uses fuel but emits no particles.
+
+- Relay shop: T purchases the existing next planet defense tier. R is reserved and shows “Rocket upgrades coming soon”; its button is disabled until rocket upgrades exist. Planet artwork previews shields and turrets, while rocket artwork shows the standard hull. Purchases keep existing costs, ownership checks, and tracking.
+
+- Exploration/chat update: home stays a refueling refuge with no cargo production or relay. Move Moon to Earth's X and 1,400 units above it; its relay follows normal station geometry. New runs retain Moon as the initial target and flash its guidance. Capture shields expand for one second (disabled for reduced motion). Chat is local-only in this singleplayer build, uses “Pilot” and the player color, keeps at most 40 in-memory lines, and never uploads or persists typed content. Stars are 50% larger in both collision geometry and rendering to keep their visible boundary accurate.
+
+- Coordinated docking clarification: rotation no longer blocks attachment; range and entry speed still apply. The brief docking animation aligns the hull after attachment.
+
+- Chat composer replaces its hint in a fixed-height row. The larger Moon relay tutorial caption is shown until the first capture and wraps on narrow screens.
+
+- Compact galaxy/cargo attraction: use a 200-unit attraction radius and up to 35 m/s² gentle acceleration fading at the edge. Moon is now 1,100 units above Earth and Neptune 1,500 below, both at Earth’s X. Reduce system-center distances by 35% and orbital bands to 2,000/2,450/2,900, keeping the existing non-overlap and 1,000-unit star clearances.
+
+- Capture UI: a square number key pulses gently and flashes green for a matching number or red for a wrong number. Keep the existing fresh-key and timing guards; show only the progress bar beneath it and the detach action.
+
+- First shared-room implementation: cap at eight anonymous pilots, prefer homes
+  from a spread of planets, falling back to a free neutral planet when needed, and start Earth
+  pilots toward Moon. Send visible snapshots at up to 20 Hz, expire input after
+  300 ms, and use a 30-second reconnect reservation. Distant firing reveals a ship
+  for roughly 1.5 seconds. These limits are configurable starting choices to
+  profile on the class box.
+- Rocket costs 8/16/28/40 are approved starting values. Initial low-speed thrust
+  bonus is 50% plus 8% per later tier, fading with speed; each tier adds 8% steering
+  and braking agility. Tier 3 uses 20% less powered-control fuel; tier 4 adds 30%
+  bullet speed. These are playtest tuning, not new permanent game rules.
+- All multiplayer work and dependencies are local to this repository. No class-box
+  access, manual folder creation, production deployment, or system/global tool
+  changes have been performed. Runtime JSON is private/ignored; no paid backend
+  service is needed.

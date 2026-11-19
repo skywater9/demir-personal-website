@@ -1,5 +1,5 @@
-import { analyticsConfig } from './analyticsConfig.js?v=20261116-spark';
-import { firebaseConfig } from './firebaseConfig.js?v=20261116-spark';
+import { analyticsConfig } from './analyticsConfig.js?v=20261116-visit-log';
+import { firebaseConfig } from './firebaseConfig.js?v=20261116-visit-log';
 
 // Queue immutable batches in memory; retries reuse IDs and never expose database credentials.
 export function createAnalyticsTransport(useEmulators) {

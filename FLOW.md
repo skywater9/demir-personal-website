@@ -1,110 +1,207 @@
-# Rocket game player flow
+# Orbital Freight — runtime modes
 
-The game becomes the main website. Preserve the existing analytics and heatmap functionality. This document describes the player experience only; it does not change the website implementation.
-
-## Complete player experience
+A configured public server endpoint enables one shared galaxy. An empty endpoint
+keeps the local practice experience below. The class-box service must be deployed
+and its URL configured before multiplayer is live on Firebase.
 
 ```mermaid
 flowchart TD
-    visit["Visit the main website: rocket game"] --> menu["Start menu"]
-    menu --> saved{"Saved unfinished run available?"}
-    saved -->|No| start["Start"]
-    saved -->|Yes| choice{"Continue or New Run?"}
-    choice -->|Continue| restore["Restore saved run and record return to run"]
-    choice -->|New Run| confirm{"Confirm replacing saved progress?"}
-    confirm -->|Cancel| menu
-    confirm -->|Confirm| replace["Replace saved progress; retain previous run records"]
-    replace --> initialize
-    start --> initialize["Begin on Earth: full fuel tank, initial payload, Earth gravity, timer at zero"]
-    initialize --> launch
-    restore --> active
-
-    subgraph gameplay["Continuous gameplay: pixel art and simple 2D physics"]
-        active["Resume the saved gameplay state"]
-        launch["Launch from current landing pad with payload"]
-        launch --> fly
-        active --> fly["Fly toward the current target using throttle and direction controls"]
-        fly --> fuel{"Fuel empty?"}
-        fuel -->|Yes: immediate loss| failure
-        fuel -->|No| crash{"Crashed at excessive velocity?"}
-        crash -->|Yes| failure
-        crash -->|No| target{"Current target?"}
-
-        target -->|Station| approach["Escape planet gravity and approach station in low gravity"]
-        approach --> align["Use smaller thrusters to align the payload bay; consume less fuel"]
-        align --> dockReady{"Within docking distance and correct rotation?"}
-        dockReady -->|No| fly
-        dockReady -->|Yes| attach{"Player presses attach button?"}
-        attach -->|No| fly
-        attach -->|Yes| delivery["Attach to station and deliver payload"]
-        delivery --> finalStation{"Final destination's station?"}
-        finalStation -->|Yes| win
-        finalStation -->|No| nextPlanet["Set next planet landing pad as target"]
-        nextPlanet --> transit["Player flies to next destination; distances are not to scale"]
-        transit --> fly
-
-        target -->|Planet landing pad| descent["Approach landing pad under destination-specific gravity"]
-        descent --> gas{"Gas or ice giant?"}
-        gas -->|Yes| floating["Approach floating pad; visibility decreases inside atmosphere"]
-        floating --> jupiter{"Jupiter?"}
-        jupiter -->|Yes| wind["Slight atmospheric wind adds difficulty"]
-        wind --> landing
-        jupiter -->|No| landing
-        gas -->|No| landing{"Landed upright on pad at acceptable velocity?"}
-        landing -->|No: continue maneuvering and checking fuel/crashes| fly
-        landing -->|Yes| service["Automatically refuel, receive next payload, and target this destination's station"]
-        service --> launch
-    end
-
-    failure["Run lost: empty fuel tank or excessive-speed crash"] --> recordLoss["Persist failed run results: gameplay time and remaining fuel"]
-    recordLoss --> loseScreen["Lose screen: show time and fuel"]
-    loseScreen --> lossChoice{"Retry or return to menu?"}
-    lossChoice -->|Retry: restart entire journey on Earth| initialize
-    lossChoice -->|Return to menu| menu
-
-    win["Journey complete: final station payload delivered"] --> recordWin["Persist successful run results: gameplay time and remaining fuel"]
-    recordWin --> winScreen["Win screen: show time and fuel"]
-    winScreen --> menu
-
-    gameplay -.-> tracking["Throughout gameplay: count gameplay time only, save progress, and update HUD"]
-    tracking -.-> hud["HUD: fuel, elapsed gameplay time, altitude when in range, station distance, gravity, velocity, and rotation"]
-    tracking -.-> controls["Rocket-style control panel with control buttons; main thrust and smaller alignment thrusters consume fuel"]
-    tracking -.-> navigation["Small map or direction indicator points to current station or landing pad"]
-
-    gameplay -.-> interruption{"Refresh, exit, or return to menu during gameplay?"}
-    interruption -->|Return to menu| leave["Save progress, record leaving the run, and stop gameplay timer"]
-    leave --> menu
-    interruption -->|Refresh or exit website| unload["Retain saved progress and record departure where browser lifecycle permits; exclude time away"]
-    unload --> revisit["Refresh completes or player visits again"]
-    revisit --> menu
-
-    menu -.-> history["Previous run records remain available across refreshes and later visits"]
-    recordLoss -.-> history
-    recordWin -.-> history
-    leave -.-> history
-    unload -.-> history
-    restore -.-> history
+    website[Visit website] --> configured{Multiplayer endpoint configured?}
+    configured -->|No| local[Local practice flow below]
+    configured -->|Yes| onlineMenu[Play or Continue shared galaxy]
+    onlineMenu --> connect[Open secure WebSocket connection]
+    connect --> accepted{Connected and room has a slot?}
+    accepted -->|No| retry[Show connection or full-room reason; retry]
+    retry --> onlineMenu
+    accepted -->|New pilot| spawn[Assign free protected home, anonymous label and color]
+    accepted -->|Valid reconnect| recover[Restore server-confirmed state]
+    spawn --> shared[Fly in the shared galaxy; server owns outcomes]
+    recover --> shared
+    shared --> hack[Dock non-home relay and enter changing code]
+    hack -->|Wrong code| feedback[Flash red; progress unchanged]
+    feedback --> hack
+    hack -->|Correct code| progress{Capture complete?}
+    progress -->|No| hack
+    progress -->|Yes| capture[Transfer ownership, reset defenses, expand shield, announce capture]
+    capture --> shop[T planet purchase or R rocket purchase at owned relay]
+    shop -->|Server validates cargo and tier| purchase[Charge once, save state, confirm upgrade]
+    purchase --> shop
+    shop -->|E detach| shared
+    hack -->|E detach or disconnect| cancel[Reset partial hack]
+    cancel --> shared
+    shared --> pickup[Collect nearby attracting cargo once; server resolves ties]
+    pickup --> shared
+    shared --> refuel[Owned pad gradually refuels; home produces no cargo and has no relay]
+    refuel --> shared
+    shared --> chat[Slash opens room chat; Enter sends; Escape closes]
+    chat --> shared
+    shared --> death[Death drops cargo and removes one rocket tier]
+    death --> notice[Show tier loss during death and respawn at home]
+    notice --> shared
+    shared --> menu[Menu overlay; server simulation continues]
+    menu -->|Continue| shared
+    menu -->|Leave| release[Release territory immediately]
+    shared -->|Refresh or connection loss| grace[Clear inputs and hack; reserve pilot for 30 seconds]
+    grace -->|Reconnect in time| recover
+    grace -->|Expired| release
+    shared -->|Server restart| disk[Load durable galaxy; previously online pilots get 30 seconds to return]
+    disk -->|Return in time| recover
+    disk -->|No return| release
+    release --> onlineMenu
 ```
 
-## Destination order
+Rocket tiers are sequential: fading acceleration/weapon improvement, twin gun,
+fuel efficiency, then faster alternating barrels and bullet speed. Death floors
+the tier at zero. Chat contents and reconnect credentials never enter analytics.
+The server broadcasts public planet colors and only relevant remote ship states.
 
-Each destination supplies payload for its own station. After delivering that payload, the player manually flies to the next destination. The initial Earth launch begins with payload and a full tank; subsequent successful pad landings automatically provide refueling and the next payload.
+---
+
+# Orbital Freight — local conquest player flow
+
+The homepage is a local, open-world conquest game. There are no other players or
+bots in this version. Three scattered star systems share one galaxy with 24
+planets; Earth is the pilot's protected home. The previous finite journey has
+been replaced. This chart describes the implemented local experience.
 
 ```mermaid
-flowchart LR
-    earthStart["Earth: start"] --> moon["Moon"]
-    moon --> venus["Venus"]
-    venus --> mercury["Mercury"]
-    mercury --> earthReturn["Earth: return"]
-    earthReturn --> mars["Mars"]
-    mars --> jupiter["Jupiter"]
-    jupiter --> saturn["Saturn"]
-    saturn --> uranus["Uranus"]
-    uranus --> neptune["Neptune"]
-    neptune --> lastDelivery["Deliver Neptune payload to its station"]
-    lastDelivery --> complete["Journey complete"]
+flowchart TD
+    visit[Visit website: conquest menu and anonymous tracking notice] --> saved{Valid local galaxy saved within 30 seconds?}
+    saved -->|Yes| menu[Show Continue, New Galaxy, Local Galaxy and Flight Records]
+    saved -->|No or expired| fresh[Show Play, Local Galaxy and Flight Records]
+    fresh -->|Play| start[Create galaxy: protected home, full fuel, zero cargo; flash arrow toward Moon relay]
+    menu -->|Continue| resume[Clear held controls; resume local galaxy]
+    menu -->|New Galaxy| confirm{Confirm replacing current galaxy?}
+    confirm -->|Cancel| menu
+    confirm -->|Confirm| archive[Retain summary and create fresh galaxy]
+    archive --> start
+    fresh -->|Local Galaxy| directory[Search local galaxy listing]
+    menu -->|Local Galaxy| directory
+    directory -->|No matching search| empty[Show no matching local galaxy]
+    empty --> directory
+    directory -->|Join| join{Existing local galaxy?}
+    join -->|Yes| resume
+    join -->|No| start
+    directory -->|Back| menu
+    fresh -->|Flight Records| records[Read conquest summaries and earlier story records]
+    menu -->|Flight Records| records
+    records -->|Back| menu
+    menu -->|Briefing| briefing[Read controls and conquest rules]
+    fresh -->|Briefing| briefing
+    briefing --> menu
+    start --> flight[Fly, aim, fire, explore and manage fuel]
+    resume --> flight
+    flight -->|Map click or destination selector| target[Set relay or pad destination]
+    target --> flight
+    flight -->|Approach relay| checks[Show proximity ghost, bay guide and compact station-side E prompt]
+    checks -->|Unavailable E press| dockError[Show blocking reason in red below relay dialog]
+    dockError --> checks
+    checks -->|Leave range| flight
+    checks -->|Within 100 m, ≤20 m/s and E| attach{Owned relay?}
+    attach -->|No| hack[Dock and enter displayed digit; firing disabled]
+    hack -->|Wrong key or held repeat| hack
+    hack -->|Correct fresh key| progress{Hack complete?}
+    progress -->|No| hack
+    progress -->|Yes| capture[Capture planet; reset level and stored cargo]
+    capture --> captureEffect[Expand shield in player color; announce capture in local chat]
+    captureEffect --> upgrade[Show planet preview and T upgrade cost beside rocket preview and unavailable R option]
+    attach -->|Yes| upgrade
+    hack -->|E detach| cancel[Reset all hack progress]
+    cancel --> flight
+    upgrade -->|Enough cargo and T or click| purchase[Deduct cargo; upgrade only attached relay's planet]
+    purchase --> upgrade
+    upgrade -->|R| rocketPurchase[Buy next rocket tier with carried cargo]
+    rocketPurchase --> upgrade
+    upgrade -->|Insufficient cargo, home or final tier| unavailable[Explain unavailable purchase]
+    unavailable --> upgrade
+    upgrade -->|E detach| flight
+    flight -->|Land upright on owned pad| service[Automatically collect cargo and refill tank]
+    service -->|Stay| refill[Refill slows near full; home refills faster]
+    refill --> service
+    service -->|Take off| flight
+    flight -->|Neutral or hostile pad landing| noservice[No refuel or cargo; landing never captures]
+    noservice --> flight
+    flight -->|Zero fuel| emptyfuel[Coast under gravity; show self-destruct option]
+    emptyfuel -->|Reach owned pad| service
+    emptyfuel -->|Self-destruct| selfconfirm{Confirm cargo loss and respawn?}
+    selfconfirm -->|Cancel| emptyfuel
+    selfconfirm -->|Confirm| death[Explosion; drop carried cargo; lose one rocket tier; retain territory]
+    flight -->|Hostile projectile or fast impact| damage[Fuel damage; white leak particles]
+    damage -->|Damage exceeds fuel before hit| death
+    damage -->|Fuel covers damage, including equality| flight
+    flight -->|Star contact| death
+    death --> respawn[Respawn at protected home: full fuel, zero carried cargo]
+    respawn --> flight
+    flight -->|Slash| chat[Focus local chat; typing does not control rocket]
+    chat -->|Enter| sendChat[Append text locally; never upload chat contents]
+    sendChat --> flight
+    chat -->|Escape| flight
+    flight -->|Approach nearby attracting cargo and touch it| pickup[Collect cargo pickup]
+    pickup --> flight
+    flight -->|Escape or Menu| livemenu[Menu overlay; galaxy continues and held controls stop]
+    livemenu --> menu
+    menu -->|Continue| flight
+    flight -->|Refresh, close or hidden tab| leave[Save state; clear controls; cancel active hack]
+    leave --> reconnect{Return within 30 seconds?}
+    reconnect -->|Yes| recover[Simulate short absence: coasting, production and respawn]
+    recover --> menu
+    reconnect -->|No| expire[Expire galaxy; retain session summary]
+    expire --> fresh
 ```
 
-Gravity changes for each destination and decreases away from the planet. Exact gravity values, fuel/refueling quantities, landing velocity limits, and docking tolerances remain unspecified; the flow does not assign them. The final fuel rule is immediate failure at an empty tank, including during coasting.
+## Continuous rules
 
-Saved unfinished runs support Continue or New Run, with confirmation before replacement. Session time counts gameplay only. Leaving and returning are recorded separately from wins and losses. Progress must survive refreshes and later visits; reliable exit recording is subject to browser lifecycle limitations. Storage technology and exact save timing are not specified here.
+- W burns at full thrust; S brakes only along the nose axis, preserving sideways drift without reversing motion. Mouse/trackpad steering follows the cursor
+  with an acceleration-limited turn. Space fires; E attaches/detaches. Number
+  keys 1–0 enter relay challenges. Double-tap W/A/S/D for rocket-relative dashes.
+- The top-right map shows all planets, their ownership, home, stars, and target.
+  There is no route progress bar or final win condition.
+- All non-home planets start neutral. Hacking starts with digits 1–3; stronger
+  defenses expand the digit pool and increase required presses. Detaching resets.
+- Cargo is one resource. Owned planets produce it; owned-pad landings automatically
+  collect it. Any owned relay can upgrade only its own planet.
+- The upgrade sequence is bullet barrier → turret → outer field. Newly captured
+  worlds have a weak field. Small fields gently repel hostile rockets; hard bullet
+  barriers still allow rockets inside. Friendly shots ignore friendly barriers.
+- Home cannot be captured and has a hard shield against hostile ships/shots.
+- Turret shots are blocked around the relay refuge; player shots are not.
+  The simulation supports these rules, but the local galaxy contains no opponents.
+- Fuel reaching zero never ends a session. Coasting, gravity and shooting continue.
+  Owned-pad refueling is free, faster when empty, and faster at home.
+- Shots and fast impacts consume fuel; impact loss grows with speed. White
+  particles show each hit. Equal damage leaves zero fuel; exceeding fuel kills.
+- A fatal hit, star contact or confirmed self-destruct drops cargo and
+  respawns at home. Planet ownership/upgrades survive death. Floating cargo expires.
+- Live menus do not pause production or flight. Hidden tabs/refresh recover within
+  30 seconds; later returns expire the local galaxy. Browser storage denial is shown.
+- Starting a new galaxy requires confirmation and archives a summary. Earlier story
+  flight records remain accessible and are not converted to conquest territory.
+
+## Anonymous event logging
+
+The menu discloses tracking and reports whether events are saved/pending. The
+owner reads chronological rows at `/analytics.html`, with random visit IDs and
+wall-clock/elapsed timestamps. Local development never uploads to production.
+
+| Experience | Recorded events |
+| --- | --- |
+| Arrival, return, departure | pageView, pageReturn, pageLeave |
+| First intentional action and choices | firstAction, click, screenView |
+| Briefing and record views | briefingToggle, screenView |
+| Enter, resume, replace, expire local galaxy | conquest lifecycle actions |
+| Held flight and firing controls | controlPress/controlRelease; firing interval start/end |
+| Map target choice | mapTarget, without coordinates or typed search |
+| Docking approach, attach and detach | dockingChecklist, docked/detached |
+| Hacking | start, progress milestones, cancellation and capture; no entered digits |
+| Cargo | collection, drop and pickup amounts |
+| Fuel service | refueling start/end |
+| Upgrades | accepted/rejected outcome and tier |
+| Fuel damage | bounded damage amount and remaining fuel |
+| Destruction and respawn | death, respawn and self-destruct choices |
+| Continued visible visit | bounded periodic heartbeat |
+
+Events omit names, typed text, raw keys, aim coordinates, reconnect secrets and
+persistent player identity. Delivery remains best effort if the browser closes
+or the network blocks analytics. Historical rows remain readable.
+
+Home planets have no relay or cargo production. New runs guide the player to the Moon relay above Earth. Chat is local-only until multiplayer exists.

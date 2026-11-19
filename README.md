@@ -1,8 +1,71 @@
 # Orbital Freight
 
-A buildless, pixel art rocket game with continuous 2D flight, changing planetary
-gravity, payload deliveries, and a limited fuel supply. The game is the homepage;
-the available analytics overview is at `/analytics.html`.
+An open-world pixel-art conquest game with local practice and a shared multiplayer server. Explore three scattered star systems,
+hack relays to capture planets, collect cargo, refuel, and upgrade your territory.
+This replaces the finite story journey. A configured server hosts one shared galaxy;
+without an endpoint the game runs locally. The class-box service has not been
+deployed by this implementation. See [server setup](server/README.md).
+
+## Local conquest
+
+- **Play** starts on protected Earth with full fuel and no cargo. Other planets are neutral.
+- **W** thrusts forward at 240 m/s²; **S** rapidly brakes along the nose axis (up to 300 m/s²), tapering near rest without reversing velocity or removing sideways drift. Rocket speed has no cap. Mouse/trackpad steers the rocket toward the cursor with fast, smooth turning (8 rad/s maximum, 150 rad/s² acceleration). Turning has no thruster particles; the main engine and braking retain their effects. **Space** shoots, **E** attaches/detaches, and the displayed number key advances hacking. A W/S/Space guide follows the cursor; each line highlights and fades one second after its key is pressed.
+- The larger bottom-right flight readout shows remaining fuel with a pale usage overlay and red damage overlay, plus a large cargo count. Cargo pickups fly from the rocket to the cargo icon, which enlarges and flashes after arrival; an empty cargo count shows a “COLLECT CARGO” prompt. The square galaxy map stays centered on the player, brings the solar systems closer together, and outlines the rocket in its player color. Clicking a planet chooses its relay or landing pad based on ownership.
+- Camera zoom widens gently as speed rises and eases back in when slowing.
+  Landing and docking retain a close view.
+- Click a neutral planet to target its relay, or an owned planet to target its landing pad. Cargo must be collected in flight.
+- Dock within 100 m at 20 m/s or less, at any rocket rotation. Within 200 m, a flashing ghost ship marks the docking position and a dotted line connects your right-side bay to it. The station shows a small square E docking cue; an unavailable attempt explains why in red below the relay dialog. Successful docking plays a 140 ms visual alignment animation. Complete the displayed changing-digit
+  challenge to capture neutral planets. Wrong keys do nothing; detaching resets it.
+- Owned planets bank cargo, then release pods from their surfaces into close orbits
+  at random altitudes 70–160 m above the surface, with small random variations in orbital speed and direction. Fly through the pods to collect cargo; landing only refuels.
+  The small force field
+  extends 200 m above the surface. Refilling is free of cargo cost, faster when empty,
+  slower near full, and faster at home. Zero fuel leaves you coasting, with an explicit
+  self-destruct choice.
+- At any owned non-home relay, buy that planet's next defense: bullet
+  barrier, turret, then large outer field. Home keeps its special hard shield.
+- Shots cost 5 fuel points. Fast impacts cost more fuel as speed rises above the
+  former crash thresholds (25 m/s at surfaces, 30 m/s at stations): half a fuel
+  point per excess m/s, rounded up with a minimum of one. Damage releases white
+  fuel-leak particles; surviving impacts bounce gently.
+- Damage greater than remaining fuel destroys the rocket. Equal damage leaves
+  zero fuel and a surviving rocket; another damaging hit at zero is fatal.
+  Stars and confirmed self-destruct remain lethal. Death drops carried cargo;
+  home respawn restores fuel and retains owned planets and planet upgrades; one rocket tier is lost.
+- The local galaxy browser lists/searches the one local galaxy; it is not a network
+  server directory. Multiplayer hosting and other pilots are deferred.
+- Menus remain live. Refresh/return within **30 seconds** to recover your world.
+  Longer absences expire it. A local session summary is retained. Earlier story
+  records remain in Flight Records; their storage is never overwritten.
+- Saves use this tab's sessionStorage. Closing a tab permanently may clear them;
+  browser restoring the same tab can recover only within the reconnect allowance.
+- Fuel and cargo appear together in the bottom-right flight HUD beside the map. Damage releases bright white sparks from the rocket and a short particle burst along the fuel gauge. The speed counter, circular
+  velocity dial, and rotation-degree readout are not displayed. Relay approach, hack,
+  and upgrade controls appear above the relay in the flight view.
+- The anonymous tracking notice and delivery status are in the menu. The existing
+  private dashboard at `/analytics.html` includes conquest events.
+
+Run locally from this repository:
+
+```sh
+python3 -m http.server 8001 --directory public
+```
+
+Open <http://localhost:8001/>. No game server, account, dependency installation,
+or billed service is needed for this local version. Local play does not send
+analytics to production. The existing Firebase site remains the deployment target.
+
+The full multiplayer design remains in [MULTIPLAYER_PLAN.md](MULTIPLAYER_PLAN.md).
+The implemented local experience is charted in [FLOW.md](FLOW.md). Test commands,
+coverage and manual playtesting are in [TESTING.md](TESTING.md).
+
+## Earlier singleplayer implementation reference
+
+The sections below preserve historical deployment and story-game details. Route
+progression, final delivery wins, old controls and persistent story saves describe
+the retired journey, not the new conquest homepage. The new local flow above and
+FLOW.md take precedence. Existing legacy modules remain available for regression
+checks and earlier records; the homepage loads conquestApp.mjs instead.
 
 ## Published Spark setup
 
@@ -11,7 +74,7 @@ the available analytics overview is at `/analytics.html`.
 - Google Analytics property: <https://analytics.google.com/analytics/web/#/p561590091/realtime/overview>
 - The Firebase project stays on the no-cost Spark plan. No Cloud Functions or
   other billing-required features are deployed. The production analytics page
-  shows the free overview and hides inactive custom session/heatmap controls.
+  reads saved event rows directly from Firestore; its Google sign-in is owner-only.
 - Google Analytics records normal page analytics plus `game_started`,
   `game_continued`, `game_left`, `game_suspended`, `game_landed`, `game_delivered`,
   `game_won`, `game_lost`, and `game_abandoned`. Parameters include route index,
@@ -23,8 +86,70 @@ the available analytics overview is at `/analytics.html`.
   Publish the free static setup with:
 
 ```sh
-firebase deploy --only hosting --config firebase.spark.json --project demir-personal-website
+firebase deploy --only hosting,firestore:rules,auth --config firebase.spark.json --project demir-personal-website
 ```
+
+## Anonymous event log (current production implementation)
+
+1. Open the live game in a private window or on a phone. The menu discloses tracking.
+2. Start, use keyboard or onscreen controls, approach a docking bay, open the menu,
+   continue, and finish or leave a flight. Wait for **EVENT LOG / SAVED** in the footer.
+3. On your own device, open `/analytics.html` and sign in with the same Google account
+   used to manage this Firebase project. Choose a visit to read all its numbered rows.
+4. Each row shows event name, fixed target label, wall-clock time, seconds since arrival,
+   and relevant gameplay metrics. Load more rows for long visits; Refresh fetches updates.
+5. Confirm arrival, first action, clicks, screen choices, held control presses/releases,
+   held thrust/rotation/RCS controls, docking checklist/attempts, landing/refueling, delivery, result,
+   departure and return match `FLOW.md`. Clicks on non-interactive elements are logged
+   by tag. Briefing/history expansion choices are recorded. Gameplay events include
+   fuel, route index, delivery count, and gameplay seconds.
+6. Refresh mid-flight: game progress survives independently, and the same tab visit
+   continues with a `pageView` marked restored. Previous completed game records stay local.
+7. Sign out: private rows clear immediately. A different Google account has no log access.
+
+Implementation: `visitLog.mjs` captures events; `visitLogCore.mjs` holds the bounded
+schema/outbox; `visitLogDashboard.mjs` reads owner-authorized Firestore queries.
+`visitLogs/{sessionId}` holds a visit summary and `events/{sequence}` holds immutable
+rows. Random anonymous Auth credentials authorize a writer; no visitor account UI is
+required. A server-issued `analyticsOwner` custom claim authorizes only the existing
+owner account. Visitor writer auth and owner dashboard auth use separate Firebase apps.
+No Cloud Functions, paid plan, App Check key, or new dependency is needed.
+
+- The tab's sessionStorage holds pending rows and stable sequence IDs across refreshes.
+  A new tab/visit gets a random session ID. Refresh after 30 minutes of inactivity or
+  24 hours starts a fresh visit. Closing the tab can lose rows not yet acknowledged.
+- Uploads run every 5 seconds or 12 queued events, with retry/backoff up to 60 seconds.
+  Requests use `keepalive`; deterministic IDs prevent duplicates after uncertain commits.
+  Foreground heartbeats every 20 seconds bound the unknown gap when an exit is missed.
+  Browser crashes, disabled storage, blockers, network loss, and exhausted quotas can
+  still prevent collection. The footer reports saved, pending, or connection failure.
+- Observed site time is last event minus arrival, and can include time away between
+  return events. The game timer separately counts only active gameplay.
+- Strict allowlists exclude names, emails, typed text, raw keys, run IDs, URLs/referrers,
+  and IP addresses from event documents. Firebase/Hosting have their own platform logs.
+  The private summary contains a random anonymous writer UID only for access control.
+- Up to 5,000 rows are accepted per visit. Spark remains subject to its free quotas
+  (currently 20,000 writes and 50,000 reads/day); hitting them interrupts collection
+  instead of authorizing a billed upgrade. Summary updates also consume writes.
+  See [Firestore quotas](https://firebase.google.com/docs/firestore/quotas).
+- Saved rows have no automatic expiry. Dashboard queries load 25 visits or 100 events
+  per page using standard single-field indexes. The older Functions heatmap stays inactive.
+- Localhost gameplay deliberately does not upload production event logs. Test the real
+  rules with the Auth/Firestore emulators, or use the live private-window verification above.
+
+Run offline unit/DOM checks with `node --experimental-vm-modules --test tests/*.test.mjs`.
+Rules integration tests additionally require `FIRESTORE_EMULATOR_HOST` and
+`FIREBASE_AUTH_EMULATOR_HOST`; run `firebase emulators:exec --only auth,firestore
+--project demo-website-analytics 'node --test tests/visitLogRules.test.mjs'`.
+If default emulator ports are occupied, supply a temporary config with free ports.
+The integration test checks real anonymous writes, owner queries, duplicate commits,
+out-of-order batches, cross-visitor denial, forbidden text fields, bounds, and immutability.
+Automated DOM tests do not substitute for visual browser playtesting.
+Production REST verification saved a two-row backend test visit
+`bc2a3cd8-f432-4739-adab-2c6e28bd012b` (arrival/departure only); it is not a
+player run and contains no fabricated gameplay outcomes. Released static files
+were compared to local sources, anonymous writes/readback succeeded, visitor
+listing was denied, and the billing API confirmed billing remains disabled.
 
 ## Play locally
 
@@ -41,37 +166,83 @@ updated UI. Update those tokens together when releasing further game changes.
 
 | Control | Action |
 | --- | --- |
-| Hold Space or Up | Burn the main engine; release to coast |
-| W / S | Increase / decrease throttle by 5% |
+| Hold W, Space or Up | Burn the main engine; release to coast |
 | A / D or Left / Right | Rotate counterclockwise / clockwise |
-| I / J / K / L | Small thrusters: up / left / down / right in world directions |
+| K | Brake: backward thrust relative to the rocket; aim to oppose your motion |
+| Double-tap W / A / S / D | Dash forward / left / backward / right relative to the rocket |
 | E | Attach and deliver when all bay checks are green |
 | Escape | Save and return to the menu |
 
-All flight actions also have on-screen controls, including simultaneous touch
-inputs. Keyboard users can Tab to a control and hold Space or Enter to operate it.
+Held flight actions also have on-screen controls, including simultaneous touch
+inputs. Dashes use the keyboard: press the same W/A/S/D key twice within 250 ms
+to add an instant 54 m/s burst in that rocket-relative direction. Each dash spends
+1 percentage point of fuel. All directions share a 2-second cooldown measured in
+active flight time, preserved across saves. Taps during cooldown do not queue a
+future dash; holding a key does not repeat dashes. W burns the main engine and A/D retain their held rotation actions. Keyboard users can Tab to a control and hold Space or Enter to operate it.
 
 The route is Earth → Moon → Venus → Mercury → Earth → Mars → Jupiter → Saturn →
 Uranus → Neptune. Each stop starts with a payload for its relay. Deliver it, then
 manually fly to the next landing pad. A safe upright landing grants fuel and the
-next payload once per route stop. Deliver the Neptune payload to win. Excessive
+next payload once per route stop. The tank holds half the original fuel supply;
+the gauge still reads 0–100%. Every pad adds 25 percentage points, capped at full,
+and each route stop can refuel only once. Existing saved fuel percentages and
+previous flight records remain readable. Deliver the Neptune payload to win. Excessive
 impact speed or an empty tank ends the run; Retry starts over on Earth.
 
+The flight view is full width. Its bottom console runs left to right: propulsion
+with a live combined fuel-use meter above remaining fuel; a larger rocket
+velocity/heading dial with a vertical divider before speed and stacked X/Y, and a horizontal divider above rotation; flight systems
+information in paired TITLE: value rows (time/objective, altitude/gravity, deliveries/payload); then flight controls. The main engine always runs at 100% when held. The desktop console is 180 px tall;
+the propulsion panel shows only fuel use and remaining fuel, with low fuel indicated by color.
+Numbered console headings, the screen-direction caption, and the bottom footer are omitted.
+The Menu/Esc button sits at the
+flight view's upper-right; the navigation map and environment label sit upper-left,
+with flight status messages and docking checks rising from the bottom-right of the flight view. The console keeps four columns on large
+screens, switches to three columns on intermediate screens, and wraps to two or
+one column on smaller screens. The orange usage meter rises with combined main,
+attitude, and small-thruster fuel draw; more simultaneous thrust fills it
+further.
+
+Use the A/D rotation buttons on the control panel; heading is shown in the velocity dial.
+Holding a turn gently increases its speed from 1.55 to 2.15 rad/s over two seconds.
+Releasing or reversing resets the ramp; there is no rotational drift after release.
+The bottom-console velocity dial keeps a rocket icon centered and rotates it with the
+ship's heading. Its bright amber arrow shows actual drift in screen coordinates,
+with fainter X/Y components and dashed projection guides; +Y points downward.
+Arrow length is bounded to keep both tiny drifts and fast flight readable, so the
+speed beside the dial (two decimal places, m/s) is the magnitude reference. The
+rotation angle and signed X/Y speeds sit alongside it in quieter text. The separate rotation/speed telemetry
+cells are replaced by these instruments. Stationary flight hides the arrow.
+
 Use the amber target indicator and navigation map. Land within ±12° upright and
-at ≤ 8 m/s. Dock within 32 m of the bay marker, at ≤ 5 m/s and ±12° upright. Your
-rocket's nose must point up (0°) for docking. Station impacts below 20 m/s bounce;
-impacts at 20 m/s or faster end the run. Planet impacts retain the 8 m/s landing
-limit. Failed runs show a brief pixel explosion before the recorded result.
+at ≤ 12 m/s. Dock within 32 m of the bay marker, at ≤ 8 m/s and ±12° upright. Your
+rocket's nose must point up (0°) for docking. Station impacts below 30 m/s bounce;
+impacts at 30 m/s or faster end the run. Surface impacts above 12 m/s through
+25 m/s bump gently without landing or refueling; faster surface impacts crash. Rebound
+speed is capped at 6 m/s, with at most 3 m/s away from the contact. Failed runs show a brief pixel explosion before the recorded result.
 The enlarged destination indicator pulses once per second, or stays steady with
-the browser's reduced-motion preference.
+the browser's reduced-motion preference. Distance to the active relay or pad is
+printed beside that indicator, both on-screen and at the edge; there is no
+separate relay-distance telemetry cell.
+
+Rotation already consumes attitude fuel. Paired cool-colored attitude jets now
+show the turn direction. The K brake fires backward relative to the rocket's nose,
+and cool exhaust particles show its thrust without separate RCS sprite
+flames. Main engine thrust also appears as particles, with no static flame sprite.
+Exhaust particles inherit the rocket's world velocity and drift with mild arcade
+drag, so fast flight and turns leave motion-aware trails. Particles fade, clear
+between runs/menus, and are capped at 360. Reduced-motion mode keeps the jet cues
+and omits particle trails, including the brief cyan dash bursts. These effects do not change flight or fuel physics.
 
 A compact docking checklist appears within 200 m of a bay. It shows live distance, speed,
 and nose-up rotation requirements with checkmarks. Keep flying while it is open;
-when all three checks pass, press E or Attach & Deliver. A small camera offset leaves room
-for the checklist, which closes after delivery or when you leave the approach.
+when all three checks pass, press E or Attach & Deliver. The checklist rises from the bottom-right of the
+flight view and closes after delivery or when you leave the approach; it does
+stay within the flight view with scrolling available on short screens; no camera offset is applied.
 
-Your bay is on the rocket's right side. After delivery, use left RCS (J) to detach and
-back away from the receiver before accelerating. Gas giants have floating pads and reduced atmospheric visibility;
+Your bay is on the rocket's right side. After delivery, use W main thrust to detach
+and clear the receiver before turning toward the next pad. I/J/L controls and lateral
+thruster buttons and the small forward thruster are removed. K retains its original strength and fuel use. Gas giants have floating pads and reduced atmospheric visibility;
 Jupiter also has a small lateral wind. Distances and planet sizes are arcade scale.
 
 ## Saves and flight records
@@ -103,13 +274,20 @@ data are centralized in `public/scripts/rocketPhysics.mjs`.
 ## Verify the game
 
 ```sh
-node --test tests/*.test.mjs
+node --experimental-vm-modules --test tests/*.test.mjs
 npm --prefix functions test
 ```
 
 Use Node.js 22 or newer. Game tests use built-in Node modules and do not need
 installed dependencies. The analytics tests use the existing Functions setup.
 See [TESTING.md](TESTING.md) for coverage, emulator checks, and the playtest checklist.
+
+## Legacy Functions-based analytics (not the production Spark log)
+
+The following sections document the retained earlier implementation and its local
+emulator tests. Their Functions/API deployment instructions do not apply to the
+current direct-Firestore event log above. The old dashboard markup is retained only
+as a test fixture at `tests/fixtures/legacyAnalytics.html`.
 
 ## Analytics: step 1 local preview
 
@@ -391,3 +569,43 @@ operations, date validation, pagination across empty batches, owner authorizatio
 and clearing the heatmap on sign-out. Actual browser rendering and visual alignment
 remain part of manual verification. Custom production collection and Functions
 deployment remain disabled on Spark; the game and analytics overview are published.
+
+Docking approach uses a compact `[E] to dock` prompt beside the station instead of the old orientation/speed checklist. An unsuccessful E press shows a red reason beneath the prompt for four gameplay seconds. Attached relay hacking and upgrade controls remain available.
+
+The station prompt stays anchored to the relay as the camera moves. Failed docking shows only `NOT IN RANGE`, `SLOW DOWN`, or `UNAVAILABLE`. The player-centered map is zoomed out 20% from the previous view and shows planets and stars as circles sized by radius.
+
+Owned relay shops show side-by-side planet and rocket previews. Press **T** or click the planet button to buy its next defense tier at the displayed cargo cost. **R** buys the next rocket upgrade at the displayed cargo cost. Holding T never repeats purchases.
+
+The shop places Rocket on the left and Planet on the right. Planet prices appear as a yellow number and cargo-crate icon.
+
+Owned relay shops display a large “BUY UPGRADE” heading below the relay name.
+
+Gas and ice giant approaches use a clear flight view, without the atmospheric tint or low-visibility banner.
+
+Home planets produce no cargo and have no relay or relay collision; they remain refueling refuges. Legacy home cargo pods are removed on the next simulation step. The Moon sits 1,100 world units above Earth, and new runs start with flashing Moon relay guidance. Capture plays a one-second expanding shield in the player's color and adds a colored announcement to the borderless local chat feed above fuel. Press `/` to type, Enter to send, or Escape to close. Chat is local-only, bounded to 40 lines, and never saved or uploaded to analytics. The minimap player marker is larger and nearly white. System stars are 50% larger with brighter colors and a broad glow.
+
+The chat hint reads “Press / to chat.”; opening chat replaces that line with a faint rectangular input without moving the feed. Initial Moon relay guidance uses a larger arrow and the large caption “CAPTURE PLANETS TO GAIN CARGO,” which disappears after the first capture.
+
+Cargo within 200 world units gently accelerates toward a live player, with attraction fading to zero at the edge. Distant cargo keeps its existing drift or orbit. Neptune sits directly below Earth, opposite the Moon. Planetary orbit spacing is reduced to 2,000–2,900 units and system centers are 35% closer; planets, relays, and stars retain their tested clearances. Saved landed/docked ships follow relocated pads and relays.
+
+The capture panel reads “CAPTURE PLANET” and “Enter code,” followed by a pulsing square number key, progress bar, and E to detach. Correct number presses flash green; wrong numbers flash red. Reduced motion disables the key pulse.
+
+Gun tips heat with firing, smoke during overheating, and lock fire for 2.5 seconds while cooling. Shots add a small opposite-direction impulse in flight. Cargo orbital speed varies by ±14%.
+
+Chat messages, hint, and typed input share the same font size and left text edge.
+
+## Multiplayer implementation
+
+The Node server, durable shared galaxy, browser connection, remote ship rendering,
+room chat, reconnect handling, and four rocket tiers are implemented locally.
+Run the service only after the class-box manual setup is complete; see
+[server/README.md](server/README.md) for assigned-port and `svc` instructions.
+Configure the public endpoint in `public/scripts/multiplayerConfig.mjs` after
+the box is ready. Empty configuration retains local practice. The published
+Firebase site is not changed automatically by editing this repository.
+
+Rocket tiers cost 8, 16, 28, and 40 cargo initially. R buys the next rocket tier
+at an owned relay; T buys the attached planet's defense. Death removes one rocket
+tier and shows the loss during respawn. Saved multiplayer state and reconnect
+credentials are separate from old local conquest saves. Chat is broadcast within
+the room but not persisted or uploaded to analytics.

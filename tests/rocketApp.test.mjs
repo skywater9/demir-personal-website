@@ -6,9 +6,9 @@ import { RocketRenderer } from '../public/scripts/rocketRenderer.mjs';
 import { saveKey } from '../public/scripts/rocketStorage.mjs';
 import { createRun, routeBody, bodies, dockingPoint, tuning } from '../public/scripts/rocketPhysics.mjs';
 
-const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('./fixtures/storyGame.html', import.meta.url), 'utf8');
 
-// Implement just the event and element interfaces the app uses, with IDs parsed from the actual homepage.
+// Implement just the event and element interfaces the app uses, with IDs parsed from the archived story-mode fixture.
 function makePage() {
     const page = { visibilityState: 'visible', activeElement: null, handlers: new Map() };
     class Element {
@@ -103,7 +103,7 @@ function makeStorage() {
     return { getItem(key) { return data.get(key) ?? null; }, setItem(key, value) { data.set(key, value); } };
 }
 
-// Build the live application against the homepage fixture with a renderer that cannot start background work.
+// Build the legacy application against its archived fixture without starting background work.
 function makeApp(storage = makeStorage(), lockManager = { request(name, action) { return action(); } }, realRenderer = false) {
     const { page, nodes, controls } = makePage();
     const browserWindow = {
@@ -176,12 +176,12 @@ test('menu and refresh preserve velocity and fuel, record leave/return, and excl
 test('switching away suspends only once and clears all held keyboard and touch inputs', () => {
     const { app, nodes, page, browserWindow } = makeApp();
     nodes.get('startButton').fire('click');
-    page.fire('keydown', { code: 'Space' });
-    const rcs = app.heldButtons.find(button => button.dataset.control === 'rcsRight');
+    page.fire('keydown', { code: 'KeyW' });
+    const rcs = app.heldButtons.find(button => button.dataset.control === 'rcsDown');
     rcs.fire('pointerdown', { pointerId: 2 });
-    assert.deepEqual(app.currentInput(), { burn: true, rotate: 0, rcsX: 1, rcsY: 0 });
+    assert.deepEqual(app.currentInput(), { burn: true, rotate: 0, rcsX: 0, rcsY: 1 });
     nodes.get('burnButton').fire('pointercancel', { pointerId: 1 });
-    assert.equal(app.currentInput().rcsX, 1);
+    assert.equal(app.currentInput().rcsY, 1);
     page.visibilityState = 'hidden';
     page.fire('visibilitychange');
     browserWindow.fire('pagehide');
@@ -304,6 +304,10 @@ test('dialogs contain Tab navigation and focused engine buttons support keyboard
     assert.equal(page.activeElement, nodes.get('startButton'));
     nodes.get('startButton').fire('click');
     nodes.get('burnButton').focus();
+    nodes.get('burnButton').fire('keydown', { code: 'Space' });
+    page.fire('keydown', { code: 'Space', target: nodes.get('burnButton') });
+    assert.equal(app.currentInput().burn, false);
+    page.fire('keyup', { code: 'Space' });
     nodes.get('burnButton').fire('keydown', { code: 'Enter' });
     assert.equal(app.currentInput().burn, true);
     page.fire('keyup', { code: 'Enter' });
@@ -375,4 +379,225 @@ test('renderer exercises all planet and atmosphere paths with finite canvas coor
     renderer.draw({ ...createRun(), x: 0, y: -4000 }, {}, true);
     for (const progress of [0, 0.4, 0.9]) renderer.draw({ ...createRun(), status: 'lost' }, {}, false, 1 / 60, progress);
     assert.ok(drawCalls > 1000);
+});
+
+test('game tracking reports screen choices, held control transitions and docking attempts', () => {
+    const { app, nodes, page, browserWindow } = makeApp();
+    const events = [];
+    browserWindow.CustomEvent = class { constructor(type, options) { this.type = type; this.detail = options.detail; } };
+    browserWindow.dispatchEvent = event => events.push(event);
+    nodes.get('startButton').fire('click');
+    page.fire('keydown', { code: 'KeyW' });
+    app.currentInput();
+    app.currentInput();
+    page.fire('keyup', { code: 'KeyW' });
+    app.currentInput();
+    app.attach();
+    nodes.get('menuButton').fire('click');
+    const log = events.filter(event => event.type === 'rocket:log').map(event => event.detail);
+    assert.equal(log.filter(event => event.name === 'controlPress').length, 1);
+    assert.equal(log.filter(event => event.name === 'controlRelease').length, 1);
+    assert.ok(log.some(event => event.name === 'screenView' && event.target === 'flight'));
+    assert.ok(log.some(event => event.name === 'screenView' && event.target === 'menu'));
+    assert.equal(log.some(event => event.name === 'throttleChange'), false);
+    assert.ok(log.some(event => event.name === 'dockAttempt'));
+});
+
+test('velocity dial shows screen-space drift independently of heading with precise numeric readouts', () => {
+    const { app, nodes } = makeApp();
+    Object.assign(app.run, { vx: 3, vy: 4, angle: Math.PI / 2 });
+    app.updateHud();
+    assert.equal(nodes.get('speedValue').textContent, '5.00');
+    assert.equal(nodes.get('vxValue').textContent, '+3.00');
+    assert.equal(nodes.get('vyValue').textContent, '+4.00');
+    assert.match(nodes.get('velocityDial').attributes['aria-label'], /Rocket rotation 90.0 degrees/);
+    assert.equal(nodes.get('velocityRocket').attributes.transform, 'translate(80 80) rotate(90)');
+    assert.equal(nodes.get('velocityVector').attributes.x2, '90.80');
+    assert.equal(nodes.get('velocityVector').attributes.y2, '94.40');
+    assert.match(nodes.get('velocityComponents').attributes.d, /H 90.80.*V 94.40/);
+    assert.match(nodes.get('velocityDial').attributes['aria-label'], /Speed 5.00.*positive Y is down/);
+});
+
+test('velocity dial handles rest, tiny drift, reverse drift, and fast flight without invalid geometry', () => {
+    const { app, nodes } = makeApp();
+    app.run.vx = 0;
+    app.run.vy = 0;
+    app.updateHud();
+    assert.equal(nodes.get('velocityVector').attributes.visibility, 'hidden');
+    assert.equal(nodes.get('velocityArrowHead').attributes.visibility, 'hidden');
+    assert.equal(nodes.get('speedValue').textContent, '0.00');
+    for (const [vx, vy] of [[0.01, 0], [-3, -4], [300, 400]]) {
+        Object.assign(app.run, { vx, vy, angle: -Math.PI / 2 });
+        app.updateHud();
+        const vector = nodes.get('velocityVector').attributes;
+        const dx = Number(vector.x2) - 80;
+        const dy = Number(vector.y2) - 80;
+        assert.equal(vector.visibility, 'visible');
+        assert.equal(Math.sign(dx), Math.sign(vx));
+        assert.equal(Math.sign(dy), Math.sign(vy));
+        assert.ok(Math.hypot(dx, dy) <= 56.01, 'Vector must remain inside the instrument ring.');
+        assert.doesNotMatch(nodes.get('velocityArrowHead').attributes.d, /NaN|Infinity/);
+    }
+});
+
+test('legacy engine stays at full thrust without adjustable throttle controls', () => {
+    const { app, nodes, page } = makeApp();
+    app.newRun();
+    for (const id of ['throttleSlider', 'throttleValue', 'throttleFill']) assert.equal(nodes.has(id), false);
+    assert.equal(typeof app.setThrottle, 'undefined');
+    assert.equal(app.run.throttle, 1);
+    assert.equal(nodes.get('fuelValue').textContent, '100.0');
+    page.fire('keydown', { code: 'KeyW', target: nodes.get('flightCanvas') });
+    assert.equal(app.currentInput().burn, true);
+    flyFor(app, 0.5);
+    assert.equal(app.run.throttle, 1);
+    assert.ok(Math.abs(app.run.fuel - (100 - app.run.elapsed * tuning.mainFuelRate / tuning.fuelCapacityScale)) < 1e-9);
+    assert.equal(nodes.get('fuelValue').textContent, app.run.fuel.toFixed(1));
+    page.fire('keyup', { code: 'KeyW' });
+    assert.equal(app.currentInput().burn, false);
+    const fuelAfterBurn = app.run.fuel;
+    flyFor(app, 0.5, 500);
+    assert.equal(app.run.fuel, fuelAfterBurn);
+    assert.equal(app.run.throttle, 1);
+    assert.equal(nodes.has('stationValue'), false);
+    assert.equal(nodes.get('rotationValue').textContent, '0.0°');
+});
+
+
+test('W burns the main engine and S brakes while Space and I/J/K/L are unmapped', () => {
+    const { app, page } = makeApp();
+    app.newRun();
+    assert.deepEqual(app.heldButtons.map(button => button.dataset.control).sort(),
+        ['burn', 'rcsDown', 'rotateLeft', 'rotateRight']);
+    for (const code of ['Space', 'KeyI', 'KeyJ', 'KeyK', 'KeyL']) page.fire('keydown', { code });
+    assert.deepEqual(app.currentInput(), { burn: false, rotate: 0, rcsX: 0, rcsY: 0 });
+    page.fire('keydown', { code: 'KeyW' });
+    assert.deepEqual(app.currentInput(), { burn: true, rotate: 0, rcsX: 0, rcsY: 0 });
+    page.fire('keydown', { code: 'KeyS' });
+    assert.deepEqual(app.currentInput(), { burn: true, rotate: 0, rcsX: 0, rcsY: 1 });
+    page.fire('keyup', { code: 'KeyW' });
+    assert.equal(app.currentInput().burn, false);
+    assert.equal(app.currentInput().rcsY, 1);
+    page.fire('keyup', { code: 'KeyS' });
+    assert.equal(app.currentInput().rcsY, 0);
+    app.run.rotationVelocity = 2;
+    app.openMenu();
+    assert.equal(app.run.rotationVelocity, 0);
+});
+
+test('fuel-use meter reaches full with main thrust, rotation and one small thruster', () => {
+    const { app, nodes } = makeApp();
+    app.updateUsageMeter({ burn: true, rotate: 1, rcsY: 1 });
+    assert.equal(nodes.get('usageValue').textContent, '100%');
+    app.updateUsageMeter({ rcsY: -1 });
+    const forwardUse = nodes.get('usageValue').textContent;
+    app.updateUsageMeter({ rcsY: 1 });
+    assert.equal(nodes.get('usageValue').textContent, forwardUse);
+    app.updateUsageMeter({});
+    assert.equal(nodes.get('usageValue').textContent, '0%');
+});
+
+
+test('double-tapping W/A/S/D within 250 ms queues one rocket-relative dash per tap pair', () => {
+    for (const [code, direction, vx, vy] of [
+        ['KeyW', 'forward', tuning.dashImpulse, 0], ['KeyA', 'left', 0, -tuning.dashImpulse],
+        ['KeyS', 'backward', -tuning.dashImpulse, 0], ['KeyD', 'right', 0, tuning.dashImpulse]
+    ]) {
+        const { app, page } = makeApp();
+        app.newRun();
+        Object.assign(app.run, { x: 0, y: -5000, landedOn: null, angle: Math.PI / 2 });
+        page.fire('keydown', { code, timeStamp: 100 });
+        assert.equal(app.pendingDash, null);
+        page.fire('keyup', { code });
+        page.fire('keydown', { code, timeStamp: 350 });
+        page.fire('keyup', { code });
+        assert.equal(app.pendingDash, direction);
+        app.frame(0);
+        assert.equal(app.pendingDash, direction, 'Keep the dash until a physics step runs.');
+        app.frame(100);
+        assert.equal(app.pendingDash, null);
+        assert.ok(Math.abs(app.run.vx - vx) < 1e-10);
+        assert.ok(Math.abs(app.run.vy - vy) < 1e-10);
+        assert.equal(app.run.fuel, 99);
+        app.frame(200);
+        assert.equal(app.run.fuel, 99, 'Multiple fixed steps must not repeat the burst.');
+    }
+});
+
+test('dash taps reject key repeats and slow pairs and clear when leaving flight', () => {
+    const { app, page } = makeApp();
+    app.newRun();
+    page.fire('keydown', { code: 'KeyW', timeStamp: 100 });
+    page.fire('keydown', { code: 'KeyW', timeStamp: 150, repeat: true });
+    page.fire('keydown', { code: 'KeyW', timeStamp: 200 });
+    assert.equal(app.pendingDash, null, 'A held key is only one tap.');
+    page.fire('keyup', { code: 'KeyW' });
+    page.fire('keydown', { code: 'KeyW', timeStamp: 351 });
+    assert.equal(app.pendingDash, null, 'A 251 ms gap must not dash.');
+    page.fire('keyup', { code: 'KeyW' });
+    page.fire('keydown', { code: 'KeyW', timeStamp: 450 });
+    assert.equal(app.pendingDash, 'forward');
+    app.openMenu();
+    assert.equal(app.pendingDash, null);
+    assert.equal(app.lastDashTap.size, 0);
+    assert.equal(app.run.fuel, 100);
+    app.continueRun();
+    page.fire('keydown', { code: 'KeyW', timeStamp: 500 });
+    assert.equal(app.pendingDash, null, 'A tap before suspension must not count after Continue.');
+});
+
+test('double taps during cooldown cannot queue a dash for later or bypass it with another direction', () => {
+    const { app, page } = makeApp();
+    app.newRun();
+    Object.assign(app.run, { x: 0, y: -5000, landedOn: null });
+    for (const timeStamp of [100, 200]) {
+        page.fire('keydown', { code: 'KeyS', timeStamp });
+        page.fire('keyup', { code: 'KeyS' });
+    }
+    app.frame(0);
+    app.frame(100);
+    assert.equal(app.run.fuel, 99);
+    for (const timeStamp of [300, 400]) {
+        page.fire('keydown', { code: 'KeyA', timeStamp });
+        page.fire('keyup', { code: 'KeyA' });
+    }
+    assert.equal(app.pendingDash, null);
+    app.run.elapsed = app.run.dashReadyAt;
+    app.frame(200);
+    assert.equal(app.run.fuel, 99, 'Rejected cooldown taps must not fire later.');
+    page.fire('keydown', { code: 'KeyA', timeStamp: 500 });
+    assert.equal(app.pendingDash, null, 'Cooldown taps must not supply the first tap of a new pair.');
+    page.fire('keyup', { code: 'KeyA' });
+    page.fire('keydown', { code: 'KeyA', timeStamp: 600 });
+    page.fire('keyup', { code: 'KeyA' });
+    assert.equal(app.pendingDash, 'left');
+    app.frame(300);
+    assert.equal(app.run.fuel, 98);
+    const cooldown = app.run.dashReadyAt;
+    app.openMenu();
+    app.continueRun();
+    assert.equal(app.run.dashReadyAt, cooldown);
+});
+
+
+test('a successful dash emits one visual burst and rejected cooldown taps emit none', () => {
+    const { app, page } = makeApp();
+    const bursts = [];
+    app.renderer.dashBurst = (run, direction) => bursts.push({ direction, fuel: run.fuel });
+    app.newRun();
+    Object.assign(app.run, { x: 0, y: -5000, landedOn: null });
+    app.frame(0);
+    for (const timeStamp of [100, 200]) {
+        page.fire('keydown', { code: 'KeyS', timeStamp });
+        page.fire('keyup', { code: 'KeyS' });
+    }
+    app.frame(100);
+    app.frame(200);
+    assert.deepEqual(bursts, [{ direction: 'backward', fuel: 99 }]);
+    for (const timeStamp of [300, 400]) {
+        page.fire('keydown', { code: 'KeyD', timeStamp });
+        page.fire('keyup', { code: 'KeyD' });
+    }
+    app.frame(300);
+    assert.equal(bursts.length, 1);
 });

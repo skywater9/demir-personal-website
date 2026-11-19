@@ -1,4 +1,4 @@
-import { bodies, route, stationFor, stationGeometry, targetFor, nearestBody, tuning } from './rocketPhysics.mjs?v=20261116-spark';
+import { bodies, route, stationFor, stationGeometry, targetFor, nearestBody, tuning } from './rocketPhysics.mjs?v=20261118-strong-dash';
 
 // Paint low-resolution procedural sprites and a camera-following world without downloaded assets.
 export class RocketRenderer {
@@ -10,6 +10,11 @@ export class RocketRenderer {
         this.mapContext = mapCanvas.getContext('2d', { alpha: false });
         this.camera = { x: 0, y: -420, zoom: 0.8 };
         this.visualTime = 0;
+        this.particles = [];
+        this.exhaustCarry = new Map();
+        this.exhaustRunId = null;
+        this.dashFlash = null;
+        this.particleSerial = 0;
         this.reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches || false;
         this.stars = Array.from({ length: 200 }, (_, index) => ({
             x: this.random(index * 3 + 1), y: this.random(index * 3 + 2),
@@ -149,19 +154,150 @@ export class RocketRenderer {
         this.label(`${body.name.toUpperCase()} RELAY`, point.x, point.y - Math.round(44 * scale), current ? '#e9b16a' : '#839aa8', 'center');
     }
 
-    // Draw the rocket upright at zero angle, with a right-side bay and input-driven engine plumes.
+    // Place visible exhaust at the rocket-local nozzles opposite each commanded thrust direction.
+    exhaustJets(run, input) {
+        if (run.status !== 'active' || run.fuel <= 0) return [];
+        const jets = [];
+        if (input.burn) {
+            jets.push({ id: 'main', x: 0, y: 10, dx: 0, dy: 1, kind: 'main', power: 1 });
+        }
+        const turn = Math.sign(input.rotate || 0);
+        if (turn) {
+            jets.push({ id: 'turnTop', x: -6 * turn, y: -8, dx: -turn, dy: 0, kind: 'attitude', power: 1 });
+            jets.push({ id: 'turnBottom', x: 6 * turn, y: 6, dx: turn, dy: 0, kind: 'attitude', power: 1 });
+        }
+        if (input.rcsX) jets.push({ id: 'translateX', x: -Math.sign(input.rcsX) * 7, y: 0,
+            dx: -Math.sign(input.rcsX), dy: 0, kind: 'translation', power: 1 });
+        if (input.rcsY) jets.push({ id: 'translateY', x: 0, y: -Math.sign(input.rcsY) * 10,
+            dx: 0, dy: -Math.sign(input.rcsY), kind: 'translation', power: 1 });
+        return jets;
+    }
+
+    // Add a brief directional exhaust burst so a dash is visible without changing flight physics.
+    dashBurst(run, direction) {
+        const directions = { forward: [0, 1], left: [1, 0], backward: [0, -1], right: [-1, 0] };
+        const exhaust = Object.hasOwn(directions, direction) ? directions[direction] : null;
+        if (!exhaust || run.status !== 'active' || run.fuel <= 0) return;
+        if (this.exhaustRunId !== run.id) {
+            this.particles = [];
+            this.exhaustCarry.clear();
+            this.exhaustRunId = run.id;
+        }
+        const [localX, localY] = exhaust;
+        const dx = localX * Math.cos(run.angle) - localY * Math.sin(run.angle);
+        const dy = localX * Math.sin(run.angle) + localY * Math.cos(run.angle);
+        this.dashFlash = { angle: Math.atan2(-dy, -dx), remaining: 0.45 };
+        if (this.reducedMotion) return;
+        const nozzleScale = 2 * Math.max(0.65, this.camera.zoom) / this.camera.zoom;
+        const offset = (localX ? 7 : 10) * nozzleScale;
+        for (let index = 0; index < 18; index++) {
+            const seed = ++this.particleSerial;
+            const spread = (this.random(seed * 7) - 0.5) * 70;
+            const speed = 120 + this.random(seed * 13) * 100;
+            const lifetime = 0.18 + this.random(seed * 11) * 0.12;
+            this.particles.push({ x: run.x + dx * offset, y: run.y + dy * offset,
+                vx: run.vx + dx * speed - dy * spread, vy: run.vy + dy * speed + dx * spread,
+                life: lifetime, lifetime, kind: 'dash', size: 4 });
+        }
+        if (this.particles.length > 360) this.particles.splice(0, this.particles.length - 360);
+    }
+
+    // Draw a brief screen-size dash cue above the scene so zoom cannot hide it.
+    drawDashFlash(player, dt) {
+        const flash = this.dashFlash;
+        if (!flash) return;
+        flash.remaining = Math.max(0, flash.remaining - Math.max(0, dt));
+        if (flash.remaining === 0) { this.dashFlash = null; return; }
+        const point = this.screen(player.x, player.y);
+        const ctx = this.context;
+        ctx.save();
+        ctx.translate(point.x, point.y);
+        ctx.rotate(flash.angle);
+        ctx.globalAlpha = Math.min(1, flash.remaining / 0.15);
+        ctx.strokeStyle = '#b8fff5';
+        ctx.lineWidth = 3;
+        for (const offset of [20, 30, 40]) {
+            ctx.beginPath();
+            ctx.moveTo(-offset, -8);
+            ctx.lineTo(-offset + 8, 0);
+            ctx.lineTo(-offset, 8);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    // Keep exhaust in world space so motion, turns, and mild arcade drag create curved trails.
+    updateExhaust(run, input, dt, menu = false) {
+        const elapsed = Math.max(0, Math.min(0.05, dt));
+        if (run.id !== this.exhaustRunId || menu || this.reducedMotion) {
+            this.particles = [];
+            this.exhaustCarry.clear();
+            this.exhaustRunId = run.id;
+            if (menu || this.reducedMotion) return;
+        }
+        for (const particle of this.particles) {
+            particle.life -= elapsed;
+            const damping = Math.exp(-elapsed * 1.8);
+            particle.vx *= damping;
+            particle.vy *= damping;
+            particle.x += particle.vx * elapsed;
+            particle.y += particle.vy * elapsed;
+        }
+        this.particles = this.particles.filter(particle => particle.life > 0);
+        const jets = this.exhaustJets(run, input);
+        const activeIds = new Set(jets.map(jet => jet.id));
+        for (const id of this.exhaustCarry.keys()) if (!activeIds.has(id)) this.exhaustCarry.delete(id);
+        const cosine = Math.cos(run.angle);
+        const sine = Math.sin(run.angle);
+        // Match particle nozzles to the rocket sprite's local scale at either camera zoom.
+        const nozzleScale = 2 * Math.max(0.65, this.camera.zoom) / this.camera.zoom;
+        for (const jet of jets) {
+            const count = (this.exhaustCarry.get(jet.id) || 0) + elapsed * (jet.kind === 'main' ? 95 * jet.power : 90);
+            const emitted = Math.floor(count);
+            this.exhaustCarry.set(jet.id, count - emitted);
+            const dx = jet.dx * cosine - jet.dy * sine;
+            const dy = jet.dx * sine + jet.dy * cosine;
+            const x = run.x + (jet.x * cosine - jet.y * sine) * nozzleScale;
+            const y = run.y + (jet.x * sine + jet.y * cosine) * nozzleScale;
+            for (let index = 0; index < emitted; index++) {
+                const seed = ++this.particleSerial;
+                const spread = (this.random(seed * 7) - 0.5) * (jet.kind === 'main' ? 12 : 20);
+                const speed = jet.kind === 'main' ? 100 + jet.power * 120 : 85;
+                const lifetime = jet.kind === 'main' ? 0.45 + this.random(seed * 11) * 0.4 : 0.3 + this.random(seed * 11) * 0.2;
+                this.particles.push({ x, y, vx: run.vx + dx * speed - dy * spread,
+                    vy: run.vy + dy * speed + dx * spread, life: lifetime, lifetime,
+                    kind: jet.kind, size: jet.kind === 'main' ? 3 : 3 });
+            }
+        }
+        // Bound renderer memory even if every control is held or a tab briefly stalls.
+        if (this.particles.length > 360) this.particles.splice(0, this.particles.length - 360);
+    }
+
+    // Paint fading pixel particles behind the rocket without modifying any flight state.
+    drawExhaust() {
+        const ctx = this.context;
+        ctx.save();
+        for (const particle of this.particles) {
+            const point = this.screen(particle.x, particle.y);
+            if (point.x < -4 || point.y < -4 || point.x > this.canvas.width + 4 || point.y > this.canvas.height + 4) continue;
+            const age = 1 - particle.life / particle.lifetime;
+            const colors = particle.kind === 'main' ? ['#fff0b2', '#edb264', '#cb7041', '#724c3d'] : ['#d2fff0', '#8edcd4', '#548a92', '#34515e'];
+            ctx.globalAlpha = Math.max(0, 1 - age);
+            ctx.fillStyle = colors[Math.min(colors.length - 1, Math.floor(age * colors.length))];
+            const size = Math.max(1, Math.round(particle.size * (1 - age) * this.camera.zoom));
+            // Center each square on its trajectory so its width cannot shift the plume right.
+            ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+        }
+        ctx.restore();
+    }
+
+    // Draw the rocket sprite; all engine and RCS thrust visuals are world-space particles.
     drawRocket(run, input) {
         const ctx = this.context;
         const position = this.screen(run.x, run.y);
         ctx.save(); ctx.translate(position.x, position.y); ctx.rotate(run.angle);
         const scale = Math.max(0.65, this.camera.zoom);
         ctx.scale(scale, scale);
-        if (input.burn && run.throttle > 0 && run.status === 'active') {
-            const length = 5 + run.throttle * 12 + Math.floor(run.elapsed * 20) % 4;
-            ctx.fillStyle = '#d07238'; ctx.fillRect(-3, 8, 6, length);
-            ctx.fillStyle = '#f2b967'; ctx.fillRect(-2, 8, 4, length - 3);
-            ctx.fillStyle = '#f5e3a5'; ctx.fillRect(-1, 8, 2, length * 0.55);
-        }
         ctx.fillStyle = '#627b83'; ctx.fillRect(-8, 3, 3, 7); ctx.fillRect(5, 3, 3, 7);
         ctx.fillStyle = '#bcc9c4'; ctx.fillRect(-5, -9, 10, 16);
         ctx.fillStyle = '#e2e5d5'; ctx.fillRect(-3, -13, 6, 5); ctx.fillRect(-1, -16, 2, 3);
@@ -170,11 +306,6 @@ export class RocketRenderer {
         ctx.fillStyle = '#dba363'; ctx.fillRect(-5, 2, 10, 3);
         ctx.fillStyle = run.payload ? '#92ceab' : '#4c6671'; ctx.fillRect(5, -3, 3, 5);
         ctx.fillStyle = '#303d48'; ctx.fillRect(-3, 7, 6, 3);
-        ctx.fillStyle = '#a5e5df';
-        if (input.rcsX < 0) ctx.fillRect(8, -5, 5, 2);
-        if (input.rcsX > 0) ctx.fillRect(-13, -5, 5, 2);
-        if (input.rcsY < 0) ctx.fillRect(-6, 9, 2, 5);
-        if (input.rcsY > 0) ctx.fillRect(-6, -12, 2, 5);
         ctx.restore();
     }
 
@@ -183,6 +314,9 @@ export class RocketRenderer {
         const ctx = this.context;
         const target = targetFor(run);
         const point = this.screen(target.x, target.y);
+        const distance = Math.hypot(run.x - target.x, run.y - target.y);
+        const distanceText = distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${distance.toFixed(distance < 100 ? 1 : 0)} m`;
+        const targetLabel = `${target.type === 'station' ? 'RELAY' : target.body.name.toUpperCase()} · ${distanceText}`;
         const width = this.canvas.width;
         const height = this.canvas.height;
         const visible = point.x >= 25 && point.x <= width - 25 && point.y >= 30 && point.y <= height - 25;
@@ -193,7 +327,8 @@ export class RocketRenderer {
             const size = target.type === 'station' ? 15 : 19;
             ctx.strokeRect(point.x - size, point.y - size, size * 2, size * 2);
             ctx.fillStyle = color; ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
-            if (target.type === 'station') this.label('↑ DOCK UPRIGHT / 0°', point.x, point.y + size + 12, color, 'center');
+            this.label(targetLabel, Math.max(48, Math.min(width - 48, point.x)), Math.max(10, point.y - size - 6), color, 'center');
+            if (target.type === 'station') this.label('↑ DOCK UPRIGHT / 0°', Math.max(48, Math.min(width - 48, point.x)), Math.min(height - 8, point.y + size + 12), color, 'center');
         } else {
             const ship = this.screen(run.x, run.y);
             const dx = point.x - ship.x;
@@ -205,7 +340,7 @@ export class RocketRenderer {
             const y = Math.round(ship.y + dy * factor);
             ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx));
             ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-8, 8); ctx.fill(); ctx.restore();
-            this.label(target.type === 'station' ? 'RELAY ↑ UPRIGHT' : target.body.name.toUpperCase(), Math.max(45, Math.min(width - 45, x)), y - 15, color, 'center');
+            this.label(targetLabel, Math.max(48, Math.min(width - 48, x)), y - 15, color, 'center');
         }
     }
 
@@ -256,19 +391,17 @@ export class RocketRenderer {
         const zoom = near.altitude < 550 && speed < 70 ? 0.95 : 0.62;
         const smoothing = 1 - Math.exp(-dt * 4);
         const desiredX = run.x + (menu ? -220 : run.vx * 0.8 + 40);
-        const target = targetFor(run);
-        const dockingApproach = !menu && run.status === 'active' && run.phase === 'station' && !run.docked
-            && Math.hypot(run.x - target.x, run.y - target.y) <= tuning.dockingAssistDistance;
-        const desiredY = dockingApproach ? run.y + this.canvas.height * 0.12 / this.camera.zoom
-            : run.y + (menu ? -80 : run.vy * 0.6 - 90);
+        const desiredY = run.y + (menu ? -80 : run.vy * 0.6 - 90);
         if (run.status !== 'lost' || menu) {
             this.camera.x += (desiredX - this.camera.x) * smoothing;
             this.camera.y += (desiredY - this.camera.y) * smoothing;
             this.camera.zoom += (zoom - this.camera.zoom) * smoothing;
         }
+        this.updateExhaust(run, input, dt, menu);
         this.drawSpace();
         for (const body of bodies) this.drawBody(body, run);
         for (const body of bodies) this.drawStation(body, run);
+        this.drawExhaust();
         if (!menu) this.drawGuidance(run);
         if (run.status !== 'lost') this.drawRocket(run, input);
         else if (!menu && failureProgress !== null) this.drawExplosion(run, failureProgress);
@@ -278,6 +411,8 @@ export class RocketRenderer {
             this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
             this.label(near.body.id === 'jupiter' ? 'ATMOSPHERE / LOW VIS / WIND' : 'ATMOSPHERE / LOW VIS', this.canvas.width / 2, this.canvas.height - 14, '#eee3bf', 'center');
         }
+        if (menu || run.status !== 'active') this.dashFlash = null;
+        else this.drawDashFlash(run, dt);
         this.drawMap(run);
     }
 }

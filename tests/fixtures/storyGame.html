@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#101921">
+    <meta name="description" content="Orbital Freight: a pixel art rocket flight game. Launch, dock, deliver, and cross the solar system on a limited fuel supply.">
+    <title>Orbital Freight — Rocket flight game</title>
+    <link rel="stylesheet" href="style.css?v=20261118-strong-dash">
+    <script type="module" src="scripts/visitLog.mjs?v=20261116-visit-log"></script>
+    <script type="module" src="scripts/rocketApp.mjs?v=20261118-strong-dash"></script>
+    <script type="module" src="scripts/siteAnalytics.js?v=20261116-visit-log"></script>
+</head>
+<body>
+    <main id="gameShell" class="game-shell" data-analytics-section="game">
+        <section class="viewport" aria-label="Flight view">
+            <canvas id="flightCanvas" aria-label="Pixel art rocket flight scene. Follow the flashing target indicator and its distance label; navigation is in the upper-left corner and instruments and controls are below the view.">Your browser needs canvas support to display this game.</canvas>
+            <div class="flight-navigation-corner" aria-label="Navigation">
+                <div class="navigation-panel"><div class="panel-heading map-heading"><span>NAVIGATION</span><span id="routePosition">STOP 01 / 10</span></div>
+                <canvas id="mapCanvas" width="268" height="55" aria-label="Solar system navigation map. Highlighted destination is the current target."></canvas>
+                <div class="navigation-caption"><span class="legend-dot"></span> TARGET <span class="legend-dot ship-dot"></span> SHIP <span class="muted">L = MOON</span></div></div>
+                <p id="environmentLabel" class="environment-label">EARTH / SURFACE OPERATIONS</p>
+            </div>
+            <div class="flight-top-actions">
+                <button id="menuButton" class="quiet-button flight-menu-button" type="button" data-analytics-id="gameMenu">MENU <kbd>ESC</kbd></button>
+            </div>
+            <div class="flight-bottom-notifications">
+                <p id="flightMessage" class="flight-message flight-status-corner" role="status" aria-live="polite"></p>
+                <section id="dockDialog" class="docking-dialog" role="dialog" aria-modal="false" aria-labelledby="dockDialogTitle" hidden>
+                        <div class="docking-dialog-header"><h2 id="dockDialogTitle">Docking checklist</h2><span id="dockState">ALIGNING</span></div>
+                        <p>Right-side bay → amber marker. Nose <strong>straight up ↑</strong>.</p>
+                        <ul class="docking-requirements">
+                            <li id="dockRangeCheck">○ Move within 32 m of the bay marker</li>
+                            <li id="dockSpeedCheck">○ Slow down to 8 m/s or less</li>
+                            <li id="dockAngleCheck">○ Point the nose up: 0° ±12°</li>
+                        </ul>
+                        <button id="dockButton" type="button" class="dock-button" data-analytics-id="gameDock">ATTACH &amp; DELIVER <kbd>E</kbd></button>
+                    </section>
+            </div>
+        </section>
+        <section id="controlPanel" class="control-panel" data-analytics-section="cockpit" aria-label="Flight console">
+            <section class="console-column propulsion-controls" aria-label="Fuel use and remaining fuel">
+                <div class="usage-control">
+                    <div class="readout-label">FUEL USE <output id="usageValue">0%</output></div>
+                    <div id="usageGauge" class="usage-meter" role="progressbar" aria-label="Current thruster fuel use" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="usageFill"></span></div>
+                </div>
+                <div class="fuel-panel">
+                    <div class="readout-label">FUEL <div class="fuel-number"><strong id="fuelValue">100.0</strong><span>%</span></div></div>
+                    <div class="fuel-track" role="progressbar" aria-label="Remaining fuel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" id="fuelGauge"><span id="fuelFill"></span></div>
+                </div>
+            </section>
+            <section class="console-column velocity-instrument" aria-label="Motion instruments">
+                <svg id="velocityDial" class="velocity-dial" viewBox="0 10 160 145" role="img" aria-label="Velocity direction. Positive X is right; positive Y is down.">
+                    <circle class="velocity-ring" cx="80" cy="80" r="62"/>
+                    <circle class="velocity-inner-ring" cx="80" cy="80" r="32"/>
+                    <path class="velocity-axes" d="M 18 80 H 142 M 80 18 V 142"/>
+                    <path class="velocity-ticks" d="M 80 18 V 25 M 80 135 V 142 M 18 80 H 25 M 135 80 H 142"/>
+                    <text class="velocity-axis-label" x="149" y="83">X</text><text class="velocity-axis-label" x="80" y="154" text-anchor="middle">Y</text>
+                    <path id="velocityComponents" class="velocity-components" d="M 80 80 H 80 M 80 80 V 80"/>
+                    <path id="velocityProjection" class="velocity-projection" d="M 80 80 H 80 V 80"/>
+                    <line id="velocityVector" class="velocity-vector" x1="80" y1="80" x2="80" y2="80" visibility="hidden"/>
+                    <path id="velocityArrowHead" class="velocity-arrow-head" d="M 80 80 Z" visibility="hidden"/>
+                    <g id="velocityRocket" class="velocity-rocket" transform="translate(80 80)">
+                        <path d="M -2 -12 H 2 V -9 H 5 V 7 H 2 V 11 H -2 V 7 H -5 V -9 H -2 Z M -5 2 H -8 V 9 H -5 Z M 5 2 H 8 V 9 H 5 Z"/>
+                        <path class="velocity-rocket-window" d="M -2 -5 H 2 V -1 H -2 Z"/>
+                    </g>
+                </svg>
+                <div class="motion-readouts">
+                    <div class="motion-stat"><div class="readout-label">SPEED (m/s)</div><div class="velocity-speed"><output id="speedValue">0.00</output></div></div>
+                    <div class="motion-stat motion-rotation"><div class="readout-label">ROTATION</div><output id="rotationValue" class="rotation-value">0.0°</output></div>
+                    <div class="vector-readout"><span>X <b id="vxValue">+0.00</b></span><span>Y <b id="vyValue">+0.00</b></span></div>
+                </div>
+            </section>
+            <section class="console-column flight-controls" aria-label="Flight controls">
+                <div class="flight-buttons">
+                    <div class="engine-attitude-controls">
+                        <button type="button" id="burnButton" class="burn-button hold-button" data-control="burn" data-analytics-id="gameBurn">▲<span>HOLD TO BURN</span><kbd>W / SPACE / ↑</kbd></button>
+                        <div class="rotation-buttons"><button type="button" class="hold-button" data-control="rotateLeft" data-analytics-id="gameRotateLeft" aria-label="Rotate counterclockwise">↶<kbd>A / ←</kbd></button><button type="button" class="hold-button" data-control="rotateRight" data-analytics-id="gameRotateRight" aria-label="Rotate clockwise">↷<kbd>D / →</kbd></button></div>
+                    </div>
+                    <div class="brake-controls">
+                        <button type="button" class="hold-button" data-control="rcsDown" data-analytics-id="gameRcsDown" aria-label="Brake with backward thrust relative to the rocket">↓<span>BRAKE</span><kbd>K</kbd></button>
+                    </div>
+                </div>
+            </section>
+            <aside id="instrumentPanel" class="console-column console-aux" data-analytics-section="cockpit" aria-label="Flight systems information">
+                <div class="console-data">
+                    <dl class="telemetry-grid">
+                        <div><dt>FLIGHT TIME:</dt><dd id="timeValue">00:00.0</dd></div>
+                        <div><dt id="objectiveType">CURRENT OBJECTIVE:</dt><dd id="objectiveName">EARTH RELAY</dd></div>
+                        <div><dt>ALTITUDE:</dt><dd><span id="altitudeValue">0.0</span> m</dd></div>
+                        <div><dt>GRAVITY:</dt><dd><span id="gravityValue">9.81</span> m/s²</dd></div>
+                        <div><dt>DELIVERIES:</dt><dd><span id="deliveryValue">00</span> / 10</dd></div>
+                        <div><dt>PAYLOAD:</dt><dd id="payloadValue">LOADED</dd></div>
+                    </dl>
+                </div>
+
+            </aside>
+        </section>
+        <div id="menuOverlay" class="overlay menu-overlay" data-analytics-section="menu">
+            <section id="mainMenu" class="menu-card" role="dialog" aria-modal="true" aria-labelledby="menuTitle" tabindex="-1">
+                <div class="eyebrow menu-kicker"><span class="status-light"></span> INTERPLANETARY CARGO OPERATIONS</div>
+                <h1 id="menuTitle">ORBITAL<br><span>FREIGHT</span><span class="title-square" aria-hidden="true"></span></h1>
+                <p class="menu-intro">Ten deliveries. One continuous flight.<br>Make every burn count.</p>
+                <div class="menu-objectives"><span>01 <b>LAUNCH</b></span><i>→</i><span>02 <b>DOCK</b></span><i>→</i><span>03 <b>DELIVER</b></span></div>
+                <p class="menu-description">Carry payloads from planetary landing pads to orbital relays. Cross the solar system, adapt to changing gravity, and keep fuel in the tank.</p>
+                <div class="menu-actions"><button id="continueButton" class="primary-button" type="button" data-analytics-id="gameContinue" hidden>CONTINUE FLIGHT <span>→</span></button><button id="startButton" class="primary-button" type="button" data-analytics-id="gameStart">START FLIGHT <span>→</span></button><button id="historyButton" class="secondary-button" type="button" data-analytics-id="gameHistory">FLIGHT RECORDS <span id="historyCount">00</span></button></div>
+                <p id="savedRunNote" class="saved-note">Start on Earth with a full tank and your first payload.</p>
+                <details class="manual"><summary>PRE-FLIGHT BRIEFING / CONTROLS</summary><div><p><kbd>W / SPACE / ↑</kbd> Hold the main engine at 100%; release to coast.<br><kbd>A / D / ← / →</kbd> Rotate; hold to turn gradually faster. <kbd>K</kbd> Brake with backward thrust relative to the rocket’s orientation.<br><kbd>W / A / S / D</kbd> Double-tap within 250 ms to dash forward / left / backward / right relative to the rocket. Each dash costs 1% fuel; all directions share a 2-second cooldown.<br><kbd>E</kbd> Attach when bay checks are green. <kbd>ESC</kbd> Save and menu.</p><p>Land upright on the next pad at ≤ 12 m/s to receive fuel and payload. Dock with the nose pointing UP (0°), within ±12°, and slow to ≤ 8 m/s. Surface impacts above 12 m/s through 25 m/s and station impacts below 30 m/s cause gentle bumps; slow down again before landing or attaching. Your bay is on the rocket’s right side. After delivering, use W main thrust to detach and clear the receiver before turning toward the next pad.</p><p>The motion dial shows drift direction and rocket rotation. The orange propulsion meter shows combined current fuel use; the green bar shows remaining fuel. The tank has half its original capacity. Each landing pad adds 25% of a tank, capped at full, once per route stop. Empty fuel or a high-speed collision ends the run. Leaving the page suspends and saves your flight.</p></div></details>
+                <p class="saved-note">This site logs anonymous clicks, choices, game actions, and timing for the owner. No names, passwords, or typed text are recorded.</p>
+                <div class="menu-footer"><span>EARTH → MOON → THE OUTER PLANETS</span><span>PIXEL FLIGHT / V1.0</span></div>
+            </section>
+            <section id="confirmPanel" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="-1" hidden><span class="eyebrow">FLIGHT RECORDER</span><h2 id="confirmTitle">Start over on Earth?</h2><p>Your unfinished flight will be recorded as abandoned. Previous flight records will remain available.</p><div class="stack-actions"><button type="button" id="confirmNewButton" class="primary-button" data-analytics-id="gameConfirmNewRun">CONFIRM NEW FLIGHT</button><button type="button" id="cancelNewButton" class="secondary-button" data-analytics-id="gameCancelNewRun">KEEP CURRENT FLIGHT</button></div></section>
+            <section id="historyPanel" class="history-card" role="dialog" aria-modal="true" aria-labelledby="historyTitle" tabindex="-1" data-analytics-section="history" hidden><div class="history-header"><div><span class="eyebrow">LOCAL FLIGHT RECORDER</span><h2 id="historyTitle">Flight records</h2></div><button type="button" id="historyBackButton" class="secondary-button" data-analytics-id="gameHistoryBack">← MENU</button></div><p class="muted">Saved in this browser. Expand a flight to see departures, returns, and deliveries.</p><div id="historyRows" class="history-rows"></div><p class="small muted">Up to 100 previous flights are retained. The unfinished flight is shown separately.</p></section>
+            <section id="resultPanel" class="modal-card result-card" role="dialog" aria-modal="true" aria-labelledby="resultTitle" tabindex="-1" data-analytics-section="results" hidden><span id="resultEyebrow" class="eyebrow">FLIGHT ENDED</span><h2 id="resultTitle">Signal lost.</h2><p id="resultReason"></p><dl class="result-stats"><div><dt>FLIGHT TIME</dt><dd id="resultTime">00:00.0</dd></div><div><dt>FUEL REMAINING</dt><dd id="resultFuel">0.0%</dd></div><div><dt>PAYLOADS DELIVERED</dt><dd id="resultDeliveries">0 / 10</dd></div><div><dt>LAST DESTINATION</dt><dd id="resultPlanet">EARTH</dd></div></dl><div class="stack-actions"><button id="retryButton" type="button" class="primary-button" data-analytics-id="gameRetry">RETRY FROM EARTH <span>→</span></button><button id="resultMenuButton" type="button" class="secondary-button" data-analytics-id="gameMenu">RETURN TO MENU</button></div></section>
+        </div>
+    </main>
+    <footer class="page-footer" hidden><span id="eventLogStatus" role="status">EVENT LOG / CONNECTING</span><span id="saveStatus">AUTOSAVE / LOCAL</span></footer>
+    <p id="storageWarning" class="storage-warning" role="alert" hidden></p>
+    <noscript><div class="noscript">Orbital Freight needs JavaScript to run. Enable JavaScript, then reload this page.</div></noscript>
+</body>
+</html>

@@ -1,22 +1,25 @@
 export const tuning = Object.freeze({
-    maxFuel: 100, mainAcceleration: 34, rcsAcceleration: 5,
+    // Fuel remains a saved/displayed percentage; half capacity doubles the percentage used per burn.
+    maxFuel: 100, fuelCapacityScale: 0.5, mainAcceleration: 34, rcsAcceleration: 5,
     mainFuelRate: 0.62, rcsFuelRate: 0.12, rotationFuelRate: 0.025,
-    rotationRate: 1.55, shipRadius: 18, padHalfWidth: 48,
-    safeLandingSpeed: 8, stationCrashSpeed: 20, safeLandingAngle: Math.PI / 15,
-    dockingDistance: 32, dockingSpeed: 5, dockingAngle: Math.PI / 15, dockingAssistDistance: 200,
+    rotationRate: 1.55, rotationAcceleration: 0.3, maxRotationRate: 2.15,
+    dashImpulse: 108, dashFuelCost: 1, dashCooldown: 2, dashTapWindow: 250,
+    shipRadius: 18, padHalfWidth: 48,
+    safeLandingSpeed: 12, surfaceCrashSpeed: 25, stationCrashSpeed: 30, safeLandingAngle: Math.PI / 15,
+    dockingDistance: 32, dockingSpeed: 8, dockingAngle: Math.PI / 15, dockingAssistDistance: 200,
     influenceAltitude: 1050, fixedStep: 1 / 120
 });
 
 export const bodies = Object.freeze([
-    { id: 'earth', name: 'Earth', x: 0, y: 0, radius: 260, gravity: 9.81, color: '#4b91b5', land: '#79a66b', refuel: 48, gas: false },
-    { id: 'moon', name: 'Moon', x: 1900, y: -100, radius: 145, gravity: 1.62, color: '#a4a9b5', land: '#727887', refuel: 34, gas: false },
-    { id: 'venus', name: 'Venus', x: -2700, y: 100, radius: 245, gravity: 8.87, color: '#d7ad6b', land: '#a77e4e', refuel: 48, gas: false },
-    { id: 'mercury', name: 'Mercury', x: -5400, y: -70, radius: 170, gravity: 3.7, color: '#a99786', land: '#75685f', refuel: 42, gas: false },
-    { id: 'mars', name: 'Mars', x: 4500, y: 80, radius: 205, gravity: 3.71, color: '#bc7155', land: '#854f48', refuel: 44, gas: false },
-    { id: 'jupiter', name: 'Jupiter', x: 7500, y: 180, radius: 380, gravity: 24.79, color: '#cfad8e', land: '#9d7265', refuel: 65, gas: true },
-    { id: 'saturn', name: 'Saturn', x: 10600, y: 40, radius: 320, gravity: 10.44, color: '#d6c291', land: '#a8916d', refuel: 50, gas: true },
-    { id: 'uranus', name: 'Uranus', x: 13600, y: -80, radius: 275, gravity: 8.69, color: '#8ac6ca', land: '#5c989f', refuel: 48, gas: true },
-    { id: 'neptune', name: 'Neptune', x: 16600, y: 20, radius: 270, gravity: 11.15, color: '#587fbf', land: '#385a98', refuel: 55, gas: true }
+    { id: 'earth', name: 'Earth', x: 0, y: 0, radius: 260, gravity: 9.81, color: '#4b91b5', land: '#79a66b', refuel: 25, gas: false },
+    { id: 'moon', name: 'Moon', x: 1900, y: -100, radius: 145, gravity: 1.62, color: '#a4a9b5', land: '#727887', refuel: 25, gas: false },
+    { id: 'venus', name: 'Venus', x: -2700, y: 100, radius: 245, gravity: 8.87, color: '#d7ad6b', land: '#a77e4e', refuel: 25, gas: false },
+    { id: 'mercury', name: 'Mercury', x: -5400, y: -70, radius: 170, gravity: 3.7, color: '#a99786', land: '#75685f', refuel: 25, gas: false },
+    { id: 'mars', name: 'Mars', x: 4500, y: 80, radius: 205, gravity: 3.71, color: '#bc7155', land: '#854f48', refuel: 25, gas: false },
+    { id: 'jupiter', name: 'Jupiter', x: 7500, y: 180, radius: 380, gravity: 24.79, color: '#cfad8e', land: '#9d7265', refuel: 25, gas: true },
+    { id: 'saturn', name: 'Saturn', x: 10600, y: 40, radius: 320, gravity: 10.44, color: '#d6c291', land: '#a8916d', refuel: 25, gas: true },
+    { id: 'uranus', name: 'Uranus', x: 13600, y: -80, radius: 275, gravity: 8.69, color: '#8ac6ca', land: '#5c989f', refuel: 25, gas: true },
+    { id: 'neptune', name: 'Neptune', x: 16600, y: 20, radius: 270, gravity: 11.15, color: '#587fbf', land: '#385a98', refuel: 25, gas: true }
 ].map(body => Object.freeze(body)));
 
 export const route = Object.freeze(['earth', 'moon', 'venus', 'mercury', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']);
@@ -63,8 +66,8 @@ export function createRun(id = globalThis.crypto.randomUUID(), now = Date.now())
         version: 1, id, startedAt: now, updatedAt: now, elapsed: 0,
         routeIndex: 0, delivered: 0, phase: 'station', status: 'active', reason: '',
         x: earth.x, y: earth.y - earth.radius - tuning.shipRadius,
-        vx: 0, vy: 0, angle: 0, fuel: tuning.maxFuel, throttle: 0.85,
-        landedOn: 'earth', docked: false, payload: true, serviced: [0],
+        vx: 0, vy: 0, angle: 0, rotationVelocity: 0, fuel: tuning.maxFuel, throttle: 1,
+        dashReadyAt: 0, landedOn: 'earth', docked: false, payload: true, serviced: [0],
         events: [{ type: 'started', at: now, elapsed: 0 }]
     };
 }
@@ -143,6 +146,7 @@ export function tryDock(run) {
     run.vx = 0;
     run.vy = 0;
     run.angle = 0;
+    run.rotationVelocity = 0;
     run.docked = true;
     run.payload = false;
     run.delivered += 1;
@@ -155,7 +159,21 @@ export function tryDock(run) {
     return true;
 }
 
-// Settle low-speed contact and service only the next expected destination, once per route visit.
+// Dampen survivable contacts and cap rebound speed so a small mistake stays recoverable.
+function bounceGently(run, nx, ny) {
+    const incoming = run.vx * nx + run.vy * ny;
+    if (incoming >= 0) return;
+    const rebound = Math.min(3, Math.max(1, -incoming * 0.15));
+    run.vx = (run.vx - incoming * nx) * 0.65 + rebound * nx;
+    run.vy = (run.vy - incoming * ny) * 0.65 + rebound * ny;
+    const speed = Math.hypot(run.vx, run.vy);
+    if (speed > 6) {
+        run.vx *= 6 / speed;
+        run.vy *= 6 / speed;
+    }
+}
+
+// Settle safe landings, bounce moderate impacts, and service the next expected destination once.
 function resolveSurface(run, body, resting = false, previous = null) {
     let dx = run.x - body.x;
     let dy = run.y - body.y;
@@ -181,7 +199,7 @@ function resolveSurface(run, body, resting = false, previous = null) {
         distance = Math.hypot(dx, dy);
     }
     const speed = Math.hypot(run.vx, run.vy);
-    if (speed > tuning.safeLandingSpeed) {
+    if (speed > tuning.surfaceCrashSpeed) {
         finishRun(run, 'lost', `Impact on ${body.name} at ${speed.toFixed(1)} m/s.`);
         return;
     }
@@ -189,6 +207,13 @@ function resolveSurface(run, body, resting = false, previous = null) {
     const ny = distance > 0 ? dy / distance : -1;
     run.x = body.x + nx * surfaceDistance;
     run.y = body.y + ny * surfaceDistance;
+    if (speed > tuning.safeLandingSpeed) {
+        run.x += nx * 0.1;
+        run.y += ny * 0.1;
+        run.landedOn = null;
+        bounceGently(run, nx, ny);
+        return;
+    }
     run.vx = 0;
     run.vy = 0;
     run.landedOn = body.id;
@@ -270,17 +295,38 @@ function resolveStation(run, body, previous) {
     }
     run.x = firstHit.x + firstHit.nx * 0.01;
     run.y = firstHit.y + firstHit.ny * 0.01;
-    const incoming = run.vx * firstHit.nx + run.vy * firstHit.ny;
-    if (incoming < 0) {
-        run.vx -= incoming * 1.3 * firstHit.nx;
-        run.vy -= incoming * 1.3 * firstHit.ny;
+    bounceGently(run, firstHit.nx, firstHit.ny);
+}
+
+// Spend a small fuel burst for one rocket-relative impulse, sharing a cooldown across directions.
+export function dashRun(run, direction) {
+    const directions = { forward: [0, -1], left: [-1, 0], backward: [0, 1], right: [1, 0] };
+    const localDirection = Object.hasOwn(directions, direction) ? directions[direction] : null;
+    if (!localDirection || run.status !== 'active' || run.fuel < tuning.dashFuelCost
+        || run.elapsed + 1e-9 < (run.dashReadyAt || 0)) return false;
+    const [localX, localY] = localDirection;
+    run.fuel = Math.max(0, run.fuel - tuning.dashFuelCost);
+    run.dashReadyAt = run.elapsed + tuning.dashCooldown;
+    if (run.fuel <= 0) {
+        finishRun(run, 'lost', 'Fuel depleted.');
+        return true;
     }
+    if (run.docked) {
+        run.docked = false;
+        recordRunEvent(run, 'undocked');
+    }
+    run.landedOn = null;
+    run.vx += (localX * Math.cos(run.angle) - localY * Math.sin(run.angle)) * tuning.dashImpulse;
+    run.vy += (localX * Math.sin(run.angle) + localY * Math.cos(run.angle)) * tuning.dashImpulse;
+    return true;
 }
 
 // Advance one small deterministic physics step; menus and hidden pages never call this method.
 export function stepRun(run, input = {}, dt = tuning.fixedStep) {
     if (run.status !== 'active' || !Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, 1 / 30);
+    // Main-engine output is fixed at full thrust; retain the save field for old run compatibility.
+    run.throttle = 1;
     if (run.fuel <= 0) {
         run.fuel = 0;
         finishRun(run, 'lost', 'Fuel depleted.');
@@ -290,22 +336,31 @@ export function stepRun(run, input = {}, dt = tuning.fixedStep) {
     const rotate = Math.max(-1, Math.min(1, input.rotate || 0));
     const rcsX = Math.max(-1, Math.min(1, input.rcsX || 0));
     const rcsY = Math.max(-1, Math.min(1, input.rcsY || 0));
-    const burning = Boolean(input.burn) && run.throttle > 0;
+    const burning = Boolean(input.burn);
     const moving = burning || rcsX !== 0 || rcsY !== 0;
-    run.fuel = Math.max(0, run.fuel - dt * (
-        (burning ? tuning.mainFuelRate * run.throttle : 0)
+    run.fuel = Math.max(0, run.fuel - dt / tuning.fuelCapacityScale * (
+        (burning ? tuning.mainFuelRate : 0)
         + tuning.rcsFuelRate * (Math.abs(rcsX) + Math.abs(rcsY))
         + tuning.rotationFuelRate * Math.abs(rotate)));
     if (run.fuel <= 0) {
         finishRun(run, 'lost', 'Fuel depleted.');
         return;
     }
-    if (run.docked && !moving) return;
+    // Start at the familiar turn speed, then gently accelerate until release or reversal.
+    const previousRotation = Number.isFinite(run.rotationVelocity) ? run.rotationVelocity : 0;
+    const rotationSpeed = Math.sign(previousRotation) === Math.sign(rotate)
+        ? Math.max(tuning.rotationRate, Math.abs(previousRotation)) : tuning.rotationRate;
+    run.rotationVelocity = rotate * Math.min(tuning.maxRotationRate,
+        rotationSpeed + tuning.rotationAcceleration * dt);
+    if (run.docked && !moving) {
+        run.rotationVelocity = 0;
+        return;
+    }
     if (run.docked) {
         run.docked = false;
         recordRunEvent(run, 'undocked');
     }
-    run.angle = normalizeAngle(run.angle + rotate * tuning.rotationRate * dt);
+    run.angle = normalizeAngle(run.angle + run.rotationVelocity * dt);
     if (run.landedOn && !moving) {
         const landedBody = bodies.find(body => body.id === run.landedOn);
         resolveSurface(run, landedBody, true);
@@ -313,9 +368,12 @@ export function stepRun(run, input = {}, dt = tuning.fixedStep) {
     }
     run.landedOn = null;
     const gravity = gravityAt(run.x, run.y);
-    const thrust = burning ? tuning.mainAcceleration * run.throttle : 0;
-    let ax = gravity.ax + Math.sin(run.angle) * thrust + rcsX * tuning.rcsAcceleration;
-    const ay = gravity.ay - Math.cos(run.angle) * thrust + rcsY * tuning.rcsAcceleration;
+    const thrust = burning ? tuning.mainAcceleration : 0;
+    // Rotate local lateral/forward RCS commands with the rocket while keeping screen Y downward.
+    const rcsAx = (rcsX * Math.cos(run.angle) - rcsY * Math.sin(run.angle)) * tuning.rcsAcceleration;
+    const rcsAy = (rcsX * Math.sin(run.angle) + rcsY * Math.cos(run.angle)) * tuning.rcsAcceleration;
+    let ax = gravity.ax + Math.sin(run.angle) * thrust + rcsAx;
+    const ay = gravity.ay - Math.cos(run.angle) * thrust + rcsAy;
     const near = nearestBody(run);
     if (near.body.id === 'jupiter' && near.altitude < 200) {
         ax += Math.sin(run.elapsed * 0.7) * 1.4;

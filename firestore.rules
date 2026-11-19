@@ -1,4 +1,16 @@
-// Prototype rules for the two public aggregate counters used by this site.
+// Prototype rules. Existing siteStats counters retain their public aggregate behavior.
+// visitLogs/{UUID}: sessionId (immutable UUID), writerId (immutable anonymous UID),
+// startedAt (immutable client milliseconds), lastEventAt (monotonic, within 24h),
+// lastSequence (0..5000), createdAt (immutable server timestamp), updatedAt (server timestamp).
+// visitLogs/{UUID}/events/{sequence}: immutable rows with sessionId, sequence (1..5000),
+// eventName/target (enums), recordedAt/elapsedMs (bounded milliseconds), receivedAt (server timestamp),
+// details (strict bounded numeric, boolean, or enumerated fields only).
+// conquest details: required action enum; optional gameplaySeconds (0..86400), fuel (0..100),
+// cargo/amount (integers 0..1000000), owned (integer 0..256), planetLevel (integer 0..10).
+// hackProgress.amount uses five-count milestones 5..100 when supplied; shotEnded.amount is the hold's shot count.
+// Conquest targets are product labels only: conquest, planet, relay, map. No game/player/room identity.
+// Only an administrator-issued analyticsOwner auth claim permits listing other visits.
+// Anonymous writers may get their own documents for idempotent retry, never list visits.
 // Collection: siteStats
 // Documents: clicks and visits
 // Fields: count (required number, non-negative integer)
@@ -26,6 +38,123 @@ service cloud.firestore {
         && validCount(request.resource.data.count)
         && request.resource.data.count == resource.data.count + 1;
       allow delete: if false;
+    }
+
+
+    // Trust only a server-issued custom claim, never a role in a visitor-written document.
+    function isAnalyticsOwner() {
+      return request.auth != null && request.auth.token.get('analyticsOwner', false) == true;
+    }
+
+    // Anonymous authentication binds writes to a random credential without requiring visitor identity.
+    function isAnonymous() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // Keep visit identifiers bounded and prohibit user-controlled path fragments.
+    function validSessionId(sessionId) {
+      return sessionId is string && sessionId.size() == 36 && sessionId.matches('[a-f0-9-]{36}');
+    }
+
+    // Validate complete state on creates and updates; identity cannot be removed or changed.
+    function validVisit(data, sessionId) {
+      return data.keys().hasAll(['sessionId', 'writerId', 'startedAt', 'lastEventAt', 'lastSequence', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['sessionId', 'writerId', 'startedAt', 'lastEventAt', 'lastSequence', 'createdAt', 'updatedAt'])
+        && validSessionId(sessionId) && data.sessionId == sessionId
+        && data.writerId is string && data.writerId.size() > 0 && data.writerId.size() <= 128
+        && data.writerId == request.auth.uid
+        && data.startedAt is int && data.startedAt > 0
+        && data.startedAt <= request.time.toMillis() + 300000
+        && data.lastEventAt is int && data.lastEventAt >= data.startedAt
+        && data.lastEventAt <= data.startedAt + 86400000
+        && data.lastSequence is int && data.lastSequence >= 0 && data.lastSequence <= 5000
+        && data.createdAt is timestamp && data.updatedAt == request.time;
+    }
+
+    // Allow only known gameplay metrics, never arbitrary visitor strings or input values.
+    function validDetails(data) {
+      return data is map
+        && data.keys().hasOnly(['action', 'restored', 'open', 'routeIndex', 'deliveries', 'fuel', 'gameplaySeconds', 'throttle'])
+        && (!('action' in data) || data.action in ['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned'])
+        && (!('restored' in data) || data.restored is bool)
+        && (!('open' in data) || data.open is bool)
+        && (!('routeIndex' in data) || (data.routeIndex is number && data.routeIndex >= 0 && data.routeIndex <= 9))
+        && (!('deliveries' in data) || (data.deliveries is number && data.deliveries >= 0 && data.deliveries <= 10))
+        && (!('fuel' in data) || (data.fuel is number && data.fuel >= 0 && data.fuel <= 100))
+        && (!('gameplaySeconds' in data) || (data.gameplaySeconds is number && data.gameplaySeconds >= 0 && data.gameplaySeconds <= 86400))
+        && (!('throttle' in data) || (data.throttle is number && data.throttle >= 0 && data.throttle <= 100));
+    }
+
+    // Accept only anonymous conquest statistics, never coordinates, entered digits or private identifiers.
+    function validConquestDetails(data) {
+      return data is map && data.keys().hasAll(['action'])
+        && data.keys().hasOnly(['action', 'gameplaySeconds', 'fuel', 'cargo', 'owned', 'planetLevel', 'amount'])
+        && data.action in ['joined', 'continued', 'left', 'suspended', 'expired', 'spawned', 'died', 'respawned', 'damaged',
+          'landed', 'docked', 'detached', 'hackStarted', 'hackProgress', 'hackCancelled', 'captured', 'cargoCollected', 'cargoDropped',
+          'cargoPickedUp', 'refuelStarted', 'refuelEnded', 'upgraded', 'upgradeRejected', 'shotStarted', 'shotEnded',
+          'selfDestruct', 'mapTarget', 'reset']
+        && (!('gameplaySeconds' in data) || (data.gameplaySeconds is number && data.gameplaySeconds >= 0 && data.gameplaySeconds <= 86400))
+        && (!('fuel' in data) || (data.fuel is number && data.fuel >= 0 && data.fuel <= 100))
+        && (!('cargo' in data) || (data.cargo is int && data.cargo >= 0 && data.cargo <= 1000000))
+        && (!('owned' in data) || (data.owned is int && data.owned >= 0 && data.owned <= 256))
+        && (!('planetLevel' in data) || (data.planetLevel is int && data.planetLevel >= 0 && data.planetLevel <= 10))
+        && (!('amount' in data) || (data.amount is int && data.amount >= 0 && data.amount <= 1000000))
+        && (data.action != 'damaged' || (data.keys().hasAll(['amount', 'fuel']) && data.amount > 0))
+        && (data.action != 'hackProgress' || !('amount' in data)
+          || (data.amount >= 5 && data.amount <= 100 && data.amount % 5 == 0));
+    }
+
+    // Append-only, deterministic sequence IDs make replayed requests harmless and cap rows per visit.
+    function validEvent(data, sessionId, eventId) {
+      let visit = get(/databases/$(database)/documents/visitLogs/$(sessionId)).data;
+      return data.keys().hasAll(['sessionId', 'sequence', 'eventName', 'target', 'recordedAt', 'elapsedMs', 'details', 'receivedAt'])
+        && data.keys().hasOnly(['sessionId', 'sequence', 'eventName', 'target', 'recordedAt', 'elapsedMs', 'details', 'receivedAt'])
+        && visit.writerId == request.auth.uid && data.sessionId == sessionId
+        && data.sequence is int && data.sequence >= 1 && data.sequence <= 5000
+        && eventId == string(data.sequence)
+        && data.eventName in ['pageView', 'firstAction', 'click', 'screenView', 'controlPress', 'controlRelease',
+    'throttleChange', 'dockAttempt', 'dockingChecklist', 'historyToggle', 'gameLifecycle', 'conquest', 'briefingToggle', 'pageLeave', 'pageReturn', 'heartbeat'] && data.target in ['page', 'menu', 'confirm', 'history', 'results', 'flight', 'briefing', 'other',
+    'BUTTON', 'A', 'CANVAS', 'H1', 'H2', 'P', 'DIV', 'SPAN', 'INPUT', 'SUMMARY', 'IMG', 'SVG', 'PATH',
+    'burn', 'rotateLeft', 'rotateRight', 'rcsUp', 'rcsDown', 'rcsLeft', 'rcsRight',
+    'gameMenu', 'gameDock', 'gameBurn', 'gameThrottle', 'gameThrottleDown', 'gameThrottleUp',
+    'gameRotateLeft', 'gameRotateRight', 'gameRcsUp', 'gameRcsDown', 'gameRcsLeft', 'gameRcsRight',
+    'gameContinue', 'gameStart', 'gameNewRun', 'gameHistory', 'gameConfirmNewRun', 'gameCancelNewRun',
+    'gameHistoryBack', 'gameRetry', 'servers', 'records', 'conquest', 'planet', 'relay', 'map', 'fire', 'gameFire',
+    'gameServers', 'gameServerJoin', 'gameServerRefresh', 'gameServerBack', 'gameRecords', 'gameBriefing',
+    'conquestReset', 'conquestUpgrade', 'conquestInteract', 'conquestSelfDestruct', 'conquestSelfDestructCancel',
+    'conquestMap', 'conquestDigit', 'conquestBriefing', 'conquestFire', 'conquestJoin', 'conquestGalaxies']
+        && data.recordedAt is int && data.recordedAt >= visit.startedAt
+        && data.elapsedMs is int && data.elapsedMs >= 0 && data.elapsedMs <= 86400000
+        && data.recordedAt == visit.startedAt + data.elapsedMs
+        && data.receivedAt == request.time
+        && (data.eventName == 'conquest'
+          ? data.target in ['conquest', 'planet', 'relay', 'map'] && validConquestDetails(data.details)
+          : validDetails(data.details));
+    }
+
+    match /visitLogs/{sessionId} {
+      allow get: if isAnalyticsOwner() || (isAnonymous() &&
+        (!exists(/databases/$(database)/documents/visitLogs/$(sessionId)) || resource.data.writerId == request.auth.uid));
+      allow list: if isAnalyticsOwner() && request.query.limit <= 100;
+      allow create: if isAnonymous() && validVisit(request.resource.data, sessionId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.startedAt >= request.time.toMillis() - 86400000
+        && request.resource.data.lastSequence == 0
+        && request.resource.data.lastEventAt == request.resource.data.startedAt;
+      allow update: if isAnonymous() && resource.data.writerId == request.auth.uid
+        && validVisit(request.resource.data, sessionId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSequence', 'lastEventAt', 'updatedAt'])
+        && request.resource.data.lastSequence >= resource.data.lastSequence
+        && request.resource.data.lastEventAt >= resource.data.lastEventAt;
+      allow delete: if false;
+
+      match /events/{eventId} {
+        allow get: if isAnalyticsOwner() || (isAnonymous() &&
+          get(/databases/$(database)/documents/visitLogs/$(sessionId)).data.writerId == request.auth.uid);
+        allow list: if isAnalyticsOwner() && request.query.limit <= 100;
+        allow create: if isAnonymous() && validEvent(request.resource.data, sessionId, eventId);
+        allow update, delete: if false;
+      }
     }
 
     match /{document=**} {

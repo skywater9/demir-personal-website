@@ -68,3 +68,11 @@ functions/.env.*
 
 # dataconnect generated files
 .dataconnect
+
+# Class-box project environments and local secrets
+.env*
+.venv/
+
+# Private multiplayer runtime snapshots
+server/.runtime/
+server/.test-runtime/

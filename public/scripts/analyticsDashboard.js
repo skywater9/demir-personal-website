@@ -3,8 +3,8 @@ import {
     getAuth, connectAuthEmulator, onAuthStateChanged, setPersistence, browserSessionPersistence,
     signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, signOut
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js?v=20261116-spark';
-import { createAnalyticsHeatmap } from './analyticsHeatmap.js?v=20261116-spark';
+import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js?v=20261116-visit-log';
+import { createAnalyticsHeatmap } from './analyticsHeatmap.js?v=20261116-visit-log';
 
 const app = initializeApp(useFirebaseEmulators
     ? { ...firebaseConfig, projectId: 'demo-website-analytics' } : firebaseConfig);

@@ -11,15 +11,20 @@ function wantedVelocity(distance, limit) {
     return Math.sign(distance) * speed;
 }
 
-// This test-only pilot adjusts throttle and held thrusters; it never teleports, refuels, or resets velocity.
-function flyTo(run, x, y, isComplete, { maxSeconds = 500, horizontalSpeed = 60, upSpeed = 40, downSpeed = 25 } = {}) {
+// Use faster vertical transits to spend less fuel hovering against gravity with the smaller tank.
+// Pulse the fixed full-thrust engine; never write throttle, teleport, refuel, or reset velocity.
+// Retain lateral RCS for this legacy physics regression; it does not prove current keyboard-only feasibility.
+function flyTo(run, x, y, isComplete, { maxSeconds = 500, horizontalSpeed = 60, upSpeed = 60, downSpeed = 40 } = {}) {
+    let burnCredit = 0;
     for (let frame = 0; frame < maxSeconds / tuning.fixedStep; frame += 1) {
         if (isComplete()) return true;
         const gravity = gravityAt(run.x, run.y);
         const ax = (wantedVelocity(x - run.x, horizontalSpeed) - run.vx) * 2 - gravity.ax;
         const ay = (wantedVelocity(y - run.y, y < run.y ? upSpeed : downSpeed) - run.vy) * 2 - gravity.ay;
-        const burn = ay < -0.04;
-        run.throttle = burn ? Math.min(1, Math.ceil(-ay / tuning.mainAcceleration * 100) / 100) : 0;
+        // Carry fractional demand forward so each burn uses one full-thrust physics step.
+        burnCredit += Math.max(0, Math.min(1, -ay / tuning.mainAcceleration));
+        const burn = burnCredit >= 1;
+        if (burn) burnCredit -= 1;
         stepRun(run, {
             burn,
             rcsX: Math.abs(ax) > 0.04 ? Math.sign(ax) : 0,
@@ -39,7 +44,7 @@ test('fly the full route using controls and automatic pad refueling without stat
         assert.equal(flyTo(run, approachX, bay.y, () => Math.abs(run.x - approachX) < 2
             && Math.abs(run.y - bay.y) < 2 && Math.hypot(run.vx, run.vy) < 1), true,
             `${routeBody(index).name} relay approach: ${run.reason || 'approach timed out'}`);
-        assert.equal(flyTo(run, bay.x, bay.y, () => tryDock(run), { horizontalSpeed: 3, upSpeed: 2, downSpeed: 2 }), true,
+        assert.equal(flyTo(run, bay.x, bay.y, () => tryDock(run), { horizontalSpeed: 6, upSpeed: 4, downSpeed: 4 }), true,
             `${routeBody(index).name} relay: ${run.reason || 'approach timed out'}`);
         assert.equal(run.delivered, index + 1);
         assert.equal(isValidRun(run), true);
@@ -54,7 +59,8 @@ test('fly the full route using controls and automatic pad refueling without stat
         const next = routeBody(index + 1);
         assert.equal(flyTo(run, next.x, cruiseY, () => Math.abs(run.x - next.x) < 1 && Math.abs(run.vx) < 1), true,
             `Transit to ${next.name}: ${run.reason}`);
-        assert.equal(flyTo(run, next.x, next.y - next.radius - tuning.shipRadius + 0.2,
+        // Aim below the contact plane to touch down safely rather than hovering just above the pad.
+        assert.equal(flyTo(run, next.x, next.y - next.radius - tuning.shipRadius + 12,
             () => run.routeIndex === index + 1), true, `${next.name} touchdown: ${run.reason}`);
         assert.equal(run.serviced.length, index + 2);
     }

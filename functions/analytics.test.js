@@ -32,6 +32,15 @@ function makeBatch(now = Date.now()) {
     };
 }
 
+// Exercise the shared conquest privacy boundary inside each isolated browser module context.
+async function loadVisitLogCore(context) {
+    const source = await readFile(path.resolve(__dirname, '../public/scripts/visitLogCore.mjs'), 'utf8');
+    const module = new vm.SourceTextModule(source, { context });
+    await module.link(() => assert.fail('The analytics core has no dependencies.'));
+    await module.evaluate();
+    return module;
+}
+
 test('validation accepts planned data and rejects sensitive, malformed, and oversized event structures', () => {
     const now = Date.now();
     assert.doesNotThrow(() => validateBatch(makeBatch(now), now));
@@ -434,6 +443,7 @@ test('legacy site analytics preserves visit counts without the old DOM or a work
             await module.evaluate();
             modules.set(name, module);
         }
+        modules.set('./visitLogCore.mjs', await loadVisitLogCore(context));
         const tracker = new vm.SourceTextModule(source, {
             context,
             // Keep optional Google Analytics failures isolated from both visit counters.
@@ -712,6 +722,7 @@ async function createGameAnalyticsHarness({ hostname = 'example.com', supported 
         await module.evaluate();
         modules.set(name, module);
     }
+    modules.set('visitLogCore.mjs', await loadVisitLogCore(context));
     const tracker = new vm.SourceTextModule(source, { context,
         importModuleDynamically: async () => {
             imports++;
@@ -725,6 +736,8 @@ async function createGameAnalyticsHarness({ hostname = 'example.com', supported 
         events, startSdk, imports: () => imports, visits: () => visits,
         // Native CustomEvent delivery exercises the exact listener used by the game.
         emit(detail) { target.dispatchEvent(new CustomEvent('rocket:gameLifecycle', { detail })); },
+        // Dispatch the new app's semantic outcomes through the production listener.
+        emitConquest(detail) { target.dispatchEvent(new CustomEvent('rocket:conquest', { detail })); },
         // Settle SDK and transaction continuations without network or timer sleeps.
         async settle() { for (let index = 0; index < 30; index++) await Promise.resolve(); }
     };
@@ -769,6 +782,7 @@ test('GA excludes localhost on every port and loopback hosts while preserving vi
         const harness = await createGameAnalyticsHarness({ hostname });
         harness.startSdk();
         harness.emit({ action: 'started', routeIndex: 0, deliveries: 0, fuel: 100, gameplaySeconds: 0 });
+        harness.emitConquest({ action: 'joined', fuel: 100, cargo: 0, owned: 1, planetLevel: 0, gameplaySeconds: 0 });
         await harness.settle();
         assert.equal(harness.imports(), 0, hostname);
         assert.equal(harness.events.length, 0, hostname);
@@ -781,10 +795,46 @@ test('blocked, unsupported, or throwing GA leaves native gameplay and visit coun
         const harness = await createGameAnalyticsHarness(options);
         const detail = { action: 'started', routeIndex: 0, deliveries: 0, fuel: 100, gameplaySeconds: 0 };
         harness.emit(detail);
+        harness.emitConquest({ action: 'joined', fuel: 100 });
         harness.startSdk();
         await harness.settle();
         assert.doesNotThrow(() => harness.emit(detail));
+        assert.doesNotThrow(() => harness.emitConquest({ action: 'captured', owned: 2 }));
         assert.equal(harness.events.length, 0);
         assert.equal(harness.visits(), 1);
     }
+});
+
+test('GA conquest shares anonymous projection, held-fire bounds and cumulative hack milestones', async () => {
+    const harness = await createGameAnalyticsHarness();
+    const snapshot = { gameplaySeconds: 120.125, fuel: 80.125, cargo: 200, owned: 3, planetLevel: 2,
+        playerId: 'private-player', roomId: 'private-room', credential: 'private-token', x: 123, digit: 7 };
+    harness.emitConquest({ action: 'joined', ...snapshot });
+    for (let index = 0; index < 1000; index++) harness.emitConquest({ action: 'shotStarted', ...snapshot });
+    harness.emitConquest({ action: 'shotEnded', amount: 120, ...snapshot });
+    harness.emitConquest({ action: 'hackStarted', target: 'relay', ...snapshot });
+    for (let amount = 0; amount < 1000; amount++) harness.emitConquest({ action: 'hackProgress', amount, ...snapshot });
+    assert.equal(harness.events.length, 0);
+    harness.startSdk();
+    await harness.settle();
+    assert.equal(harness.events.filter(event => event.name === 'conquest_shotStarted').length, 1);
+    assert.equal(harness.events.filter(event => event.name === 'conquest_shotEnded').length, 1);
+    assert.equal(harness.events.filter(event => event.name === 'conquest_hackProgress').length, 20);
+    assert.deepEqual(harness.events[0], { name: 'conquest_joined', parameters: {
+        target: 'conquest', action: 'joined', gameplay_seconds: 120.13, fuel_remaining: 80.13,
+        cargo: 200, owned: 3, planet_level: 2
+    } });
+    assert.equal(JSON.stringify(harness.events).includes('private-'), false);
+    harness.events.length = 0;
+    const actions = ['joined', 'continued', 'left', 'suspended', 'expired', 'spawned', 'died', 'respawned',
+        'docked', 'detached', 'hackStarted', 'hackProgress', 'hackCancelled', 'captured', 'cargoCollected',
+        'cargoDropped', 'cargoPickedUp', 'refuelStarted', 'refuelEnded', 'upgraded', 'upgradeRejected',
+        'shotStarted', 'shotEnded', 'selfDestruct', 'mapTarget', 'reset'];
+    for (const action of actions) harness.emitConquest({ action, target: 'planet', amount: 25, ...snapshot });
+    assert.deepEqual(harness.events.map(event => event.name), actions.map(action => `conquest_${action}`));
+    for (const detail of [null, [], {}, { action: 'unknown' }, { action: 'joined', target: 'planet-7' },
+        { action: 'joined', fuel: Infinity }, { action: 'joined', cargo: 0.5 }, { action: 'joined', amount: '7' },
+        { action: 'hackProgress', amount: 7 }, { action: 'joined', planetLevel: 11 }]) harness.emitConquest(detail);
+    assert.equal(harness.events.length, actions.length);
+    assert.equal(harness.visits(), 1);
 });

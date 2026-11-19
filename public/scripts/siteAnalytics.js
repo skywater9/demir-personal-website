@@ -2,7 +2,8 @@ import { getApp, getApps, initializeApp } from 'https://www.gstatic.com/firebase
 import {
     getFirestore, connectFirestoreEmulator, doc, runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js?v=20261116-spark';
+import { firebaseConfig, useFirebaseEmulators } from './firebaseConfig.js?v=20261118-conquest';
+import { ConquestTracker } from './visitLogCore.mjs?v=20261118-fuel-damage';
 
 const app = getApps().length ? getApp() : initializeApp(useFirebaseEmulators
     ? { ...firebaseConfig, projectId: 'demo-website-analytics' } : firebaseConfig);
@@ -55,6 +56,7 @@ async function recordSiteVisit() {
 
 const gameActions = new Set(['started', 'continued', 'left', 'suspended', 'landed', 'delivered', 'won', 'lost', 'abandoned']);
 const pendingGameEvents = [];
+const conquest = new ConquestTracker();
 let googleAnalytics = null;
 let logGoogleEvent = null;
 let analyticsUnavailable = false;
@@ -76,9 +78,19 @@ function disableGoogleAnalytics(error) {
 // Log a projected event safely so SDK errors never interrupt gameplay or visit counts.
 function sendGameEvent(event) {
     try {
-        logGoogleEvent(googleAnalytics, `game_${event.action}`, event);
+        logGoogleEvent(googleAnalytics, event.name, event.parameters);
     } catch (error) {
         disableGoogleAnalytics(error);
+    }
+}
+
+// Keep the optional SDK's pre-init buffer bounded independently of the durable Firestore outbox.
+function queueGameEvent(name, parameters) {
+    const event = { name, parameters };
+    if (logGoogleEvent) sendGameEvent(event);
+    else {
+        if (pendingGameEvents.length >= 32) pendingGameEvents.shift();
+        pendingGameEvents.push(event);
     }
 }
 
@@ -93,17 +105,25 @@ function handleGameLifecycle(event) {
         || !Number.isFinite(detail.gameplaySeconds) || detail.gameplaySeconds < 0 || detail.gameplaySeconds > 31536000) return;
     const parameters = { action: detail.action, route_index: detail.routeIndex, deliveries: detail.deliveries,
         fuel_remaining: detail.fuel, gameplay_seconds: detail.gameplaySeconds };
-    if (logGoogleEvent) sendGameEvent(parameters);
-    else {
-        if (pendingGameEvents.length >= 32) pendingGameEvents.shift();
-        pendingGameEvents.push(parameters);
-    }
+    queueGameEvent(`game_${detail.action}`, parameters);
+}
+
+// Reuse the durable log's privacy projection and milestone/held-fire bounds for optional GA reports.
+function handleConquest(event) {
+    if (analyticsUnavailable) return;
+    const accepted = conquest.accept(event.detail);
+    if (!accepted) return;
+    const parameters = { target: accepted.target };
+    const names = { gameplaySeconds: 'gameplay_seconds', fuel: 'fuel_remaining', planetLevel: 'planet_level' };
+    for (const [key, value] of Object.entries(accepted.details)) parameters[names[key] || key] = value;
+    queueGameEvent(`conquest_${accepted.details.action}`, parameters);
 }
 
 // Listen before loading the optional SDK; buffer only new native events while initialization is pending.
 async function initializeGoogleAnalytics() {
     if (useFirebaseEmulators || isLocalAnalyticsHost()) return;
     window.addEventListener('rocket:gameLifecycle', handleGameLifecycle);
+    window.addEventListener('rocket:conquest', handleConquest);
     try {
         const { getAnalytics, isSupported, logEvent } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js');
         if (!await isSupported()) {

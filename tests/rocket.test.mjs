@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    bodies, route, tuning, createRun, routeBody, gravityAt, stepRun, targetFor, stationFor,
+    bodies, route, tuning, createRun, dashRun, routeBody, gravityAt, stepRun, targetFor, stationFor,
     dockingPoint, tryDock, dockingStatus, recordRunEvent
 } from '../public/scripts/rocketPhysics.mjs';
 import { RunStore, isValidRun, saveKey } from '../public/scripts/rocketStorage.mjs';
@@ -62,7 +62,7 @@ test('empty fuel loses instantly even when landed; excessive impact speed also l
     const impact = createRun();
     impact.landedOn = null;
     impact.y -= 0.01;
-    impact.vy = 20;
+    impact.vy = tuning.surfaceCrashSpeed + 1;
     stepRun(impact);
     assert.equal(impact.status, 'lost');
     assert.match(impact.reason, /Impact on Earth/);
@@ -71,7 +71,7 @@ test('empty fuel loses instantly even when landed; excessive impact speed also l
 test('docking rejects excess speed, wrong rotation and missing player action', () => {
     const run = createRun();
     placeAtStation(run);
-    run.vx = 6;
+    run.vx = tuning.dockingSpeed + 1;
     assert.equal(tryDock(run), false);
     run.vx = 0;
     run.angle = 0.5;
@@ -98,9 +98,9 @@ test('safe upright next-pad landing refuels once; off-pad and misaligned contact
         if (offset === 0 && angle === 0) {
             assert.equal(run.routeIndex, 1);
             assert.equal(run.payload, true);
-            assert.equal(run.fuel, 74);
+            assert.equal(run.fuel, 65);
             stepRun(run);
-            assert.equal(run.fuel, 74);
+            assert.equal(run.fuel, 65);
         } else {
             assert.equal(run.routeIndex, 0);
             assert.equal(run.fuel, 40);
@@ -120,15 +120,16 @@ test('station hull, solar panels, and antenna cause excessive-speed collisions',
     }
 });
 
-test('station contact below 20 m/s bounces, while a faster hit fails', () => {
+test('station contact below 30 m/s bumps gently, while a faster hit fails', () => {
     const station = stationFor(routeBody(0));
-    for (const speed of [10, 19.9, 20.1]) {
+    for (const speed of [10, 20.1, 29.9, 30.1]) {
         const run = createRun();
         Object.assign(run, { x: station.x - 62.01, y: station.y, vx: speed, vy: 0, landedOn: null });
         stepRun(run);
-        if (speed < 20) {
+        if (speed < tuning.stationCrashSpeed) {
             assert.equal(run.status, 'active');
             assert.ok(run.vx < 0, 'The rocket must bounce away from the receiver.');
+            assert.ok(Math.hypot(run.vx, run.vy) <= 6, 'A survivable impact must produce a gentle rebound.');
         } else assert.equal(run.status, 'lost');
     }
 });
@@ -290,7 +291,7 @@ test('a stationary rocket can align on the next pad and receive service without 
     for (let index = 0; index < 10; index += 1) stepRun(run, { rotate: -1 });
     assert.equal(run.routeIndex, 1);
     assert.equal(run.payload, true);
-    assert.ok(run.fuel > 73);
+    assert.ok(run.fuel > 64 && run.fuel < 65);
 });
 
 test('saved progress resumes all physics state without adding time away and results survive reload', () => {
@@ -329,4 +330,222 @@ test('malformed saves are rejected and blocked storage falls back without stoppi
     assert.equal(blocked.saveActive(createRun()), true);
     assert.equal(blocked.available, false);
     assert.ok(blocked.getActive());
+});
+
+test('more forgiving pad landings service safely while moderate impacts bounce without refueling', () => {
+    const moon = routeBody(1);
+    for (const speed of [11.9, 13, 20, 24.9, 25.1]) {
+        const run = createRun();
+        Object.assign(run, { phase: 'planet', delivered: 1, payload: false, fuel: 40,
+            x: moon.x, y: moon.y - moon.radius - tuning.shipRadius + 0.01,
+            vx: 0, vy: speed, angle: 0, landedOn: null });
+        stepRun(run);
+        if (speed < tuning.safeLandingSpeed) {
+            assert.equal(run.status, 'active');
+            assert.equal(run.routeIndex, 1);
+            assert.equal(run.landedOn, 'moon');
+            assert.equal(run.fuel, 65);
+            assert.equal(run.payload, true);
+        } else if (speed < tuning.surfaceCrashSpeed) {
+            assert.equal(run.status, 'active');
+            assert.equal(run.routeIndex, 0);
+            assert.equal(run.landedOn, null);
+            assert.equal(run.fuel, 40);
+            assert.equal(run.payload, false);
+            assert.ok(run.vy < 0 && run.vy >= -3, 'Moderate impact must gently rebound away from the pad.');
+            assert.ok(Math.hypot(run.x - moon.x, run.y - moon.y) > moon.radius + tuning.shipRadius);
+        } else assert.equal(run.status, 'lost');
+    }
+});
+
+test('docking accepts the raised 8 m/s limit while still requiring upright alignment', () => {
+    const run = createRun();
+    placeAtStation(run);
+    run.vx = 8;
+    assert.equal(dockingStatus(run).ready, true);
+    assert.equal(tryDock(run), true);
+    assert.equal(run.delivered, 1);
+    const tilted = createRun();
+    placeAtStation(tilted);
+    tilted.vx = 8;
+    tilted.angle = 0.5;
+    assert.equal(tryDock(tilted), false);
+});
+
+test('glancing station contacts damp sideways motion and cap the full rebound speed', () => {
+    const run = createRun();
+    const station = stationFor(routeBody(0));
+    Object.assign(run, { x: station.x - 62.01, y: station.y, vx: 20, vy: 20, landedOn: null });
+    stepRun(run);
+    assert.equal(run.status, 'active');
+    assert.ok(run.vx < 0);
+    assert.ok(Math.hypot(run.vx, run.vy) <= 6.000001);
+});
+
+test('half-capacity tank doubles percentage consumption for every fueled control while coasting stays free', () => {
+    assert.equal(tuning.fuelCapacityScale, 0.5);
+    const run = createRun();
+    Object.assign(run, { x: 0, y: -2000, landedOn: null, throttle: 1 });
+    stepRun(run, { burn: true, rotate: 1, rcsX: 1, rcsY: -1 });
+    const expectedUse = tuning.fixedStep * 2 * (tuning.mainFuelRate + tuning.rotationFuelRate + 2 * tuning.rcsFuelRate);
+    assert.ok(Math.abs(run.fuel - (100 - expectedUse)) < 1e-10);
+    const fuel = run.fuel;
+    stepRun(run);
+    assert.equal(run.fuel, fuel);
+    assert.equal(isValidRun(run), true);
+});
+
+test('every destination refuels 25 percent once, capped at the tank maximum', () => {
+    for (let index = 1; index < route.length; index++) {
+        const body = routeBody(index);
+        assert.equal(body.refuel, 25);
+        for (const fuel of [20, 90]) {
+            const run = createRun();
+            Object.assign(run, { routeIndex: index - 1, phase: 'planet', delivered: index, payload: false, fuel,
+                serviced: Array.from({ length: index }, (_, position) => position),
+                x: body.x, y: body.y - body.radius - tuning.shipRadius,
+                vx: 0, vy: 0, angle: 0, landedOn: body.id });
+            stepRun(run);
+            assert.equal(run.routeIndex, index);
+            assert.equal(run.fuel, Math.min(100, fuel + 25));
+            const servicedFuel = run.fuel;
+            stepRun(run);
+            assert.equal(run.fuel, servicedFuel, 'Remaining on a pad must not repeat its refuel grant.');
+            assert.equal(isValidRun(run), true);
+        }
+    }
+});
+
+test('rotating alone spends attitude fuel without requiring the main engine or translation controls', () => {
+    const run = createRun();
+    Object.assign(run, { x: 0, y: -2000, landedOn: null });
+    stepRun(run, { rotate: 1 });
+    assert.ok(run.angle > 0);
+    assert.ok(Math.abs(run.fuel - (100 - tuning.fixedStep * tuning.rotationFuelRate / tuning.fuelCapacityScale)) < 1e-10);
+    assert.equal(run.vx, 0);
+    assert.equal(run.vy, 0);
+});
+
+
+test('held rotation gently accelerates to a cap and resets on release or reversal', () => {
+    for (const direction of [-1, 1]) {
+        const run = createRun();
+        Object.assign(run, { x: 0, y: -5000, landedOn: null });
+        stepRun(run, { rotate: direction });
+        const initialSpeed = Math.abs(run.rotationVelocity);
+        assert.ok(initialSpeed >= tuning.rotationRate && initialSpeed < tuning.maxRotationRate);
+        for (let frame = 0; frame < 120; frame++) stepRun(run, { rotate: direction });
+        assert.ok(Math.abs(run.rotationVelocity) > initialSpeed);
+        for (let frame = 0; frame < 240; frame++) stepRun(run, { rotate: direction });
+        assert.equal(run.rotationVelocity, direction * tuning.maxRotationRate);
+        stepRun(run, { rotate: -direction });
+        assert.equal(run.rotationVelocity, -direction * initialSpeed);
+        const angle = run.angle;
+        stepRun(run);
+        assert.equal(run.rotationVelocity, 0);
+        assert.equal(run.angle, angle);
+        stepRun(run, { rotate: direction });
+        assert.equal(run.rotationVelocity, direction * initialSpeed);
+    }
+});
+
+test('small forward thrust and brake keep their rocket-relative direction, strength and fuel use', () => {
+    for (const angle of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+        for (const direction of [-1, 1]) {
+            const run = createRun();
+            Object.assign(run, { x: 0, y: -5000, angle, landedOn: null });
+            stepRun(run, { rcsY: direction });
+            assert.ok(Math.abs(run.vx + direction * Math.sin(angle) * tuning.rcsAcceleration * tuning.fixedStep) < 1e-10);
+            assert.ok(Math.abs(run.vy - direction * Math.cos(angle) * tuning.rcsAcceleration * tuning.fixedStep) < 1e-10);
+            assert.ok(Math.abs(run.fuel - (100 - tuning.rcsFuelRate * tuning.fixedStep / tuning.fuelCapacityScale)) < 1e-10);
+        }
+    }
+    const run = createRun();
+    Object.assign(run, { x: 0, y: -5000, vy: -10, landedOn: null });
+    stepRun(run, { rcsY: 1 });
+    assert.ok(run.vy > -10 && run.vy < 0, 'Upright K thrust slows forward motion.');
+});
+
+test('old saves load without a turn speed and invalid saved turn speeds are rejected', () => {
+    const run = createRun();
+    delete run.rotationVelocity;
+    assert.equal(isValidRun(run), true);
+    stepRun(run, { rotate: 1 });
+    assert.ok(Number.isFinite(run.rotationVelocity));
+    assert.equal(isValidRun(run), true);
+    for (const value of [NaN, Infinity, tuning.maxRotationRate + 1, 'fast']) {
+        run.rotationVelocity = value;
+        assert.equal(isValidRun(run), false);
+    }
+});
+
+
+test('dashes add rocket-relative impulses and cost exactly one percent fuel in every direction', () => {
+    for (const angle of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+        for (const [direction, localX, localY] of [
+            ['forward', 0, -1], ['left', -1, 0], ['backward', 0, 1], ['right', 1, 0]
+        ]) {
+            const run = createRun();
+            Object.assign(run, { angle, vx: 3, vy: -4 });
+            assert.equal(dashRun(run, direction), true);
+            assert.ok(Math.abs(run.vx - 3 - (localX * Math.cos(angle) - localY * Math.sin(angle)) * tuning.dashImpulse) < 1e-10);
+            assert.ok(Math.abs(run.vy + 4 - (localX * Math.sin(angle) + localY * Math.cos(angle)) * tuning.dashImpulse) < 1e-10);
+            assert.equal(run.fuel, 99);
+            assert.equal(run.landedOn, null);
+            assert.equal(run.dashReadyAt, 2);
+        }
+    }
+});
+
+test('all dash directions share a two-second cooldown that expires through active physics steps', () => {
+    const run = createRun();
+    Object.assign(run, { x: 0, y: -5000, landedOn: null });
+    assert.equal(dashRun(run, 'forward'), true);
+    for (let frame = 0; frame < 240; frame++) {
+        for (const direction of ['forward', 'left', 'backward', 'right']) {
+            assert.equal(dashRun(run, direction), false);
+        }
+        stepRun(run);
+    }
+    assert.equal(run.fuel, 99);
+    assert.equal(dashRun(run, 'left'), true);
+    assert.equal(run.fuel, 98);
+});
+
+test('dashes reject invalid directions, insufficient fuel and finished runs without changing state', () => {
+    for (const [fuel, status, direction] of [
+        [0.5, 'active', 'forward'], [100, 'lost', 'forward'],
+        [100, 'active', 'diagonal'], [100, 'active', 'toString']
+    ]) {
+        const run = createRun();
+        Object.assign(run, { fuel, status });
+        const before = structuredClone(run);
+        assert.equal(dashRun(run, direction), false);
+        assert.deepEqual(run, before);
+    }
+    const empty = createRun();
+    empty.fuel = 1;
+    assert.equal(dashRun(empty, 'forward'), true);
+    assert.equal(empty.fuel, 0);
+    assert.equal(empty.status, 'lost');
+});
+
+test('dash detaches from a relay and its cooldown survives saving and restoring', () => {
+    const run = createRun();
+    placeAtStation(run);
+    assert.equal(tryDock(run), true);
+    assert.equal(dashRun(run, 'left'), true);
+    assert.equal(run.docked, false);
+    assert.equal(run.events.at(-1).type, 'undocked');
+    const storage = memoryStorage();
+    new RunStore(storage).saveActive(run);
+    const resumed = new RunStore(storage).getActive();
+    assert.equal(resumed.dashReadyAt, 2);
+    assert.equal(dashRun(resumed, 'right'), false);
+    delete resumed.dashReadyAt;
+    assert.equal(isValidRun(resumed), true, 'Older saves must remain compatible.');
+    for (const value of [NaN, Infinity, -1, resumed.elapsed + 3, 'soon']) {
+        resumed.dashReadyAt = value;
+        assert.equal(isValidRun(resumed), false);
+    }
 });

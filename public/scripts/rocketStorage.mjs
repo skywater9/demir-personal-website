@@ -1,10 +1,17 @@
-import { bodies, route, tuning } from './rocketPhysics.mjs?v=20261116-spark';
+import { bodies, route, tuning } from './rocketPhysics.mjs?v=20261118-strong-dash';
 
 export const saveKey = 'orbitalFreight.v1';
 const statuses = ['active', 'won', 'lost', 'abandoned'];
 
 // Reject corrupt or incompatible saves before they can reach the simulation or rendered UI.
 export function isValidRun(run) {
+    // Older saves omit turn speed; new saves must keep it inside the simulation's limits.
+    if (run && run.rotationVelocity !== undefined
+        && (!Number.isFinite(run.rotationVelocity) || Math.abs(run.rotationVelocity) > tuning.maxRotationRate)) return false;
+    // Keep a dash cooldown across reloads while accepting saves made before dashes existed.
+    if (run && run.dashReadyAt !== undefined
+        && (!Number.isFinite(run.dashReadyAt) || run.dashReadyAt < 0
+            || run.dashReadyAt > run.elapsed + tuning.dashCooldown + 1e-9)) return false;
     if (!run || run.version !== 1 || typeof run.id !== 'string' || !run.id || run.id.length > 100
         || !statuses.includes(run.status) || !['station', 'planet'].includes(run.phase)
         || !Number.isInteger(run.routeIndex) || run.routeIndex < 0 || run.routeIndex >= route.length

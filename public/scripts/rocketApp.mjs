@@ -1,15 +1,16 @@
 import {
-    createRun, route, routeBody, tuning, stepRun, targetFor, nearestBody,
-    stationFor, gravityAt, dockingStatus, tryDock, recordRunEvent
-} from './rocketPhysics.mjs?v=20261116-spark';
-import { RunStore, saveKey } from './rocketStorage.mjs?v=20261116-spark';
-import { RocketRenderer } from './rocketRenderer.mjs?v=20261116-spark';
+    createRun, route, routeBody, tuning, stepRun, dashRun, targetFor, nearestBody,
+    gravityAt, dockingStatus, tryDock, recordRunEvent
+} from './rocketPhysics.mjs?v=20261118-strong-dash';
+import { RunStore, saveKey } from './rocketStorage.mjs?v=20261118-strong-dash';
+import { RocketRenderer } from './rocketRenderer.mjs?v=20261118-strong-dash';
 
 const keyControls = Object.freeze({
-    Space: 'burn', ArrowUp: 'burn', KeyA: 'rotateLeft', ArrowLeft: 'rotateLeft',
-    KeyD: 'rotateRight', ArrowRight: 'rotateRight', KeyI: 'rcsUp',
-    KeyK: 'rcsDown', KeyJ: 'rcsLeft', KeyL: 'rcsRight'
+    ArrowUp: 'burn', KeyA: 'rotateLeft', ArrowLeft: 'rotateLeft',
+    KeyD: 'rotateRight', ArrowRight: 'rotateRight', KeyW: 'burn',
+    KeyS: 'rcsDown'
 });
+const dashDirections = Object.freeze({ KeyW: 'forward', KeyA: 'left', KeyS: 'backward', KeyD: 'right' });
 const eventLabels = Object.freeze({
     started: 'Flight started on Earth', returned: 'Returned to flight',
     left: 'Left flight for menu', suspended: 'Left page or switched away',
@@ -40,7 +41,10 @@ export class FlightApp {
         this.ui = Object.fromEntries([...page.querySelectorAll('[id]')].map(element => [element.id, element]));
         this.mode = 'menu';
         this.keys = new Set();
+        this.lastDashTap = new Map();
+        this.pendingDash = null;
         this.pointers = new Map();
+        this.activeInput = {};
         this.heldButtons = [...page.querySelectorAll('[data-control]')];
         this.accumulator = 0;
         this.saveElapsed = 0;
@@ -60,6 +64,7 @@ export class FlightApp {
         });
         const saved = this.store.getActive();
         this.run = saved || createRun();
+        this.run.throttle = 1;
         this.renderer = renderer || new RocketRenderer(this.ui.flightCanvas, this.ui.mapCanvas);
         this.bindEvents();
         this.updateMenu();
@@ -130,9 +135,6 @@ export class FlightApp {
         });
         this.ui.historyBackButton.addEventListener('click', () => this.showScreen('menu'));
         this.ui.dockButton.addEventListener('click', () => this.attach());
-        this.ui.throttleSlider.addEventListener('input', event => this.setThrottle(Number(event.target.value) / 100));
-        this.ui.throttleUpButton.addEventListener('click', () => this.setThrottle(this.run.throttle + 0.05));
-        this.ui.throttleDownButton.addEventListener('click', () => this.setThrottle(this.run.throttle - 0.05));
         for (const button of this.heldButtons) this.bindHeldButton(button);
         this.page.addEventListener('keydown', event => this.handleKeyDown(event));
         this.page.addEventListener('keyup', event => {
@@ -149,7 +151,6 @@ export class FlightApp {
             if (event.key !== saveKey && event.key !== null) return;
             if (this.mode === 'flight' && !this.store.ownsActive(this.run.id)) this.ownershipLost();
             else {
-                this.emitGameLifecycle(type === 'left' ? 'left' : 'suspended', departureRun);
                 if (this.mode === 'menu') this.updateMenu();
             }
         });
@@ -167,7 +168,7 @@ export class FlightApp {
             button.addEventListener(eventName, event => this.pointers.delete(event.pointerId));
         }
         button.addEventListener('keydown', event => {
-            if (this.mode !== 'flight' || !['Space', 'Enter'].includes(event.code)) return;
+            if (this.mode !== 'flight' || event.code !== 'Enter') return;
             event.preventDefault();
             event.stopPropagation();
             this.keys.add(`button:${event.code}`);
@@ -178,7 +179,7 @@ export class FlightApp {
         });
     }
 
-    // Handle flight shortcuts without stealing slider keys, browser shortcuts, or ordinary button activation.
+    // Handle flight shortcuts without stealing browser shortcuts or ordinary button activation.
     handleKeyDown(event) {
         if (event.code === 'Tab' && this.mode !== 'flight') {
             this.trapFocus(event);
@@ -193,15 +194,30 @@ export class FlightApp {
         if (this.mode !== 'flight' || event.ctrlKey || event.metaKey || event.altKey) return;
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName)) return;
         if (event.code === 'Space' && event.target?.tagName === 'BUTTON') return;
-        if (keyControls[event.code]) {
+        if (keyControls[event.code] || dashDirections[event.code]) {
             event.preventDefault();
+            if (!event.repeat && !this.keys.has(event.code) && !this.busy && !this.resultsPending) {
+                this.handleDashTap(event);
+            }
             this.keys.add(event.code);
-        } else if (event.code === 'KeyW' || event.code === 'KeyS') {
-            event.preventDefault();
-            this.setThrottle(this.run.throttle + (event.code === 'KeyW' ? 0.05 : -0.05));
         } else if (event.code === 'KeyE' && !event.repeat) {
             event.preventDefault();
             this.attach();
+        }
+    }
+
+    // Require two real presses of the same key; held-key repeats and cooldown taps never buffer a dash.
+    handleDashTap(event) {
+        const direction = dashDirections[event.code];
+        if (!direction) return;
+        const now = Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now();
+        const previousTap = this.lastDashTap.get(event.code);
+        if (previousTap !== undefined && now >= previousTap && now - previousTap <= tuning.dashTapWindow) {
+            this.lastDashTap.delete(event.code);
+            if (this.pendingDash === null && this.run.status === 'active'
+                && this.run.elapsed + 1e-9 >= (this.run.dashReadyAt || 0)) this.pendingDash = direction;
+        } else {
+            this.lastDashTap.set(event.code, now);
         }
     }
 
@@ -227,6 +243,12 @@ export class FlightApp {
 
     // Clear all physical input whenever control leaves gameplay so held thrust never resumes unexpectedly.
     clearInput() {
+        this.activeInput = {};
+        this.lastDashTap.clear();
+        this.pendingDash = null;
+        this.run.rotationVelocity = 0;
+        for (const action of this.loggedActions || []) this.emitLog('controlRelease', action);
+        this.loggedActions = new Set();
         this.keys.clear();
         this.pointers.clear();
         for (const button of this.heldButtons) button.classList.remove('is-held');
@@ -235,6 +257,8 @@ export class FlightApp {
     // Show exactly one screen and disable background controls while a dialog is open.
     showScreen(mode, focus = true) {
         this.mode = mode;
+        this.ui.gameShell.dataset.screen = mode;
+        this.emitLog('screenView', mode);
         this.clearInput();
         this.accumulator = 0;
         this.lastFrame = null;
@@ -245,8 +269,6 @@ export class FlightApp {
         this.ui.instrumentPanel.inert = mode !== 'flight';
         this.ui.controlPanel.inert = mode !== 'flight';
         this.ui.menuButton.inert = mode !== 'flight';
-        this.page.querySelector('.wordmark').inert = mode !== 'flight';
-        this.text('systemStatus', mode === 'flight' ? 'FLIGHT ACTIVE' : mode === 'results' ? 'FLIGHT RECORDED' : 'AWAITING PILOT');
         if (mode === 'menu') this.updateMenu();
         if (focus && this.page.visibilityState !== 'hidden') {
             const target = mode === 'flight' ? this.ui.flightCanvas : this.activePanel();
@@ -267,6 +289,14 @@ export class FlightApp {
         this.text('savedRunNote', saved
             ? `${routeBody(saved.routeIndex).name} / ${formatTime(saved.elapsed)} / ${saved.fuel.toFixed(1)}% fuel. Flight saved on this browser.`
             : 'Start on Earth with a full tank and your first payload.');
+    }
+
+    // Emit allowlisted product actions without collecting keystrokes, DOM text, or visitor identity.
+    emitLog(name, target, details = {}) {
+        if (typeof this.browserWindow.CustomEvent !== 'function' || typeof this.browserWindow.dispatchEvent !== 'function') return;
+        try {
+            this.browserWindow.dispatchEvent(new this.browserWindow.CustomEvent('rocket:log', { detail: { name, target, details } }));
+        } catch { /* Logging failures must never interrupt flight. */ }
     }
 
     // Dispatch only semantic metadata after transitions; missing browser APIs must not interrupt flight.
@@ -317,6 +347,7 @@ export class FlightApp {
         return this.mutateStore(() => {
             const saved = this.store.getActive();
             if (!saved) return null;
+            saved.throttle = 1;
             if (!['left', 'suspended', 'interrupted'].includes(saved.events.at(-1)?.type)) recordRunEvent(saved, 'interrupted');
             recordRunEvent(saved, 'returned');
             if (!this.isForeground()) recordRunEvent(saved, 'suspended');
@@ -362,11 +393,16 @@ export class FlightApp {
             : 'The flight recorder changed in another tab. Previous results remain available; start a new flight to continue.');
     }
 
-    // Clamp user throttle changes and show the setting immediately, including while an engine is held.
-    setThrottle(throttle) {
-        if (this.mode !== 'flight' || !Number.isFinite(throttle)) return;
-        this.run.throttle = Math.max(0, Math.min(1, throttle));
-        this.updateHud();
+    // Render current fuel draw as a percentage of simultaneous maximum thruster use.
+    updateUsageMeter(input = {}) {
+        const use = (input.burn ? tuning.mainFuelRate : 0)
+            + tuning.rcsFuelRate * (Math.abs(input.rcsX || 0) + Math.abs(input.rcsY || 0))
+            + tuning.rotationFuelRate * Math.abs(input.rotate || 0);
+        const maximumUse = tuning.mainFuelRate + tuning.rcsFuelRate + tuning.rotationFuelRate;
+        const percent = Math.round(Math.min(1, use / maximumUse) * 100);
+        this.ui.usageFill.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
+        this.ui.usageGauge.setAttribute('aria-valuenow', String(percent));
+        this.text('usageValue', `${percent}%`);
     }
 
     // Combine independently held pointer and keyboard actions into one bounded physics input.
@@ -379,18 +415,22 @@ export class FlightApp {
                 if (focusedControl) actions.add(focusedControl);
             }
         }
+        for (const action of actions) if (!this.loggedActions?.has(action)) this.emitLog('controlPress', action);
+        for (const action of this.loggedActions || []) if (!actions.has(action)) this.emitLog('controlRelease', action);
+        this.loggedActions = actions;
         for (const button of this.heldButtons) button.classList.toggle('is-held', actions.has(button.dataset.control));
         return {
             burn: actions.has('burn'),
             rotate: Number(actions.has('rotateRight')) - Number(actions.has('rotateLeft')),
-            rcsX: Number(actions.has('rcsRight')) - Number(actions.has('rcsLeft')),
-            rcsY: Number(actions.has('rcsDown')) - Number(actions.has('rcsUp'))
+            rcsX: 0,
+            rcsY: Number(actions.has('rcsDown'))
         };
     }
 
     // Require an explicit attach action and checkpoint a successful delivery immediately.
     attach() {
         if (this.mode !== 'flight' || this.busy || this.resultsPending) return;
+        this.emitLog('dockAttempt', 'gameDock');
         this.busy = true;
         this.clearInput();
         return this.mutateStore(() => {
@@ -403,7 +443,7 @@ export class FlightApp {
             if (result === 'stale') return this.ownershipLost();
             if (result === 'delivered' || result === 'won') this.emitGameLifecycle('delivered');
             if (result === 'won') this.emitGameLifecycle('won');
-            if (result === 'notReady') this.message('Align upright within 32 m of the bay marker and slow below 5 m/s.', 5);
+            if (result === 'notReady') this.message(`Align upright within ${tuning.dockingDistance} m of the bay marker and slow to ${tuning.dockingSpeed} m/s or less.`, 5);
             else if (result === 'won') this.renderResults();
             else this.message(`Payload delivered. Next: ${targetFor(this.run).body.name}. Hold J to back away from the bay.`, 8);
             this.updateHud();
@@ -488,55 +528,71 @@ export class FlightApp {
         }
     }
 
+    // Plot world velocity in screen coordinates, independently of the rocket's current attitude.
+    updateVelocityDial(run, degrees) {
+        const speed = Math.hypot(run.vx, run.vy);
+        const moving = speed >= 0.005;
+        // Keep slow drift visible and bound fast-flight arrows inside the dial; the number gives exact speed.
+        const length = moving ? Math.min(56, Math.max(18, speed * 1.5)) : 0;
+        const dx = moving ? run.vx / speed * length : 0;
+        const dy = moving ? run.vy / speed * length : 0;
+        const x = 80 + dx;
+        const y = 80 + dy;
+        const nx = moving ? run.vx / speed : 0;
+        const ny = moving ? run.vy / speed : 0;
+        this.ui.velocityVector.setAttribute('x2', x.toFixed(2));
+        this.ui.velocityVector.setAttribute('y2', y.toFixed(2));
+        this.ui.velocityVector.setAttribute('visibility', moving ? 'visible' : 'hidden');
+        this.ui.velocityArrowHead.setAttribute('visibility', moving ? 'visible' : 'hidden');
+        this.ui.velocityArrowHead.setAttribute('d', `M ${x.toFixed(2)} ${y.toFixed(2)} L ${(x - nx * 8 - ny * 4).toFixed(2)} ${(y - ny * 8 + nx * 4).toFixed(2)} L ${(x - nx * 8 + ny * 4).toFixed(2)} ${(y - ny * 8 - nx * 4).toFixed(2)} Z`);
+        this.ui.velocityComponents.setAttribute('d', `M 80 80 H ${x.toFixed(2)} M 80 80 V ${y.toFixed(2)}`);
+        this.ui.velocityProjection.setAttribute('d', `M ${x.toFixed(2)} 80 V ${y.toFixed(2)} H 80`);
+        this.ui.velocityRocket.setAttribute('transform', `translate(80 80) rotate(${degrees})`);
+        this.ui.velocityDial.setAttribute('aria-label', `Speed ${speed.toFixed(2)} metres per second. X ${run.vx.toFixed(2)}, Y ${run.vy.toFixed(2)}; positive Y is down. Rocket rotation ${degrees.toFixed(1)} degrees.`);
+        this.text('speedValue', speed.toFixed(2));
+        this.text('vxValue', `${run.vx >= 0 ? '+' : ''}${run.vx.toFixed(2)}`);
+        this.text('vyValue', `${run.vy >= 0 ? '+' : ''}${run.vy.toFixed(2)}`);
+    }
+
     // Update readable flight instruments and the same tolerance indicators that the physics enforces.
     updateHud() {
         const run = this.run;
         const near = nearestBody(run);
         const target = targetFor(run);
         const gravity = gravityAt(run.x, run.y);
-        const station = stationFor(target.body);
         const docking = dockingStatus(run);
         const degrees = run.angle * 180 / Math.PI;
-        const throttle = Math.round(run.throttle * 100);
         const inRange = near.altitude <= tuning.influenceAltitude;
         this.text('fuelValue', run.fuel.toFixed(1));
-        this.text('fuelState', run.fuel < 20 ? 'LOW FUEL' : 'NOMINAL');
         this.ui.fuelValue.closest('.fuel-panel').classList.toggle('is-low', run.fuel < 20);
         this.ui.fuelFill.style.width = `${run.fuel}%`;
         this.ui.fuelGauge.setAttribute('aria-valuenow', run.fuel.toFixed(1));
         this.text('timeValue', formatTime(run.elapsed));
         this.text('deliveryValue', String(run.delivered).padStart(2, '0'));
         this.text('altitudeValue', inRange ? Math.max(0, near.altitude).toFixed(1) : '—');
-        this.text('stationValue', Math.hypot(run.x - station.x, run.y - station.y).toFixed(0));
-        this.text('speedValue', Math.hypot(run.vx, run.vy).toFixed(1));
+        this.updateVelocityDial(run, degrees);
         this.text('gravityValue', gravity.magnitude.toFixed(2));
-        this.text('rotationValue', degrees.toFixed(1));
+        this.text('rotationValue', `${degrees.toFixed(1)}°`);
         this.text('payloadValue', run.payload ? 'LOADED' : 'EMPTY');
-        this.text('vxValue', `${run.vx >= 0 ? '+' : ''}${run.vx.toFixed(1)}`);
-        this.text('vyValue', `${run.vy >= 0 ? '+' : ''}${run.vy.toFixed(1)}`);
         this.text('routePosition', `STOP ${String(run.routeIndex + 1).padStart(2, '0')} / 10`);
-        this.text('objectiveType', `CURRENT OBJECTIVE / ${target.type === 'station' ? 'RELAY' : 'LANDING PAD'}`);
+        this.text('objectiveType', 'CURRENT OBJECTIVE:');
         this.text('objectiveName', target.name.toUpperCase());
-        this.text('objectiveDistance', formatDistance(Math.hypot(run.x - target.x, run.y - target.y)));
+        this.ui.flightCanvas.setAttribute('aria-label', `Rocket flight view. Target ${target.name}, ${formatDistance(Math.hypot(run.x - target.x, run.y - target.y))} away. Instruments and controls are below.`);
         this.text('environmentLabel', inRange ? `${near.body.name.toUpperCase()} / ${near.body.gas && near.altitude < 200 ? 'ATMOSPHERE' : near.altitude < 50 ? 'SURFACE OPERATIONS' : 'GRAVITY ZONE'}` : 'DEEP SPACE / COAST TO CONSERVE');
         this.text('dockState', run.docked ? 'ATTACHED' : run.phase !== 'station' ? 'DELIVERED' : docking.ready ? 'READY TO ATTACH' : 'ALIGNING');
+        const wasDockHidden = this.ui.dockDialog.hidden;
         this.ui.dockDialog.hidden = !(this.mode === 'flight' && run.status === 'active'
             && run.phase === 'station' && !run.docked && docking.distance <= tuning.dockingAssistDistance);
+        if (wasDockHidden !== this.ui.dockDialog.hidden) this.emitLog('dockingChecklist', 'gameDock', { open: !this.ui.dockDialog.hidden });
         this.ui.dockRangeCheck.classList.toggle('is-ready', docking.distance <= tuning.dockingDistance);
         this.ui.dockSpeedCheck.classList.toggle('is-ready', docking.speed <= tuning.dockingSpeed);
         this.ui.dockAngleCheck.classList.toggle('is-ready', docking.angle <= tuning.dockingAngle);
         this.text('dockRangeCheck', `${docking.distance <= tuning.dockingDistance ? '✓' : '○'} Move within 32 m of the bay — now ${docking.distance.toFixed(0)} m`);
-        this.text('dockSpeedCheck', `${docking.speed <= tuning.dockingSpeed ? '✓' : '○'} Slow to 5 m/s or less — now ${docking.speed.toFixed(1)} m/s`);
+        this.text('dockSpeedCheck', `${docking.speed <= tuning.dockingSpeed ? '✓' : '○'} Slow to ${tuning.dockingSpeed} m/s or less — now ${docking.speed.toFixed(1)} m/s`);
         this.text('dockAngleCheck', `${docking.angle <= tuning.dockingAngle ? '✓' : '○'} Point nose straight up (0° ±12°) — now ${degrees.toFixed(0)}°`);
         this.ui.dockButton.classList.toggle('is-ready', docking.ready);
         this.ui.dockButton.disabled = !docking.ready;
-        this.ui.throttleSlider.value = String(throttle);
-        this.text('throttleValue', `${throttle}%`);
-        this.ui.attitudeNeedle.style.transform = `rotate(${degrees}deg)`;
-        this.text('pilotNote', run.docked ? `Payload delivered. Next pad: ${target.body.name}. Use left RCS (J) to clear the receiver before accelerating.`
-            : run.phase === 'planet' ? `Next: ${target.body.name}. Surface gravity ${target.body.gravity.toFixed(2)} m/s². Land upright at ≤ 8 m/s. Brake early.`
-                : near.altitude < 100 ? `Launch upright. Use at least ${Math.ceil(near.body.gravity / tuning.mainAcceleration * 100)}% throttle here; release to coast.`
-                    : 'Approach the amber bay marker. Use I/J/K/L to cancel drift; align upright and press E.');
+        this.updateUsageMeter(this.activeInput);
     }
 
     // Run bounded fixed steps for stable collisions and checkpoint once per second of active flight.
@@ -549,6 +605,14 @@ export class FlightApp {
             this.accumulator += dt;
             const previousIndex = this.run.routeIndex;
             while (this.accumulator >= tuning.fixedStep && this.run.status === 'active') {
+                if (this.pendingDash !== null) {
+                    const direction = this.pendingDash;
+                    this.pendingDash = null;
+                    if (dashRun(this.run, direction)) {
+                        this.renderer.dashBurst?.(this.run, direction);
+                        this.message(`Dash ${direction}. Cooldown: 2s.`, 2);
+                    }
+                }
                 stepRun(this.run, input);
                 this.accumulator -= tuning.fixedStep;
             }
@@ -575,6 +639,7 @@ export class FlightApp {
                 if (this.run.elapsed > this.messageUntil) this.text('flightMessage', '');
             }
         }
+        this.activeInput = this.mode === 'flight' && !this.busy && !this.resultsPending ? input : {};
         this.hudElapsed += dt;
         if (this.hudElapsed >= 0.1 || dt === 0) {
             this.updateHud();
