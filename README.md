@@ -18,7 +18,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 ## Local conquest
 
 - **Play** starts on protected Earth with full fuel and no cargo. Other planets are neutral.
-- **W** thrusts forward at 240 m/s²; **S** rapidly brakes in every direction, cancelling both forward and sideways drift regardless of heading. Four fixed brake thrusters fire according to rocket-local velocity, tapering near rest without reversing motion. Rocket speed has no cap. Mouse/trackpad steers the rocket toward the cursor with fast, smooth turning (8 rad/s maximum, 150 rad/s² acceleration). Turning has no thruster particles; the main engine and braking retain their effects. **Space** shoots, **E** attaches/detaches, and the displayed number key advances hacking. A W/S/Space guide follows the cursor; each line highlights and fades one second after its key is pressed.
+- **W** thrusts forward at 240 m/s²; **S** rapidly brakes in every direction, cancelling both forward and sideways drift regardless of heading. One brake plume points opposite world velocity regardless of hull rotation; braking tapers near rest without reversing motion. Rocket speed has no cap. Mouse/trackpad steers the rocket toward the cursor with fast, smooth turning (8 rad/s maximum, 150 rad/s² acceleration). Turning has no thruster particles; the main engine and braking retain their effects. **Space** shoots, **E** attaches/detaches, and the displayed number key advances hacking. A W/S/Space guide follows the cursor; each line highlights and fades one second after its key is pressed.
 - The larger bottom-right flight readout shows remaining fuel with a pale usage overlay and red damage overlay, plus a large cargo count. Cargo pickups fly from the rocket to the cargo icon, which enlarges and flashes after arrival; an empty cargo count shows a “COLLECT CARGO” prompt. The square galaxy map stays centered on the player, uses true world distances between solar systems, and outlines the rocket in its player color. Clicking a planet chooses its relay or landing pad based on ownership.
 - Camera zoom widens gently as speed rises and eases back in when slowing.
   Landing and docking retain a close view.
@@ -618,3 +618,5 @@ at an owned relay; T buys the attached planet's defense. Death removes one rocke
 tier and shows the loss during respawn. Saved multiplayer state and reconnect
 credentials are separate from old local conquest saves. Chat is broadcast within
 the room but not persisted or uploaded to analytics.
+
+This focused production brake fix is on `fix/single-brake-plume`, based on the last production revision. The separate starter-station prototype on main remains outside this deployment. The class game server must run this branch and restart for full-vector braking to take effect.

@@ -476,24 +476,18 @@ export class ConquestRenderer {
         if (dead || player.docked || player.fuel <= 0) return [];
         const jets = [];
         if (input.burn) jets.push({ id: 'main', x: 0, y: 10, dx: 0, dy: 1, kind: 'main' });
-        if (input.rcsY > 0) {
+        const speed = Math.hypot(player.vx, player.vy);
+        if (input.rcsY > 0 && speed > 0.001) {
             const cosine = Math.cos(player.angle), sine = Math.sin(player.angle);
-            const localX = player.vx * cosine + player.vy * sine;
-            const localY = -player.vx * sine + player.vy * cosine;
-            const thrusters = [
-                { id: 'brakeFront', x: 0, y: -13, dx: 0, dy: -1, speed: -localY },
-                { id: 'brakeBack', x: 0, y: 10, dx: 0, dy: 1, speed: localY },
-                { id: 'brakeLeft', x: -8, y: 0, dx: -1, dy: 0, speed: -localX },
-                { id: 'brakeRight', x: 8, y: 0, dx: 1, dy: 0, speed: localX }
-            ];
-            for (const { speed, ...thruster } of thrusters) {
-                if (speed > 0.001) jets.push({ ...thruster, kind: 'attitude', power: Math.min(6, speed / 50) });
-            }
+            const dx = -(player.vx * cosine + player.vy * sine) / speed;
+            const dy = -(-player.vx * sine + player.vy * cosine) / speed;
+            jets.push({ id: 'brake', x: dx * 9, y: dy * 9, dx, dy,
+                kind: 'brake', power: Math.min(6, speed / 50) });
         }
         return jets;
     }
 
-    // Emit centered world-space pixels from the sprite, inheriting the pilot's current velocity.
+    // Main exhaust inherits momentum; the brake plume travels opposite world velocity as visual feedback.
     emitJet(player, jet, count) {
         const cosine = Math.cos(player.angle);
         const sine = Math.sin(player.angle);
@@ -513,8 +507,10 @@ export class ConquestRenderer {
                 * (1 + (this.random(seed * 13) - 0.5) * 2 * speedVariation);
             const lifetime = jet.kind === 'main' ? 0.45 + this.random(seed * 11) * 0.4
                 : (0.14 + this.random(seed * 11) * 0.22) * plumeScale;
-            this.particles.push({ x, y, vx: player.vx + dx * speed - dy * spread,
-                vy: player.vy + dy * speed + dx * spread, life: lifetime, lifetime,
+            const inheritedX = jet.kind === 'brake' ? 0 : player.vx;
+            const inheritedY = jet.kind === 'brake' ? 0 : player.vy;
+            this.particles.push({ x, y, vx: inheritedX + dx * speed - dy * spread,
+                vy: inheritedY + dy * speed + dx * spread, life: lifetime, lifetime,
                 kind: jet.kind, size: 3 * plumeScale });
         }
     }
