@@ -1077,3 +1077,7 @@ ssh: connect to host <SERVER-ADDRESS> port 22: Operation timed out
 172.
 
 have the brake button apply breaks in all directions and thre are four brake thrusters around the rocket and they fire dynamically based on velocity and rotation to fully stop the rocket in all directions
+
+173.
+
+instead of 4 thrusters it should just be one where particles shoot out opposite to the velocity of the rocket, also currently the functionality of the brake is the same, it only affects velocity that the nose is facing, not all directions at once

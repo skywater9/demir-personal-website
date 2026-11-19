@@ -82,21 +82,21 @@ test('steering emits no jets while main and moving brake effects remain active',
     const input = { aimAngle: -Math.PI / 2 + Math.PI / 360, burn: true, rcsY: 1 };
     let jets = renderer.exhaustJets(player, input, false);
     assert.ok(jets.some(jet => jet.kind === 'main'));
-    assert.equal(jets.filter(jet => jet.kind === 'attitude').length, 1, 'Straight flight activates the front brake thruster regardless of heading error.');
+    assert.equal(jets.filter(jet => jet.kind === 'brake').length, 1, 'Straight flight activates the front brake thruster regardless of heading error.');
     input.rcsY = 0;
-    assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'attitude').length, 0);
+    assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'brake').length, 0);
     input.aimAngle = 0;
     player.rotationVelocity = 0.3;
-    assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'attitude').length, 0);
+    assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'brake').length, 0);
     for (const direction of [-1, 1]) {
         player.rotationVelocity = direction;
-        jets = renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'attitude');
+        jets = renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'brake');
         assert.equal(jets.length, 0);
     }
     // Crossing the signed-angle boundary must still count as a tiny correction.
     player.angle = Math.PI - 0.001;
     input.aimAngle = -Math.PI + 0.001 - Math.PI / 2;
-    assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'attitude').length, 0);
+    assert.equal(renderer.exhaustJets(player, input, false).filter(jet => jet.kind === 'brake').length, 0);
 });
 
 
@@ -157,33 +157,32 @@ test('camera zoom easing is independent of frame rate and retains close-up servi
 });
 
 
-test('four fixed brake thrusters respond to rocket-local velocity and rotation', () => {
+test('one brake plume points opposite the full world velocity at every rocket heading', () => {
     const { renderer } = makeRenderer();
     const player = createWorld().player;
     Object.assign(player, { landedOn: null });
-    const directions = [
-        { vx: 0, vy: -50, id: 'brakeFront', dx: 0, dy: -1 },
-        { vx: 0, vy: 50, id: 'brakeBack', dx: 0, dy: 1 },
-        { vx: -50, vy: 0, id: 'brakeLeft', dx: -1, dy: 0 },
-        { vx: 50, vy: 0, id: 'brakeRight', dx: 1, dy: 0 }
-    ];
-    for (const angle of [0, Math.PI / 2, Math.PI, -.7]) for (const direction of directions) {
-        const cosine = Math.cos(angle), sine = Math.sin(angle);
-        Object.assign(player, { angle, vx: direction.vx * cosine - direction.vy * sine,
-            vy: direction.vx * sine + direction.vy * cosine });
-        const jets = renderer.exhaustJets(player, { rcsY: 1 }, false);
-        assert.equal(jets.length, 1);
-        assert.equal(jets[0].id, direction.id);
-        assert.equal(jets[0].dx, direction.dx); assert.equal(jets[0].dy, direction.dy);
-        assert.ok(Math.abs(jets[0].power - 1) < 1e-9);
+    for (const angle of [0, Math.PI / 2, Math.PI, -.7]) {
+        for (const velocity of [{ vx: 0, vy: -50 }, { vx: 0, vy: 50 }, { vx: -50, vy: 0 },
+            { vx: 50, vy: 0 }, { vx: 100, vy: -50 }, { vx: -800, vy: 400 }]) {
+            Object.assign(player, { angle, ...velocity });
+            const jets = renderer.exhaustJets(player, { rcsY: 1 }, false);
+            assert.equal(jets.length, 1);
+            const jet = jets[0];
+            assert.equal(jet.id, 'brake');
+            const dx = jet.dx * Math.cos(angle) - jet.dy * Math.sin(angle);
+            const dy = jet.dx * Math.sin(angle) + jet.dy * Math.cos(angle);
+            const speed = Math.hypot(player.vx, player.vy);
+            assert.ok(Math.abs(dx + player.vx / speed) < 1e-9);
+            assert.ok(Math.abs(dy + player.vy / speed) < 1e-9);
+            assert.ok(Math.abs(jet.power - Math.min(6, speed / 50)) < 1e-9);
+            renderer.particles = [];
+            renderer.emitJet(player, jet, 12);
+            assert.ok(renderer.particles.every(particle => particle.vx * player.vx + particle.vy * player.vy < 0));
+            const combined = renderer.exhaustJets(player, { rcsY: 1, burn: true }, false);
+            assert.equal(combined.length, 2);
+            assert.deepEqual(combined.filter(jet => jet.kind === 'brake'), jets);
+        }
     }
-    Object.assign(player, { angle: 0, vx: 100, vy: -50 });
-    const diagonal = renderer.exhaustJets(player, { rcsY: 1 }, false);
-    assert.deepEqual(diagonal.map(jet => jet.id), ['brakeFront', 'brakeRight']);
-    assert.equal(diagonal[0].power, 1); assert.equal(diagonal[1].power, 2);
-    const combined = renderer.exhaustJets(player, { rcsY: 1, burn: true }, false);
-    assert.equal(combined.length, 3);
-    assert.deepEqual(combined.filter(jet => jet.kind === 'attitude'), diagonal);
     Object.assign(player, { vx: 0, vy: 0 });
     assert.deepEqual(renderer.exhaustJets(player, { rcsY: 1 }, false), []);
     assert.deepEqual(renderer.exhaustJets(player, { aimAngle: 1 }, false), []);
@@ -201,7 +200,7 @@ test('turning emits no particles while main and brake effects remain active', ()
     assert.equal(renderer.particles.length, 0);
     renderer.updateExhaust(world, { aimAngle: 0, burn: true, rcsY: 1 }, .1, false, false);
     assert.ok(renderer.particles.some(particle => particle.kind === 'main'));
-    assert.ok(renderer.particles.some(particle => particle.kind === 'attitude'));
+    assert.ok(renderer.particles.some(particle => particle.kind === 'brake'));
 });
 
 
@@ -545,5 +544,5 @@ test('other pilots show rotation-correct brake jets from their replicated veloci
     const emitted = [];
     renderer.emitJet = (player, jet) => emitted.push(jet);
     renderer.updateRemoteExhaust(world, .1, false);
-    assert.deepEqual(emitted.map(jet => jet.id), ['brakeFront', 'brakeRight']);
+    assert.deepEqual(emitted.map(jet => jet.id), ['brake']);
 });

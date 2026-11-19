@@ -3,7 +3,7 @@ import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
     killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-station-prototype';
 import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-station-prototype';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-station-prototype';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-station-prototype-brake';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
