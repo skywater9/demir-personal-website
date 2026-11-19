@@ -10,14 +10,14 @@ deployed by this implementation. See [server setup](server/README.md).
 
 - **Play** starts on protected Earth with full fuel and no cargo. Other planets are neutral.
 - **W** thrusts forward at 240 m/s²; **S** rapidly brakes along the nose axis (up to 300 m/s²), tapering near rest without reversing velocity or removing sideways drift. Rocket speed has no cap. Mouse/trackpad steers the rocket toward the cursor with fast, smooth turning (8 rad/s maximum, 150 rad/s² acceleration). Turning has no thruster particles; the main engine and braking retain their effects. **Space** shoots, **E** attaches/detaches, and the displayed number key advances hacking. A W/S/Space guide follows the cursor; each line highlights and fades one second after its key is pressed.
-- The larger bottom-right flight readout shows remaining fuel with a pale usage overlay and red damage overlay, plus a large cargo count. Cargo pickups fly from the rocket to the cargo icon, which enlarges and flashes after arrival; an empty cargo count shows a “COLLECT CARGO” prompt. The square galaxy map stays centered on the player, brings the solar systems closer together, and outlines the rocket in its player color. Clicking a planet chooses its relay or landing pad based on ownership.
+- The larger bottom-right flight readout shows remaining fuel with a pale usage overlay and red damage overlay, plus a large cargo count. Cargo pickups fly from the rocket to the cargo icon, which enlarges and flashes after arrival; an empty cargo count shows a “COLLECT CARGO” prompt. The square galaxy map stays centered on the player, uses true world distances between solar systems, and outlines the rocket in its player color. Clicking a planet chooses its relay or landing pad based on ownership.
 - Camera zoom widens gently as speed rises and eases back in when slowing.
   Landing and docking retain a close view.
 - Click a neutral planet to target its relay, or an owned planet to target its landing pad. Cargo must be collected in flight.
 - Dock within 100 m at 20 m/s or less, at any rocket rotation. Within 200 m, a flashing ghost ship marks the docking position and a dotted line connects your right-side bay to it. The station shows a small square E docking cue; an unavailable attempt explains why in red below the relay dialog. Successful docking plays a 140 ms visual alignment animation. Complete the displayed changing-digit
   challenge to capture neutral planets. Wrong keys do nothing; detaching resets it.
 - Owned planets bank cargo, then release pods from their surfaces into close orbits
-  at random altitudes 70–160 m above the surface, with small random variations in orbital speed and direction. Fly through the pods to collect cargo; landing only refuels.
+  at 0.3 cargo per second (one pod about every 3.34 seconds), at random altitudes 70–160 m above the surface, with small random variations in orbital speed and direction. Fly through the pods to collect cargo; landing only refuels.
   The small force field
   extends 200 m above the surface. Refilling is free of cargo cost, faster when empty,
   slower near full, and faster at home. Zero fuel leaves you coasting, with an explicit
@@ -26,7 +26,7 @@ deployed by this implementation. See [server setup](server/README.md).
   barrier, turret, then large outer field. Home keeps its special hard shield.
 - Shots cost 5 fuel points. Fast impacts cost more fuel as speed rises above the
   former crash thresholds (25 m/s at surfaces, 30 m/s at stations): half a fuel
-  point per excess m/s, rounded up with a minimum of one. Damage releases white
+  point per excess m/s, rounded up with a minimum of one. Damage briefly flashes the hull red for the pilot and nearby players, and releases white
   fuel-leak particles; surviving impacts bounce gently.
 - Damage greater than remaining fuel destroys the rocket. Equal damage leaves
   zero fuel and a surviving rocket; another damaging hit at zero is fatal.
@@ -590,7 +590,7 @@ Cargo within 200 world units gently accelerates toward a live player, with attra
 
 The capture panel reads “CAPTURE PLANET” and “Enter code,” followed by a pulsing square number key, progress bar, and E to detach. Correct number presses flash green; wrong numbers flash red. Reduced motion disables the key pulse.
 
-Gun tips heat with firing, smoke during overheating, and lock fire for 2.5 seconds while cooling. Shots add a small opposite-direction impulse in flight. Cargo orbital speed varies by ±14%.
+Gun tips heat with firing and lock fire for 2.5 seconds while cooling. Overheating emits no steam: the aim cursor blinks red with a shrinking cooldown pie that empties when firing becomes available again. Shots add a small opposite-direction impulse in flight. Cargo orbital speed varies by ±14%.
 
 Chat messages, hint, and typed input share the same font size and left text edge.
 

@@ -414,3 +414,59 @@ test('initial Moon relay guide has a larger arrow and large cargo caption', () =
     renderer.drawGuidance(world);
     assert.equal(labels.some(args => args[0].includes('CAPTURE PLANETS')), false);
 });
+
+// Crossing the old nearest-star boundary must preserve relative distances and map selection.
+test('map projection stays continuous between systems and preserves world distances', () => {
+    const { renderer } = makeRenderer();
+    const world = createWorld();
+    const x = (systems[0].x + systems[1].x) / 2;
+    const y = (systems[0].y + systems[1].y) / 2;
+    const left = renderer.mapCoordinates(x - 1, y);
+    const right = renderer.mapCoordinates(x + 1, y);
+    assert.equal(right.x - left.x, 2);
+    assert.equal(right.y - left.y, 0);
+    world.player.x = x; world.player.y = y;
+    const layout = renderer.mapLayout(world);
+    const point = renderer.mapPoint(x + 100, y - 100, layout);
+    assert.ok(Math.abs(point.x - layout.width / 2 - 100 * layout.scale) < 1e-9);
+    assert.ok(Math.abs(point.y - layout.height / 2 + 100 * layout.scale) < 1e-9);
+});
+
+// Both local and remote hulls read the same server timestamp and stop flashing after damage expires.
+test('damaged rockets flash red briefly without changing the pilot state', () => {
+    const { renderer } = makeRenderer();
+    const player = { ...createWorld().player, damageFlashUntil: 1.3 };
+    const colors = [];
+    Object.defineProperty(renderer.context, 'fillStyle', { set(value) { colors.push(value); } });
+    const before = structuredClone(player);
+    renderer.drawRocket(player, 1.1);
+    assert.ok(colors.includes('#ff4545'));
+    colors.length = 0;
+    renderer.drawRocket(player, 1.31);
+    assert.ok(!colors.includes('#ff4545'));
+    assert.deepEqual(player, before);
+});
+
+// Cooldown is a shrinking cursor wedge, while engines still emit particles and guns emit no steam.
+test('overheated cursor shows remaining cooldown and steam is absent for all pilots', () => {
+    const { renderer, calls } = makeRenderer();
+    const world = createWorld();
+    world.player.gunOverheatedUntil = 2.5;
+    const cursor = { x: .6, y: .4 };
+    renderer.drawAimGuide(world.player, cursor, 0);
+    const full = calls.find(call => call[0] === 'arc' && call[3] === 9);
+    assert.ok(Math.abs(full[5] - full[4] - Math.PI * 2) < 1e-9);
+    calls.length = 0;
+    renderer.drawAimGuide(world.player, cursor, 1.25);
+    const half = calls.find(call => call[0] === 'arc' && call[3] === 9);
+    assert.ok(Math.abs(half[5] - half[4] - Math.PI) < 1e-9);
+    calls.length = 0;
+    renderer.drawAimGuide(world.player, cursor, 2.5);
+    assert.ok(!calls.some(call => call[0] === 'arc'));
+    world.others = [{ ...world.player, id: 'other', thrusting: false }];
+    renderer.updateExhaust(world, {}, .1, false, false);
+    renderer.updateRemoteExhaust(world, .1, false);
+    assert.equal(renderer.particles.length, 0);
+    renderer.updateExhaust(world, { burn: true }, .1, false, false);
+    assert.ok(renderer.particles.some(particle => particle.kind === 'main'));
+});

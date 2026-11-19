@@ -163,6 +163,7 @@ export class GameRoom {
                     const p = other.player;
                     return { id: p.id, label: p.label, color: p.color, x: p.x, y: p.y, vx: p.vx, vy: p.vy,
                         angle: p.angle, aimAngle: p.aimAngle, deadUntil: p.deadUntil, cargo: p.cargo > 0 ? 1 : 0,
+                        damageFlashUntil: p.damageFlashUntil || 0,
                         rocketTier: p.rocketTier || 0, gunHeat: p.gunHeat || 0, gunOverheatedUntil: p.gunOverheatedUntil || 0,
                         thrusting: Boolean(p.thrusting), braking: Boolean(p.braking), docked: p.docked };
                 });

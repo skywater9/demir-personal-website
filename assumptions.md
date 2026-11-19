@@ -103,3 +103,5 @@ These choices fill gaps for the first playable version. They are intended for re
   access, manual folder creation, production deployment, or system/global tool
   changes have been performed. Runtime JSON is private/ignored; no paid backend
   service is needed.
+
+- Multiplayer feedback update: reduce cargo production by 50%, from 0.6 to 0.3 cargo/s, with pod releases slowed from 1.67 to 3.34 seconds. Existing stock and floating cargo are retained. Damaging impacts and shots tint the rocket red for 300 ms, replicated to nearby pilots. The map uses a single uncompressed world scale to remove jumps at nearest-system boundaries. Overheat retains the existing 2.5-second lockout and gun-tip heat, replacing steam with a red blinking cursor and shrinking remaining-time pie; reduced motion keeps the cursor steady.

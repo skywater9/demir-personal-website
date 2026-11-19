@@ -150,3 +150,11 @@ Firestore-emulator check skipped because its emulator was not running, and all
 13 shared-server checks passed. The server checks used localhost clients and
 included a real service restart. Browser/device visual testing and the class
 proxy/service deployment have not been performed.
+
+## Multiplayer damage, map, and heat feedback
+
+- With two nearby pilots, shoot the other rocket: both views should show its brief red hull flash. A damaging station/surface bump should also flash red; ordinary safe contacts should not deduct fuel.
+- Fly across the midpoint between two stars: map markers must move smoothly and their spacing must match world distances. Click targets on either side of that boundary.
+- A captured planet now generates 3 cargo per 10 seconds, with roughly one pod every 3.34 seconds. Existing cargo is retained.
+- Hold fire until overheating: no gun steam should appear. The aim cursor blinks red and its cooldown pie drains to empty over 2.5 seconds. With reduced motion, it stays steady while the pie drains.
+- Backend updates require pulling the commit in the existing project and restarting with `svc restart game`; frontend changes alone do not change authoritative production or remote hit feedback.

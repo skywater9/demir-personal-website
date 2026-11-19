@@ -40,6 +40,11 @@ test('cargo is awarded to only one pilot and projectiles damage the actual targe
     room.tick(tuning.fixedStep, 1000);
     assert.equal(pb.player.fuel, 95);
     assert.equal(pa.player.fuel, 100);
+    assert.ok(pb.player.damageFlashUntil > room.world.elapsed);
+    assert.equal(pa.player.damageFlashUntil, undefined);
+    pa.player.x = pb.player.x - 500;
+    const target = room.view(a.playerId).others.find(player => player.id === b.playerId);
+    assert.equal(target.damageFlashUntil, pb.player.damageFlashUntil);
 });
 
 // Disconnect reservations expire, whereas online pilots receive a new grace period after a restart.

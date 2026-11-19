@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261118-multiplayer';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-feedback';
 
 export const conquestKey = 'orbital.conquest.v2';
 export const reconnectWindow = 30000;

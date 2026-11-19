@@ -245,7 +245,7 @@ test('owned planets eject banked cargo pods for manual collection instead of aut
         id: `cap-${index}`, x: 50000 + index, y: 50000, vx: 0, vy: 0, amount: 1, expiresAt: 1000
     }));
     world.planets[body.id].stock = 0;
-    advance(world, 110);
+    advance(world, tuning.maxStock / tuning.cargoRate + 1);
     assert.equal(world.planets[body.id].stock, tuning.maxStock);
     assert.equal(world.planets[bodies[2].id].stock, 0);
 });
@@ -632,6 +632,7 @@ test('impact fuel loss increases with speed and survivors rebound without repeat
         stepWorld(world);
         const loss = 100 - world.player.fuel;
         assert.ok(loss > previousLoss);
+        assert.ok(world.player.damageFlashUntil > world.elapsed);
         previousLoss = loss;
         assert.equal(world.stats.deaths, 0);
         assert.ok(world.player.vx < 0);
@@ -735,4 +736,15 @@ test('each in-flight shot produces only a small opposite-direction recoil', () =
         close(world.player.vx, -Math.cos(aimAngle) * tuning.shotRecoil);
         close(world.player.vy, -Math.sin(aimAngle) * tuning.shotRecoil);
     }
+});
+
+// Production is intentionally halved in both stored resources and surface pod cadence.
+test('captured planets produce three cargo per ten seconds with slower pod releases', () => {
+    const world = inSpace();
+    world.planets.moon.owner = world.player.id;
+    advance(world, 10);
+    const pods = world.pickups.filter(pickup => pickup.bodyId === 'moon');
+    const produced = pods.reduce((sum, pickup) => sum + pickup.amount, 0) + world.planets.moon.stock;
+    assert.ok(Math.abs(produced - 3) < 1e-8);
+    assert.ok(pods.length <= 3);
 });

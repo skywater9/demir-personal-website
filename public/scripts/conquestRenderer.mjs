@@ -1,6 +1,6 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus
-} from './conquestPhysics.mjs?v=20261118-multiplayer';
+} from './conquestPhysics.mjs?v=20261119-feedback';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -28,7 +28,6 @@ export class ConquestRenderer {
         this.remoteDeaths = [];
         this.particles = [];
         this.exhaustCarry = new Map();
-        this.gunSmokeCarry = 0;
         this.particleSerial = 0;
         this.ownerPalette = new Map();
         this.lastWorld = null;
@@ -106,7 +105,7 @@ export class ConquestRenderer {
     }
 
     // Show requested heading with a small cursor and dashed guide independently of the lagging hull.
-    drawAimGuide(player, cursor) {
+    drawAimGuide(player, cursor, elapsed = this.lastElapsed) {
         if (!cursor || !Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) return;
         const point = this.screen(player.x, player.y);
         const x = cursor.x * this.canvas.width;
@@ -119,7 +118,16 @@ export class ConquestRenderer {
         ctx.setLineDash([3, 4]);
         ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(x, y); ctx.stroke();
         ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
+        const cooldown = Math.max(0, Math.min(1, ((player.gunOverheatedUntil || 0) - elapsed) / tuning.gunOverheatDuration));
+        ctx.globalAlpha = cooldown > 0 && !this.reducedMotion ? 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(this.visualTime * 14)) : 1;
+        ctx.strokeStyle = cooldown > 0 ? '#ff9379' : '#a9e9de';
+        if (cooldown > 0) {
+            ctx.fillStyle = '#ff8068';
+            ctx.beginPath(); ctx.moveTo(x, y);
+            ctx.arc(x, y, 9, -Math.PI / 2, -Math.PI / 2 + fullCircle * cooldown);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y, 10, 0, fullCircle); ctx.stroke();
+        }
         ctx.beginPath();
         ctx.moveTo(x - 4, y); ctx.lineTo(x - 1, y);
         ctx.moveTo(x + 1, y); ctx.lineTo(x + 4, y);
@@ -129,22 +137,9 @@ export class ConquestRenderer {
         ctx.restore();
     }
 
-    // Compress only system-to-system spacing so each system keeps its local planetary layout.
+    // Use one continuous world projection so crossing system boundaries never jumps the map.
     mapCoordinates(x, y) {
-        let nearestSystem = systems[0];
-        let nearestDistance = Infinity;
-        for (const system of systems) {
-            const distance = (x - system.x) ** 2 + (y - system.y) ** 2;
-            if (distance < nearestDistance) {
-                nearestSystem = system;
-                nearestDistance = distance;
-            }
-        }
-        const spacing = 0.55;
-        return {
-            x: nearestSystem.x * spacing + x - nearestSystem.x,
-            y: nearestSystem.y * spacing + y - nearestSystem.y
-        };
+        return { x, y };
     }
 
     // Keep the player at the map center and use the same zoom for drawing and map selection.
@@ -503,25 +498,6 @@ export class ConquestRenderer {
         }
     }
 
-    // Emit smoke at the gun muzzle while carrying the rocket's current momentum into every puff.
-    emitGunSmoke(player, count) {
-        const aimAngle = Number.isFinite(player.aimAngle) ? player.aimAngle : player.angle - Math.PI / 2;
-        const directionX = Math.cos(aimAngle);
-        const directionY = Math.sin(aimAngle);
-        const x = player.x + directionX * (tuning.shipRadius + 5);
-        const y = player.y + directionY * (tuning.shipRadius + 5);
-        for (let index = 0; index < count; index++) {
-            const seed = ++this.particleSerial;
-            const angle = aimAngle + (this.random(seed * 5) - 0.5) * 1.1;
-            const speed = 16 + this.random(seed * 7) * 36;
-            const lifetime = 0.75 + this.random(seed * 11) * 1.1;
-            this.particles.push({ x, y,
-                vx: player.vx + Math.cos(angle) * speed + (this.random(seed * 13) - 0.5) * 12,
-                vy: player.vy + Math.sin(angle) * speed + (this.random(seed * 17) - 0.5) * 12,
-                life: lifetime, lifetime, kind: 'gunSmoke', size: 3 + this.random(seed * 19) * 4 });
-        }
-    }
-
     // Leak a short burst of white fuel particles from the hull only after real damage events.
     damageBurst(world, event) {
         if (this.reducedMotion) return;
@@ -546,7 +522,6 @@ export class ConquestRenderer {
         if (menu || this.reducedMotion) {
             this.particles = [];
             this.exhaustCarry.clear();
-            this.gunSmokeCarry = 0;
             return;
         }
         for (const particle of this.particles) {
@@ -566,14 +541,6 @@ export class ConquestRenderer {
             this.exhaustCarry.set(jet.id, count - emitted);
             this.emitJet(player, jet, emitted);
         }
-        if (!dead && world.elapsed < (player.gunOverheatedUntil || 0)) {
-            this.gunSmokeCarry += dt * 24;
-            const emittedSmoke = Math.floor(this.gunSmokeCarry);
-            this.gunSmokeCarry -= emittedSmoke;
-            this.emitGunSmoke(player, emittedSmoke);
-        } else {
-            this.gunSmokeCarry = 0;
-        }
         if (this.particles.length > 360) this.particles.splice(0, this.particles.length - 360);
     }
 
@@ -586,7 +553,6 @@ export class ConquestRenderer {
             if (!this.inView(point, 4)) continue;
             const age = 1 - particle.life / particle.lifetime;
             const colors = particle.kind === 'damage' ? ['#ffffff', '#f2f5fa', '#d5dfeb', '#9aaabb']
-                : particle.kind === 'gunSmoke' ? ['#f1f3ef', '#cbd2cf', '#abb5b3', '#858f90']
                 : particle.kind === 'main' ? ['#fff0b2', '#edb264', '#cb7041', '#724c3d']
                 : ['#f4fff9', '#c9fff2', '#79d6cf', '#40858c'];
             ctx.globalAlpha = Math.max(0, 1 - age);
@@ -603,7 +569,7 @@ export class ConquestRenderer {
     }
 
     // Preserve the familiar rocket hull and add cargo plus a gun that aims independently.
-    drawRocket(player) {
+    drawRocket(player, elapsed = this.lastElapsed) {
         const ctx = this.context;
         const point = this.screen(player.x, player.y);
         const scale = Math.max(0.65, this.camera.zoom);
@@ -655,6 +621,14 @@ export class ConquestRenderer {
         ctx.restore();
         }
         ctx.restore();
+        if (elapsed < (player.damageFlashUntil || 0)) {
+            ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(player.angle); ctx.scale(scale, scale);
+            ctx.globalAlpha = 0.85 * Math.min(1, (player.damageFlashUntil - elapsed) / 0.15);
+            ctx.fillStyle = '#ff4545'; ctx.shadowColor = '#ff4545'; ctx.shadowBlur = 8;
+            ctx.fillRect(-5, -9, 10, 19); ctx.fillRect(-3, -13, 6, 5);
+            ctx.fillRect(-8, 3, 3, 7); ctx.fillRect(5, 3, 3, 7);
+            ctx.restore();
+        }
     }
 
     // Show a short pixel explosion at the death location until the pilot respawns at home.
@@ -900,7 +874,7 @@ export class ConquestRenderer {
         }
     }
 
-    // Emit visible remote engines and overheating smoke without receiving hidden pilot controls.
+    // Emit visible remote engines without receiving hidden pilot controls.
     updateRemoteExhaust(world, dt, menu) {
         const active = new Set();
         if (!menu && !this.reducedMotion) for (const player of world.others || []) {
@@ -910,11 +884,6 @@ export class ConquestRenderer {
                 const id = `${player.id}:${jet.id}`; active.add(id);
                 const count = (this.remoteExhaustCarry.get(id) || 0) + dt * (jet.kind === 'main' ? 95 : 45 * jet.power);
                 this.emitJet(player, jet, Math.floor(count)); this.remoteExhaustCarry.set(id, count % 1);
-            }
-            if (world.elapsed < player.gunOverheatedUntil) {
-                const id = `${player.id}:smoke`; active.add(id);
-                const count = (this.remoteExhaustCarry.get(id) || 0) + dt * 24;
-                this.emitGunSmoke(player, Math.floor(count)); this.remoteExhaustCarry.set(id, count % 1);
             }
         }
         for (const id of this.remoteExhaustCarry.keys()) if (!active.has(id)) this.remoteExhaustCarry.delete(id);
@@ -955,7 +924,6 @@ export class ConquestRenderer {
             this.remoteDeaths = [];
             this.particles = [];
             this.exhaustCarry.clear();
-            this.gunSmokeCarry = 0;
             this.cameraReady = false;
             this.wasDead = false;
         }
@@ -963,14 +931,12 @@ export class ConquestRenderer {
             this.deathPosition = { x: player.x, y: player.y };
             this.deathTime = this.visualTime;
             this.exhaustCarry.clear();
-            this.gunSmokeCarry = 0;
         }
         const near = nearestBody(player);
         const respawned = !dead && this.wasDead;
         if (respawned) {
             this.particles = [];
             this.exhaustCarry.clear();
-            this.gunSmokeCarry = 0;
         }
         if (!dead || !this.cameraReady) this.updateCamera(player, near, elapsed, menu, respawned);
         this.updateExhaust(world, input, elapsed, menu, dead);
@@ -985,18 +951,18 @@ export class ConquestRenderer {
         this.drawRemoteDeaths();
         for (const other of world.others || []) if (!other.deadUntil) {
             const pose = this.networkPose(other, elapsed);
-            this.drawRocket(pose);
+            this.drawRocket(pose, world.elapsed);
             const point = this.screen(pose.x, pose.y);
             if (this.inView(point, 24)) this.label(other.label, point.x, point.y - 18, other.color, 'center');
         }
         const liveIds = new Set([player.id, ...(world.others || []).map(other => other.id)]);
         for (const id of this.networkPoses.keys()) if (!liveIds.has(id)) this.networkPoses.delete(id);
-        if (!dead) this.drawRocket(this.dockingVisualPlayer(world.others ? this.networkPose(player, elapsed) : player));
+        if (!dead) this.drawRocket(this.dockingVisualPlayer(world.others ? this.networkPose(player, elapsed) : player), world.elapsed);
         else if (this.deathPosition) this.drawExplosion();
         if (!menu && !dead) this.drawGuidance(world);
         this.drawCaptureEffects();
 
-        if (!menu && !dead && !respawned) this.drawAimGuide(player, input.aimCursor);
+        if (!menu && !dead && !respawned) this.drawAimGuide(player, input.aimCursor, world.elapsed);
         if (!menu && !dead) this.drawDockingGuide(world, input.aimCursor);
         this.drawMap(world);
         this.wasDead = dead;

@@ -1034,3 +1034,11 @@ found 0 vulnerabilities
 -> https://demirg.api.codehw.net  (port 20090)
 Nov 19 07:13:27 localhost systemd[39092]: Started <STUDENT>-game.service - <STUDENT> / game.
 Nov 19 07:13:27 localhost bash[102509]: [game] Shared galaxy ready. Public address is $STUDENT_URL.
+
+163.
+
+ok now it works, i had two people on the same game at once
+
+164.
+
+the main issue was when I hit someone else, there was not really any animation, when you are hit it should flash red. any kind of damage like bumping or being shot. An issue was that on the map the solar systems looked close but when I actually flied over the solar system like teleported away? i didnt see it in game but just teleported on the map. Another thing is that there is too much cargo that is being produced per planet, we should reduce the cargo production amount. Also the weapon heat up animation is hard to understand, remove the steam effects from that, and instead animate the cursor, of over heated, blink the cursor, and put a pie chart overlay on it that goes from full to empty, signifying the cooldown time.

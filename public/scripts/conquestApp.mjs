@@ -1,9 +1,9 @@
 import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-multiplayer-live';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261118-multiplayer';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261118-multiplayer';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261118-multiplayer';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-feedback';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-feedback';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-feedback';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',

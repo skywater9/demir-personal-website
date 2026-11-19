@@ -13,7 +13,7 @@ export const tuning = Object.freeze({
     maxStepDuration: 1, respawnDelay: 0.9,
     aimRotationAcceleration: 150, maxAimRotationRate: 8,
     aimRotationResponse: 100, aimRotationDamping: 20,
-    cargoRate: 0.6, maxStock: 60, cargoSpawnInterval: 1.67, cargoSurfaceOffset: 70,
+    cargoRate: 0.3, maxStock: 60, cargoSpawnInterval: 3.34, cargoSurfaceOffset: 70,
     cargoAltitudeVariation: 90, cargoOrbitSpeedVariation: 0.14,
     pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
@@ -327,6 +327,7 @@ function damagePlayer(world, amount, reason) {
     if (player.deadUntil || !Number.isFinite(amount) || amount <= 0) return false;
     const fatal = amount > player.fuel;
     player.fuel = Math.max(0, player.fuel - amount);
+    player.damageFlashUntil = world.elapsed + 0.3;
     emit(world, 'damaged', { amount, fuel: player.fuel, reason, x: player.x, y: player.y });
     if (fatal) killPlayer(world, reason);
     return fatal;
