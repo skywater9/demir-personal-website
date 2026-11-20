@@ -674,12 +674,19 @@ export class ConquestRenderer {
         ctx.restore();
     }
 
-    // Preserve the familiar rocket hull and add cargo plus a gun that aims independently.
+    // Keep the pixel hull crisp over a faint player-colored glow, with cargo and an independent gun.
     drawRocket(player, elapsed = this.lastElapsed) {
         const ctx = this.context;
         const point = this.screen(player.x, player.y);
         const scale = Math.max(0.65, this.camera.zoom);
         ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(player.angle); ctx.scale(scale, scale);
+        ctx.save();
+        ctx.globalAlpha *= 0.16;
+        ctx.fillStyle = player.color || ownColor;
+        ctx.shadowColor = player.color || ownColor;
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.ellipse(0, -2, 8, 15, 0, 0, fullCircle); ctx.fill();
+        ctx.restore();
         ctx.fillStyle = '#627b83'; ctx.fillRect(-8, 3, 3, 7); ctx.fillRect(5, 3, 3, 7);
         ctx.fillStyle = '#bcc9c4'; ctx.fillRect(-5, -9, 10, 16);
         ctx.fillStyle = '#e2e5d5'; ctx.fillRect(-3, -13, 6, 5); ctx.fillRect(-1, -16, 2, 3);

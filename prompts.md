@@ -1093,3 +1093,7 @@ what link to use to acces the server
 176.
 
 but the server directly link has new verison
+
+177.
+
+each rocket should glow slightly of their player color
