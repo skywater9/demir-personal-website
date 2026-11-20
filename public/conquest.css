@@ -301,3 +301,8 @@ kbd { font:inherit; color:#bac8c7; font-size:8px; }
 /* Attach transient feedback to the map so it stays directly above normal and expanded navigation. */
 .galaxy-map .notifications { bottom:calc(100% + 10px); left:auto; right:0; width:100%; max-height:min(40vh,300px); z-index:8; }
 .galaxy-map .respawn-notice { position:static; top:auto; left:auto; transform:none; padding:10px 12px; font-size:11px; }
+
+/* Planet prompts share the hover outline's quiet gray treatment until capture is available. */
+.relay-card.planet-capture:not(:has(#interactButton.is-ready)):not(.is-hacking) { border-color:#656e75; background:#162026ed; box-shadow:none; }
+.relay-card.planet-capture #interactButton:disabled { color:#9aa2a8; opacity:.6; }
+.relay-card.planet-capture.is-hacking { border-color:#8cdeb0; background:#142b22ed; }

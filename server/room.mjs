@@ -75,7 +75,7 @@ export class GameRoom {
         let labelNumber = 1;
         while (occupiedLabels.has(`Pilot ${labelNumber}`)) labelNumber++;
         const player = { ...seed.player, id, label: `Pilot ${labelNumber}`, color, homeId: home.id, rocketTier: 0, joinedAt: this.world.elapsed,
-            x: home.x, y: home.y - home.radius - tuning.shipRadius, landedOn: home.id };
+            ...dockingPoint(home), landedOn: home.id };
         this.world.players[id] = { player, hack: null, target: { bodyId: home.id, type: 'planet' }, stats: seed.stats, refueling: null };
         Object.assign(this.world.planets[home.id], { owner: id, home: true, level: 0, stock: 0 });
         withPlayer(this.world, id, () => { this.world.target = { bodyId: this.starterRelay(player).id, type: 'relay' }; });
@@ -196,6 +196,10 @@ export class GameRoom {
         return { version: 2, id: this.world.id, createdAt: this.world.createdAt, updatedAt: this.world.updatedAt,
             elapsed: this.world.elapsed, player, planets: this.world.planets, projectiles: this.world.projectiles,
             pickups: this.world.pickups, events: [], eventCounter: this.world.eventCounter, ...actor,
+            captures: Object.values(this.world.players).filter(other => other.hack).map(other => ({
+                bodyId: other.hack.bodyId, playerId: other.player.id,
+                progress: other.hack.progress, required: other.hack.required
+            })),
             ownerColors: Object.fromEntries(Object.values(this.world.players).map(actor => [actor.player.id, actor.player.color])),
             mapPlayers: Object.values(this.world.players).map(actor => ({ id: actor.player.id, label: actor.player.label,
                 color: actor.player.color, x: actor.player.x, y: actor.player.y, angle: actor.player.angle,

@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-station-prototype';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-planet-ui';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;

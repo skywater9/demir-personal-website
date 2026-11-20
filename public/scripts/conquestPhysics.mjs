@@ -11,14 +11,14 @@ export function stationFor(body) {
 
 // Resolve attachment points without creating separate relays around planets.
 export function dockingPoint(body) {
-    return { x: body.x, y: body.y - body.radius - tuning.shipRadius, angle: 0,
+    return { x: body.station ? body.x - 58 : body.x, y: body.station ? body.y : body.y - body.radius - tuning.shipRadius, angle: 0,
         name: body.station ? 'Starter station' : `${body.name} surface` };
 }
 
 export const tuning = Object.freeze({
     ...motionTuning,
     mainAcceleration: 240, brakeAcceleration: 300, brakeResponse: 8,
-    dockingSpeed: 20, dockingAngle: 35 * Math.PI / 180,
+    hackingDistance: 250, dockingSpeed: 20, dockingAngle: 35 * Math.PI / 180,
     gunHeatPerShot: 0.26, gunCoolingRate: 0.25, gunOverheatDuration: 2.5, shotRecoil: 1.25,
     shotFuelDamage: 5, impactFuelDamageRate: 0.5,
     maxStepDuration: 1, respawnDelay: 0.9,
@@ -105,7 +105,7 @@ export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now(
         version: 2, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id,
-            x: home.x, y: home.y - home.radius - tuning.shipRadius,
+            ...dockingPoint(home),
             vx: 0, vy: 0, angle: 0, rotationVelocity: 0,
             fuel: tuning.maxFuel, cargo: 0, landedOn: home.id, docked: null,
             deadUntil: 0, aimAngle: 0, gunHeat: 0, gunOverheatedUntil: 0
@@ -194,13 +194,15 @@ export function dockingStatus(world, bodyId = nearestRelay(world.player, world).
         && world.planets[body.id].level > 0 && (!world.planets[body.id].turrets?.length
             || world.planets[body.id].turrets.some(turret => turret.disabledUntil <= world.elapsed));
     const occupied = otherPilots.some(other => other.id !== player.id && other.docked === body.id);
+    const capturing = !body.station && world.planets[body.id].owner !== player.id;
     const ready = !player.deadUntil && !player.docked && !protectedHome && !occupied && !defensesActive
-        && distance <= tuning.dockingDistance && speed <= tuning.dockingSpeed;
+        && distance <= (body.station ? tuning.dockingDistance : tuning.hackingDistance)
+        && (capturing || speed <= tuning.dockingSpeed);
     return { bodyId: body.id, distance, speed, angle, ready,
         reason: ready ? '' : player.deadUntil ? 'RESPAWNING'
             : defensesActive ? 'DESTROY TURRETS FIRST' : occupied ? 'OCCUPIED' : protectedHome ? 'PROTECTED'
-                : distance > tuning.dockingDistance ? 'NOT IN RANGE'
-                    : speed > tuning.dockingSpeed ? 'SLOW DOWN'
+                : distance > (body.station ? tuning.dockingDistance : tuning.hackingDistance) ? 'NOT IN RANGE'
+                    : !capturing && speed > tuning.dockingSpeed ? 'SLOW DOWN'
                         : 'UNAVAILABLE' };
 }
 
@@ -211,8 +213,7 @@ function isHome(world, body) {
 
 // Issue a fresh challenge, avoiding the previous digit so held old keys cannot advance it.
 function challengeDigit(level, previous = null) {
-    const digits = level === 0 ? [1, 2, 3] : level === 1 ? [1, 2, 3, 4, 5, 6]
-        : level === 2 ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const digits = [1, 2, 3, 4];
     const pool = digits.filter(digit => digit !== previous);
     return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -230,6 +231,11 @@ function detach(world) {
 export function interact(world, bodyId = null) {
     const player = world.player;
     if (player.deadUntil) return { ok: false, reason: 'RESPAWNING' };
+    if (world.hack) {
+        emit(world, 'hackCancelled', { bodyId: world.hack.bodyId });
+        world.hack = null;
+        return { ok: true, reason: 'Hack cancelled.' };
+    }
     if (player.docked) {
         detach(world);
         return { ok: true, reason: 'Detached.' };
@@ -242,9 +248,10 @@ export function interact(world, bodyId = null) {
         if (prepareTurrets(planet).some(turret => turret.disabledUntil <= world.elapsed)) {
             return { ok: false, reason: 'DESTROY TURRETS FIRST' };
         }
-        world.hack = { bodyId: body.id, progress: 0, required: 4, digit: 0 };
+        world.hack = { bodyId: body.id, progress: 0, required: 4, digit: challengeDigit(0),
+            heldDigit: null, lastAcceptedAt: world.elapsed - tuning.hackPressInterval, challengeId: world.eventCounter + 1 };
         emit(world, 'hackStarted', { bodyId: body.id });
-        return { ok: true, reason: 'Hold E and aim at the planet.' };
+        return { ok: true, reason: 'Enter the displayed numbers (1–4).' };
     }
     const point = dockingPoint(body);
     Object.assign(player, { x: point.x, y: point.y, vx: 0, vy: 0, angle: 0,
@@ -253,38 +260,43 @@ export function interact(world, bodyId = null) {
     return { ok: true, reason: 'Attached.' };
 }
 
-// Keep the old command safe for saved clients; captures now use held E instead of number keys.
-export function hackDigit() {
-    return { ok: false, reason: 'Hold E while aiming at the planet.' };
+// Accept deliberate number presses without requiring the rocket to face the planet.
+export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
+    const hack = world.hack;
+    if (!hack || world.player.deadUntil) return { ok: false, reason: 'No active hack.' };
+    if (digit === null) { hack.heldDigit = null; return { ok: true }; }
+    if (repeat || (challengeId !== undefined && challengeId !== hack.challengeId)) return { ok: false, reason: 'Stale press.' };
+    const value = Number(digit);
+    if (!Number.isInteger(value) || value < 1 || value > 4 || value === hack.heldDigit) return { ok: false, reason: 'Use a fresh 1–4 key press.' };
+    hack.heldDigit = value;
+    if (value !== hack.digit) return { ok: false, reason: 'Wrong number.' };
+    if (world.elapsed - hack.lastAcceptedAt + 1e-9 < tuning.hackPressInterval) return { ok: false, reason: 'Press too soon.' };
+    if (!dockingStatus(world, hack.bodyId).ready) return { ok: false, reason: 'Connection lost.' };
+    hack.progress += 1;
+    hack.lastAcceptedAt = world.elapsed;
+    if (hack.progress >= hack.required) {
+        Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 0, stock: 0,
+            nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
+        delete world.planets[hack.bodyId].turrets;
+        world.stats.captures += 1;
+        emit(world, 'captured', { bodyId: hack.bodyId });
+        world.hack = null;
+        return { ok: true, reason: 'Captured.' };
+    }
+    hack.digit = challengeDigit(0, hack.digit);
+    hack.challengeId += 1;
+    emit(world, 'hackProgress', { bodyId: hack.bodyId, amount: hack.progress });
+    return { ok: true };
 }
 
-// Advance only a nearby, slow pilot actively aiming at the planet with E held.
-function updatePlanetCapture(world, input, dt) {
-    if (!world.hack && input.capture && bodyFor(input.captureBody) && !bodyFor(input.captureBody).station
-        && world.planets[input.captureBody]?.owner !== world.player.id) interact(world, input.captureBody);
+// Keep a connection only while the cursor remains over the planet and the ship stays in range.
+function updatePlanetCapture(world, input) {
+    if (!world.hack) return;
     const hack = world.hack;
-    if (!hack) return;
-    const body = bodyFor(hack.bodyId);
-    const player = world.player;
-    const distance = Math.hypot(body.x - player.x, body.y - player.y);
-    const angle = Math.atan2(body.y - player.y, body.x - player.x);
-    const aimed = Math.abs(normalizeAngle(player.aimAngle - angle)) <= Math.asin(Math.min(1, body.radius / Math.max(1, distance)));
-    const ready = !player.deadUntil && input.capture === true && input.captureBody === body.id
-        && aimed && dockingStatus(world, body.id).ready
-        && !prepareTurrets(world.planets[body.id]).some(turret => turret.disabledUntil <= world.elapsed);
-    if (!ready) {
+    if (input.captureBody !== hack.bodyId || !dockingStatus(world, hack.bodyId).ready) {
         world.hack = null;
-        emit(world, 'hackCancelled', { bodyId: body.id });
-        return;
+        emit(world, 'hackCancelled', { bodyId: hack.bodyId });
     }
-    hack.progress += dt;
-    if (hack.progress < hack.required) return;
-    Object.assign(world.planets[body.id], { owner: player.id, level: 0, stock: 0,
-        nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
-    delete world.planets[body.id].turrets;
-    world.stats.captures += 1;
-    world.hack = null;
-    emit(world, 'captured', { bodyId: body.id });
 }
 
 // Pay the station owner one cargo per elapsed minute, independent of their location.
@@ -397,7 +409,7 @@ export function killPlayer(world, reason = 'Destroyed.', cause = {}) {
 function respawn(world) {
     const home = bodyFor(world.player.homeId);
     Object.assign(world.player, {
-        x: home.x, y: home.y - home.radius - tuning.shipRadius, vx: 0, vy: 0,
+        ...dockingPoint(home), vx: 0, vy: 0,
         angle: 0, rotationVelocity: 0, fuel: tuning.maxFuel, cargo: 0,
         landedOn: home.id, docked: null, deadUntil: 0, aimAngle: 0, gunHeat: 0, gunOverheatedUntil: 0
     });
@@ -630,11 +642,12 @@ function servicePad(world, dt) {
     const player = world.player;
     const body = bodyFor(player.landedOn || player.docked);
     const planet = body && world.planets[body.id];
-    if (!body || planet.owner !== player.id || player.deadUntil
-        || Math.abs(player.x - body.x) > tuning.padHalfWidth || player.y >= body.y
-        || Math.abs(Math.hypot(player.x - body.x, player.y - body.y) - body.radius - tuning.shipRadius) > 0.1
-        || Math.hypot(player.vx, player.vy) > 0.01
-        || Math.abs(normalizeAngle(player.angle)) > tuning.safeLandingAngle) {
+    const atStation = body?.station && Math.hypot(player.x - dockingPoint(body).x, player.y - dockingPoint(body).y) < 1;
+    const atPad = body && !body.station && Math.abs(player.x - body.x) <= tuning.padHalfWidth && player.y < body.y
+        && Math.abs(Math.hypot(player.x - body.x, player.y - body.y) - body.radius - tuning.shipRadius) <= 0.1
+        && Math.abs(normalizeAngle(player.angle)) <= tuning.safeLandingAngle;
+    if (!body || planet.owner !== player.id || player.deadUntil || (!atStation && !atPad)
+        || Math.hypot(player.vx, player.vy) > 0.01) {
         stopRefueling(world);
         flushCollection(world);
         return;
@@ -1001,11 +1014,11 @@ export function stepWorld(world, input = {}, dt = tuning.fixedStep) {
     // Keep saved serviced rockets attached to pads and relays when galaxy positions change.
     const landedBody = bodyFor(world.player.landedOn);
     if (landedBody) {
-        world.player.x = landedBody.x;
-        world.player.y = landedBody.y - landedBody.radius - tuning.shipRadius;
+        const point = dockingPoint(landedBody);
+        world.player.x = point.x; world.player.y = point.y;
     }
     const dockedBody = bodyFor(world.player.docked);
-    if (dockedBody && !isHome(world, dockedBody)) {
+    if (dockedBody) {
         const dock = dockingPoint(dockedBody);
         world.player.x = dock.x; world.player.y = dock.y;
     }
@@ -1112,7 +1125,7 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
             const player = world.player;
             const input = inputs[id] || {};
             const home = bodyFor(player.landedOn);
-            if (home) { player.x = home.x; player.y = home.y - home.radius - tuning.shipRadius; }
+            if (home) { const point = dockingPoint(home); player.x = point.x; player.y = point.y; }
             if (player.docked) Object.assign(player, dockingPoint(bodyFor(player.docked)));
             const previous = world.previousPlayers[id] = { x: player.x, y: player.y };
             coolPlayerGun(player, step, world.elapsed);

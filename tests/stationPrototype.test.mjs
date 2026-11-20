@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, bodies, planetBodies, starterStations, stepWorld, interact, dockingPoint, nextRocketUpgrade } from '../public/scripts/conquestPhysics.mjs';
+import { createWorld, bodies, planetBodies, starterStations, stepWorld, interact, dockingPoint, nextRocketUpgrade, hackDigit, tuning, dockingStatus } from '../public/scripts/conquestPhysics.mjs';
 import { GameRoom } from '../server/room.mjs';
 import { validateSave } from '../server/persistence.mjs';
 
@@ -13,14 +13,12 @@ function advance(world, seconds, input = {}) {
     }
 }
 
-// Keep a pilot near the surface while holding the capture control.
-function captureMoon(world, seconds) {
+// Place a pilot farther out, facing away, and establish a cursor-targeted hack.
+function startMoonHack(world) {
     const moon = bodies.find(body => body.id === 'moon');
-    Object.assign(world.player, { landedOn: null, docked: null, x: moon.x, y: moon.y - moon.radius - 45, aimAngle: Math.PI / 2 });
-    for (let i = 0; i < seconds * 60; i++) {
-        world.player.vx = 0; world.player.vy = 0;
-        stepWorld(world, { capture: true, captureBody: moon.id, aimAngle: Math.PI / 2 }, 1 / 60);
-    }
+    Object.assign(world.player, { landedOn: null, docked: null, x: moon.x, y: moon.y - moon.radius - tuning.shipRadius - 200,
+        vx: 0, vy: 0, angle: Math.PI, aimAngle: -Math.PI / 2 });
+    return interact(world, moon.id);
 }
 
 test('prototype starts at a shielded station with no owned planets and pays one cargo per minute', () => {
@@ -37,35 +35,42 @@ test('prototype starts at a shielded station with no owned planets and pays one 
     assert.ok(nextRocketUpgrade(world).available);
 });
 
-test('four seconds of aimed capture earns a planet without attaching or teleporting', () => {
+test('E starts a 1–4 challenge from 200 m without matching the rocket heading', () => {
     const world = createWorld('capture', 0);
-    captureMoon(world, 4.1);
+    assert.ok(startMoonHack(world).ok);
+    assert.ok(world.hack.digit >= 1 && world.hack.digit <= 4);
+    advance(world, 0.2, { captureBody: 'moon' });
+    assert.equal(world.hack.progress, 0, 'time alone must not advance hacking');
+    for (let index = 0; index < 4; index++) {
+        assert.ok(hackDigit(world, world.hack.digit).ok);
+        hackDigit(world, null);
+        advance(world, 0.15, { captureBody: 'moon' });
+    }
     assert.equal(world.planets.moon.owner, world.player.id);
     assert.equal(world.player.docked, null);
     assert.equal(world.stats.captures, 1);
 });
 
-test('releasing E or aiming away cancels partial progress', () => {
+test('wrong or repeated digits do not advance capture; losing the cursor cancels it', () => {
     const world = createWorld('cancel', 0);
-    captureMoon(world, 1);
-    assert.ok(world.hack.progress > 0);
-    stepWorld(world, {});
+    startMoonHack(world);
+    assert.equal(hackDigit(world, 9).ok, false);
+    assert.equal(world.hack.progress, 0);
+    assert.ok(hackDigit(world, world.hack.digit).ok);
+    assert.equal(hackDigit(world, world.hack.digit, { repeat: true }).ok, false);
+    assert.equal(world.hack.progress, 1);
+    advance(world, 0.1, { captureBody: null });
     assert.equal(world.hack, null);
-    captureMoon(world, 1);
-    stepWorld(world, { capture: true, captureBody: 'moon', aimAngle: -Math.PI / 2 });
-    assert.equal(world.hack, null);
-    assert.equal(world.planets.moon.owner, null);
 });
 
-test('active turrets block capture and disabled turrets permit progress', () => {
+test('active turrets block capture and disabled turrets permit starting a challenge', () => {
     const world = createWorld('defenses', 0);
-    world.planets.moon.level = 1;
-    world.planets.moon.owner = 'hostile';
-    captureMoon(world, 0.2);
-    assert.equal(world.hack, null);
+    Object.assign(world.planets.moon, { owner: 'hostile', level: 1,
+        turrets: [{ health: 5, disabledUntil: 0, angle: 0, nextShotAt: 0 }] });
+    assert.equal(startMoonHack(world).ok, false);
     world.planets.moon.turrets[0].disabledUntil = world.elapsed + 10;
-    captureMoon(world, 0.2);
-    assert.ok(world.hack.progress > 0);
+    assert.ok(startMoonHack(world).ok);
+    assert.ok(world.hack);
 });
 
 test('multiplayer reserves different stations and validates fractional capture saves', () => {
@@ -77,4 +82,18 @@ test('multiplayer reserves different stations and validates fractional capture s
     actor.hack = { bodyId: 'moon', digit: 0, progress: 0.5, required: 4 };
     assert.doesNotThrow(() => validateSave(room.saved()));
     assert.equal(room.setInput(one.playerId, { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, capture: true, captureBody: 'not-a-planet' }), false);
+});
+
+// High-speed flybys remain eligible while station docking still needs a safe speed.
+test('planet capture accepts high speed and arbitrary heading', () => {
+    const world = createWorld('flyby', 0);
+    startMoonHack(world);
+    world.hack = null;
+    Object.assign(world.player, { vx: 700, vy: -250, angle: 2 });
+    assert.equal(dockingStatus(world, 'moon').ready, true);
+    assert.ok(interact(world, 'moon').ok);
+    assert.ok(hackDigit(world, world.hack.digit).ok);
+    const station = bodies.find(body => body.id === world.player.homeId);
+    Object.assign(world.player, dockingPoint(station));
+    assert.equal(dockingStatus(world, station.id).ready, false);
 });

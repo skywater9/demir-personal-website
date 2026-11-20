@@ -14,9 +14,9 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Players start at a small protected station, owning no planet. The station refuels,
   provides one cargo per minute directly to its pilot, and sells rocket upgrades.
 - Planets are 20% smaller and have no separate relays. Aim the cursor at a planet,
-  approach within 100 m of its surface, slow below 20 m/s, and hold E for four seconds.
-  Active turrets prevent capture; disable every turret first. Releasing E, losing aim,
-  leaving range, or exceeding capture speed cancels progress.
+  approach within 250 m of its surface and press E, then enter four displayed numbers from 1–4. Capture has no speed or heading restriction.
+  Active turrets prevent capture; disable every turret first. Moving the cursor away
+  or leaving range cancels progress.
 - Captured planets produce orbiting cargo and offer defense upgrades through E.
   Return to the starter station for rocket upgrades. Planet ownership excludes stations.
 - Prototype saves use a separate local storage key. Existing multiplayer save files
@@ -25,6 +25,15 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Focused checks: `node --test tests/stationPrototype.test.mjs`. Legacy relay and
   initial-Earth UI tests still describe the previous design and need revision before release.
 
+
+- Planet interaction is hover-driven: gray outline/prompt at a distance; ready prompts
+  turn green in range and the planet outline pulses. Cursor dots move toward hovered
+  planets, with a solid segment inside capture range.
+- Each correct code animates a green ring and translucent sector over the planet.
+  Defenders see red enemy capture progress; completion pulses green and leaves a
+  gently glowing ownership outline. Neutral planets have no idle labels or range rings.
+- Pilots spawn and refuel at the starter station's left bay.
+- UI checks: `node --test tests/planetInteraction.test.mjs tests/stationPrototype.test.mjs`.
 
 ## Combat and room activity
 

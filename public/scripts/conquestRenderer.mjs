@@ -1,6 +1,6 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions
-} from './conquestPhysics.mjs?v=20261119-station-prototype';
+} from './conquestPhysics.mjs?v=20261119-planet-ui';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -23,6 +23,7 @@ export class ConquestRenderer {
         this.visualTime = 0;
         this.dockingEffect = null;
         this.captureEffects = [];
+        this.hackVisuals = new Map();
         this.networkPoses = new Map();
         this.remoteExhaustCarry = new Map();
         this.remoteDeaths = [];
@@ -105,7 +106,7 @@ export class ConquestRenderer {
     }
 
     // Show requested heading with a small cursor and dashed guide independently of the lagging hull.
-    drawAimGuide(player, cursor, elapsed = this.lastElapsed) {
+    drawAimGuide(player, cursor, elapsed = this.lastElapsed, world = null) {
         if (!cursor || !Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) return;
         const point = this.screen(player.x, player.y);
         const x = cursor.x * this.canvas.width;
@@ -115,8 +116,32 @@ export class ConquestRenderer {
         ctx.strokeStyle = '#a9e9de';
         ctx.lineWidth = 1;
         ctx.globalAlpha = 0.65;
-        ctx.setLineDash([3, 4]);
+        const hovered = world ? this.hoveredPlanet(world, cursor) : null;
+        ctx.setLineDash([2, 4]);
+        ctx.lineDashOffset = hovered && !this.reducedMotion ? -this.visualTime * 24 : 0;
         ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(x, y); ctx.stroke();
+        if (hovered) {
+            const center = this.screen(hovered.x, hovered.y);
+            const radius = (hovered.radius + tuning.shipRadius + tuning.hackingDistance) * this.camera.zoom / 2;
+            const dx = x - point.x, dy = y - point.y;
+            const lengthSquared = dx * dx + dy * dy;
+            if (lengthSquared > 0) {
+                const offsetX = point.x - center.x, offsetY = point.y - center.y;
+                const projection = offsetX * dx + offsetY * dy;
+                const discriminant = projection * projection - lengthSquared * (offsetX * offsetX + offsetY * offsetY - radius * radius);
+                if (discriminant >= 0) {
+                    const root = Math.sqrt(discriminant);
+                    const start = Math.max(0, (-projection - root) / lengthSquared);
+                    const end = Math.min(1, (-projection + root) / lengthSquared);
+                    if (start <= end) {
+                        ctx.setLineDash([]);
+                        ctx.lineDashOffset = 0;
+                        ctx.beginPath(); ctx.moveTo(point.x + dx * start, point.y + dy * start);
+                        ctx.lineTo(point.x + dx * end, point.y + dy * end); ctx.stroke();
+                    }
+                }
+            }
+        }
         ctx.setLineDash([]);
         const cooldown = Math.max(0, Math.min(1, ((player.gunOverheatedUntil || 0) - elapsed) / tuning.gunOverheatDuration));
         ctx.globalAlpha = cooldown > 0 && !this.reducedMotion ? 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(this.visualTime * 14)) : 1;
@@ -279,7 +304,10 @@ export class ConquestRenderer {
             const progress = Math.max(0, this.visualTime - effect.startedAt);
             const center = this.screen(body.x, body.y);
             const radius = (body.radius + tuning.smallShieldAltitude) * this.camera.zoom / 2;
-            ctx.save(); ctx.strokeStyle = effect.color; ctx.fillStyle = effect.color;
+            ctx.save();
+            ctx.fillStyle = '#8cdeb0'; ctx.globalAlpha = (1 - progress) * 0.32;
+            ctx.beginPath(); ctx.arc(center.x, center.y, body.radius * this.camera.zoom / 2, 0, fullCircle); ctx.fill();
+            ctx.strokeStyle = effect.color; ctx.fillStyle = effect.color;
             ctx.lineWidth = 3; ctx.globalAlpha = (1 - progress) * .6;
             ctx.beginPath(); ctx.arc(center.x, center.y, radius * (1 - (1 - progress) ** 3), 0, fullCircle); ctx.stroke();
             ctx.globalAlpha = (1 - progress) * .12; ctx.fill(); ctx.restore();
@@ -309,7 +337,7 @@ export class ConquestRenderer {
         if (!home && state.level === 0) ctx.setLineDash([3, 4]);
         ctx.beginPath(); ctx.arc(center.x, center.y, smallRadius * scale, 0, fullCircle); ctx.stroke();
         ctx.setLineDash([]);
-        if (home) {
+        if (home && !body.station) {
             ctx.globalAlpha = 0.4;
             ctx.beginPath(); ctx.arc(center.x, center.y, smallRadius * scale + 3, 0, fullCircle); ctx.stroke();
         }
@@ -349,8 +377,13 @@ export class ConquestRenderer {
         ctx.fillStyle = '#030b2344';
         ctx.beginPath(); ctx.arc(center.x + radius * 1.1, center.y + radius * 0.3, radius * 1.4, 0, fullCircle); ctx.fill();
         ctx.restore();
-        ctx.strokeStyle = body.color; ctx.lineWidth = 1;
+        ctx.save();
+        ctx.strokeStyle = state.owner ? color : body.color;
+        ctx.lineWidth = state.owner ? 1.5 : 1;
+        if (state.owner) { ctx.shadowColor = color; ctx.shadowBlur = 5; }
         ctx.beginPath(); ctx.arc(center.x, center.y, radius + 1, 0, fullCircle); ctx.stroke();
+        ctx.restore();
+        if (!state.owner) return;
         const pad = this.screen(body.x, body.y - body.radius);
         const half = Math.max(3, Math.round(tuning.padHalfWidth * scale));
         ctx.fillStyle = '#1a3039'; ctx.fillRect(pad.x - half, pad.y - 3, half * 2, 5);
@@ -417,11 +450,6 @@ export class ConquestRenderer {
         if (!this.inView(receiver, refugeRadius, 50)) return;
         const selected = world.target?.bodyId === body.id && world.target.type !== 'planet';
         const color = selected ? targetColor : this.ownerColor(world.planets[body.id]?.owner, world.player);
-        ctx.save();
-        ctx.strokeStyle = '#8cbdcc'; ctx.globalAlpha = 0.65; ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.arc(receiver.x, receiver.y, refugeRadius, 0, fullCircle); ctx.stroke();
-        ctx.restore();
         ctx.save(); ctx.translate(point.x, point.y);
         ctx.scale(this.camera.zoom, this.camera.zoom);
         for (const part of stationGeometry) {
@@ -436,6 +464,19 @@ export class ConquestRenderer {
         ctx.restore();
         ctx.strokeStyle = color; ctx.lineWidth = 1;
         ctx.strokeRect(receiver.x - 3, receiver.y - 6, 6, 12);
+        if (body.id === world.player.homeId) {
+            const shieldRadius = (body.radius + tuning.homeShieldAltitude) * this.camera.zoom / 2;
+            const iconY = point.y - shieldRadius - 15;
+            ctx.save();
+            ctx.strokeStyle = this.ownerColor(world.player.id, world.player);
+            ctx.fillStyle = '#10212a'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(point.x - 7, iconY); ctx.lineTo(point.x, iconY - 6); ctx.lineTo(point.x + 7, iconY);
+            ctx.lineTo(point.x + 5, iconY); ctx.lineTo(point.x + 5, iconY + 7);
+            ctx.lineTo(point.x - 5, iconY + 7); ctx.lineTo(point.x - 5, iconY); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
         this.label('STARTER STATION · REFUEL · ROCKET SHOP', point.x, point.y - Math.max(12, 44 * this.camera.zoom), color, 'center');
         this.label('SHIELDED · +1 CARGO / MIN', receiver.x, receiver.y + refugeRadius + 11, '#9dc4cd', 'center');
     }
@@ -704,37 +745,101 @@ export class ConquestRenderer {
         };
     }
 
+    // Resolve hover from the same rendered planet radius used by the interaction controller.
+    hoveredPlanet(world, cursor) {
+        if (!cursor) return null;
+        const x = cursor.x * this.canvas.width;
+        const y = cursor.y * this.canvas.height;
+        return bodies.find(body => {
+            if (body.station) return false;
+            const center = this.screen(body.x, body.y);
+            return Math.hypot(center.x - x, center.y - y) <= Math.max(10, body.radius * this.camera.zoom / 2);
+        }) || null;
+    }
+
+    // Ease each code entry quickly without modifying authoritative capture progress.
+    captureProgress(bodyId, playerId, target) {
+        const key = `${bodyId}:${playerId}`;
+        let state = this.hackVisuals.get(key);
+        if (!state) {
+            state = { from: 0, target, at: this.visualTime };
+            this.hackVisuals.set(key, state);
+        }
+        const elapsed = Math.min(1, Math.max(0, (this.visualTime - state.at) / 0.16));
+        const current = state.from + (state.target - state.from) * (1 - (1 - elapsed) ** 3);
+        if (target !== state.target) {
+            state.from = current; state.target = target; state.at = this.visualTime;
+        }
+        return this.reducedMotion ? target : current;
+    }
+
+    // Display one coherent hover and capture treatment, with red warnings for the planet owner.
+    drawPlanetInteraction(world, cursor) {
+        const hovered = this.hoveredPlanet(world, cursor);
+        const captures = [...(world.captures || [])];
+        if (world.hack) captures.push({ ...world.hack, playerId: world.player.id });
+        // Finish the last quarter-turn before the completed capture fades into its ownership glow.
+        for (const effect of this.captureEffects || []) {
+            if (this.visualTime - effect.startedAt < 0.22 && !captures.some(item => item.bodyId === effect.bodyId)) {
+                captures.push({ bodyId: effect.bodyId, playerId: world.planets[effect.bodyId]?.owner,
+                    progress: 1, required: 1 });
+            }
+        }
+        const activeKeys = new Set();
+        const ctx = this.context;
+        for (const body of bodies) {
+            if (body.station) continue;
+            const center = this.screen(body.x, body.y);
+            const radius = body.radius * this.camera.zoom / 2;
+            if (!this.inView(center, radius + 12)) continue;
+            const capture = captures.find(item => item.bodyId === body.id);
+            const hovering = hovered?.id === body.id;
+            if (!hovering && !capture) continue;
+            ctx.save();
+            ctx.setLineDash([]);
+            if (hovering && !capture) {
+                const ready = dockingStatus(world, body.id).ready;
+                ctx.strokeStyle = '#a7afb5';
+                ctx.globalAlpha = ready && !this.reducedMotion ? 0.5 + 0.4 * (0.5 + 0.5 * Math.sin(this.visualTime * 8)) : 0.65;
+                ctx.lineWidth = ready ? 2 : 1;
+                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, 0, fullCircle); ctx.stroke();
+            }
+            if (capture) {
+                const defender = world.planets[body.id]?.owner === world.player.id && capture.playerId !== world.player.id;
+                const color = defender ? '#ff6268' : '#8cdeb0';
+                const progress = this.captureProgress(body.id, capture.playerId, Math.min(1, capture.progress / capture.required));
+                activeKeys.add(`${body.id}:${capture.playerId}`);
+                ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.8;
+                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, 0, fullCircle); ctx.stroke();
+                if (progress > 0) {
+                    const end = -Math.PI / 2 + fullCircle * progress;
+                    ctx.globalAlpha = 0.22;
+                    ctx.beginPath(); ctx.moveTo(center.x, center.y);
+                    ctx.arc(center.x, center.y, radius, -Math.PI / 2, end); ctx.closePath(); ctx.fill();
+                    ctx.globalAlpha = 0.9; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(center.x, center.y, radius + 4, -Math.PI / 2, end); ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+        for (const key of this.hackVisuals.keys()) if (!activeKeys.has(key)) this.hackVisuals.delete(key);
+    }
+
     // Guide any nearby undocked pilot to the nearest relay without duplicating readiness text.
     drawDockingGuide(world, cursor) {
         const player = world.player;
         if (player.docked || player.deadUntil > world.elapsed) return;
         const body = nearestRelay(player, world);
         const status = dockingStatus(world, body.id);
-        if (status.distance > tuning.dockingAssistDistance) return;
+        if (status.distance > (body.station ? tuning.dockingAssistDistance : tuning.hackingDistance)) return;
         const dock = dockingPoint(body);
-        if (!body.station) {
-            const center = this.screen(body.x, body.y);
-            const radius = body.radius * this.camera.zoom / 2 + 5;
-            const ctx = this.context;
-            ctx.save();
-            ctx.strokeStyle = status.ready ? '#8cdeb0' : '#ffce72';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(center.x, center.y, radius, 0, fullCircle); ctx.stroke();
-            if (world.hack?.bodyId === body.id) {
-                ctx.strokeStyle = '#e4fff0'; ctx.lineWidth = 4;
-                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, -Math.PI / 2,
-                    -Math.PI / 2 + fullCircle * world.hack.progress / world.hack.required); ctx.stroke();
-            }
-            ctx.restore();
-            return;
-        }
+        if (!body.station) return;
         const ghost = { ...player, x: dock.x, y: dock.y, angle: 0 };
         const point = this.screen(dock.x, dock.y);
         const color = status.ready ? ownColor : neutralColor;
         const ctx = this.context;
         ctx.save();
-        ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.22;
-        ctx.beginPath(); ctx.arc(point.x, point.y, tuning.dockingDistance * this.camera.zoom / 2, 0, fullCircle); ctx.stroke();
         const from = this.rocketBay(player);
         const to = this.rocketBay(ghost);
         ctx.globalAlpha = 0.65; ctx.setLineDash([2, 4]);
@@ -750,7 +855,7 @@ export class ConquestRenderer {
     drawGuidance(world) {
         const player = world.player;
         const target = targetFor(world);
-        if (!target) return;
+        if (!target || !target.body.station) return;
         const point = this.screen(target.x, target.y);
         const distance = Math.hypot(player.x - target.x, player.y - target.y);
         const distanceText = distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
@@ -778,7 +883,7 @@ export class ConquestRenderer {
             captionX = point.x; captionY = point.y + size + 20;
             this.label(text, point.x, point.y - size - 6, color, 'center', true);
             if (!relay && distance < 300) {
-                this.label('AIM AT PLANET · HOLD E', point.x, point.y + size + 12, color, 'center', true);
+                this.label('CURSOR ON PLANET · E TO HACK', point.x, point.y + size + 12, color, 'center', true);
             }
         } else {
             const centerX = width / 2;
@@ -795,7 +900,7 @@ export class ConquestRenderer {
             this.label(text, x, y - 12, color, 'center', true);
         }
         if (explainCargo) {
-            const lines = width >= 320 ? ['AIM AT A PLANET + HOLD E TO CAPTURE'] : ['CAPTURE PLANETS', 'TO GAIN CARGO'];
+            const lines = width >= 320 ? ['CURSOR ON PLANET + E · ENTER NUMBERS 1–4'] : ['CAPTURE PLANETS', 'TO GAIN CARGO'];
             for (let index = 0; index < lines.length; index++) {
                 this.label(lines[index], captionX, Math.min(height - 6 - (lines.length - 1) * 15, captionY) + index * 15,
                     '#fff0b1', 'center', true, 12);
@@ -964,6 +1069,7 @@ export class ConquestRenderer {
         const newWorld = this.lastWorld !== world || world.elapsed < this.lastElapsed;
         if (newWorld) {
             this.captureEffects = [];
+            this.hackVisuals.clear();
             this.networkPoses.clear();
             this.remoteExhaustCarry.clear();
             this.remoteDeaths = [];
@@ -992,6 +1098,7 @@ export class ConquestRenderer {
         for (const body of bodies) this.drawBody(body, world);
         for (const body of bodies) this.drawStation(body, world);
         this.drawObjects(world);
+        if (!menu) this.drawPlanetInteraction(world, input.aimCursor);
         this.drawExhaust();
         this.drawRemoteDeaths();
         for (const other of world.others || []) if (!other.deadUntil) {
@@ -1007,7 +1114,7 @@ export class ConquestRenderer {
         if (!menu && !dead) this.drawGuidance(world);
         this.drawCaptureEffects();
 
-        if (!menu && !dead && !respawned) this.drawAimGuide(player, input.aimCursor, world.elapsed);
+        if (!menu && !dead && !respawned) this.drawAimGuide(player, input.aimCursor, world.elapsed, world);
         if (!menu && !dead) this.drawDockingGuide(world, input.aimCursor);
         this.drawMap(world);
         this.wasDead = dead;
