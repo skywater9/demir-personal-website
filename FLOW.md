@@ -18,7 +18,7 @@ flowchart TD
     spawn --> guide[Target nearby neutral relay; large capture and cargo arrow for every home]
     guide --> shared[Fly in the shared galaxy; server owns outcomes]
     recover --> shared
-    shared --> hack[Dock non-home relay and enter changing code]
+    shared --> hack[Target planet; destroy every turret; enter changing code: 8 to 14 presses by tier]
     hack -->|Wrong code| feedback[Flash red; progress unchanged]
     feedback --> hack
     hack -->|Correct code| progress{Capture complete?}
@@ -30,7 +30,7 @@ flowchart TD
     shop -->|E detach| shared
     hack -->|E detach or disconnect| cancel[Reset partial hack]
     cancel --> shared
-    shared --> pickup[Inside a planet bubble its pods approach gently around the surface; nearby pickup still works outside; server collects once]
+    shared --> pickup[Planet pods stay inside its bubble; only its owner attracts and collects them; death drops remain public]
     pickup --> shared
     shared --> refuel[Owned pad gradually refuels; home produces no cargo and has no relay]
     refuel --> shared

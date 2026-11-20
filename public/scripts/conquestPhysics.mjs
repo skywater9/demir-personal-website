@@ -30,16 +30,16 @@ export const tuning = Object.freeze({
     cargoAltitudeVariation: 90, cargoOrbitSpeedVariation: 0.14,
     pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
-    cargoBubbleSpeed: 40, cargoBubbleAcceleration: 20,
+    cargoBubbleSpeed: 100, cargoBubbleAcceleration: 100,
     refuelRate: 12, homeRefuelRate: 24, refuelSnap: 0.05,
     recaptureCooldown: 5, blackHoleInfluenceAltitude: 3500,
-    hackPressInterval: 0.12, hackBasePresses: 4, hackExtraPresses: 2,
+    hackPressInterval: 0.12, hackBasePresses: 8, hackExtraPresses: 2,
     upgradeCosts: Object.freeze([8, 16, 28]),
     homeShieldAltitude: 150, smallShieldAltitude: planetCaptureRange + motionTuning.shipRadius, outerFieldAltitude: 1000,
     rocketRepulsion: 24, outerRepulsion: 14, bulletSlowFactor: 0.45,
     outerBulletSlowFactor: 0.75, dockingDistance: 100, refugeRadius: 100,
     bulletSpeed: 680, bulletRadius: 3, bulletLifetime: 5, fireCooldown: 0.24,
-    turretRange: 1700, turretCooldown: 2.4, turretBulletSpeed: 190,
+    turretRange: 1700, turretCooldown: 1.4, turretBulletSpeed: 190, turretHomingRate: .28,
     turretHealth: 1, turretRadius: 22,
     rocketUpgradeCosts: Object.freeze([8, 16, 28, 40]),
     maxProjectiles: 256, maxEvents: 200
@@ -231,7 +231,7 @@ function isHome(world, body) {
 
 // Issue a fresh challenge, avoiding the previous digit so held old keys cannot advance it.
 function challengeDigit(level, previous = null) {
-    const digits = [1, 2, 3, 4];
+    const digits = Array.from({ length: Math.min(6, 3 + Math.max(0, Math.floor(level))) }, (_, index) => index + 1);
     const pool = digits.filter(digit => digit !== previous);
     return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -270,10 +270,10 @@ export function interact(world, bodyId = null) {
         if (prepareTurrets(planet).some(turret => turret.health > 0)) {
             return { ok: false, reason: 'DESTROY TURRETS FIRST' };
         }
-        world.hack = { bodyId: body.id, progress: 0, required: 4, digit: challengeDigit(0),
+        world.hack = { bodyId: body.id, progress: 0, required: tuning.hackBasePresses + planet.level * tuning.hackExtraPresses, digit: challengeDigit(planet.level),
             heldDigit: null, lastAcceptedAt: world.elapsed - tuning.hackPressInterval, challengeId: world.eventCounter + 1 };
         emit(world, 'hackStarted', { bodyId: body.id });
-        return { ok: true, reason: 'Enter the displayed numbers (1–4).' };
+        return { ok: true, reason: 'Enter the displayed numbers.' };
     }
     if (!body.station) {
         player.shoppingOn = body.id;
@@ -293,7 +293,7 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
     if (digit === null) { hack.heldDigit = null; return { ok: true }; }
     if (repeat || (challengeId !== undefined && challengeId !== hack.challengeId)) return { ok: false, reason: 'Stale press.' };
     const value = Number(digit);
-    if (!Number.isInteger(value) || value < 1 || value > 4 || value === hack.heldDigit) return { ok: false, reason: 'Use a fresh 1–4 key press.' };
+    if (!Number.isInteger(value) || value < 1 || value > 6 || value === hack.heldDigit) return { ok: false, reason: 'Press the displayed number with a fresh key press.' };
     hack.heldDigit = value;
     if (value !== hack.digit) return { ok: false, reason: 'Wrong number.' };
     if (world.elapsed - hack.lastAcceptedAt + 1e-9 < tuning.hackPressInterval) return { ok: false, reason: 'Press too soon.' };
@@ -318,7 +318,7 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
         }
         return { ok: true, reason: 'Captured.' };
     }
-    hack.digit = challengeDigit(0, hack.digit);
+    hack.digit = challengeDigit(world.planets[hack.bodyId].level, hack.digit);
     hack.challengeId += 1;
     emit(world, 'hackProgress', { bodyId: hack.bodyId, amount: hack.progress });
     return { ok: true };
@@ -808,10 +808,10 @@ function prepareTurrets(planet) {
 }
 
 // Solve a constant-velocity intercept; use direct aim when no reachable positive intercept exists.
-function turretAim(x, y, target) {
+function turretAim(x, y, target, speed = tuning.turretBulletSpeed, lifetime = tuning.bulletLifetime) {
     const dx = target.x - x, dy = target.y - y;
     const vx = target.vx || 0, vy = target.vy || 0;
-    const a = vx * vx + vy * vy - tuning.turretBulletSpeed ** 2;
+    const a = vx * vx + vy * vy - speed ** 2;
     const b = 2 * (dx * vx + dy * vy);
     const c = dx * dx + dy * dy;
     let time = 0;
@@ -825,7 +825,7 @@ function turretAim(x, y, target) {
             if (times.length) time = Math.min(...times);
         }
     }
-    if (!Number.isFinite(time) || time < 0 || time > tuning.bulletLifetime) time = 0;
+    if (!Number.isFinite(time) || time < 0 || time > lifetime) time = 0;
     return Math.atan2(dy + vy * time, dx + vx * time);
 }
 
@@ -853,7 +853,7 @@ function fireTurrets(world) {
             turret.angle = turretAim(x, y, target);
             if (world.elapsed + 1e-9 < turret.nextShotAt || world.projectiles.length >= tuning.maxProjectiles) continue;
             world.projectiles.push({ id: `turret-${world.eventCounter + 1}`, owner: planet.owner,
-                source: 'turret', bodyId: body.id, turretIndex: index, x, y,
+                source: 'turret', bodyId: body.id, turretIndex: index, targetId: target.id, x, y,
                 vx: Math.cos(turret.angle) * tuning.turretBulletSpeed,
                 vy: Math.sin(turret.angle) * tuning.turretBulletSpeed,
                 radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
@@ -874,11 +874,29 @@ function hitTurret(world, body, index, attackerId) {
     else destroyed();
 }
 
+// Gently correct a turret shot toward its original live enemy without changing its speed or retargeting.
+function steerTurretShot(world, shot, dt) {
+    if (shot.source !== 'turret' || typeof shot.targetId !== 'string') return;
+    const target = world.players ? world.players[shot.targetId]?.player
+        : world.player.id === shot.targetId ? world.player : null;
+    if (!target || target.deadUntil || target.id === shot.owner) return;
+    const speed = Math.hypot(shot.vx, shot.vy);
+    if (speed < 1e-8) return;
+    const angle = Math.atan2(shot.vy, shot.vx);
+    const desired = turretAim(shot.x, shot.y, target, speed, shot.expiresAt - world.elapsed);
+    const change = normalizeAngle(desired - angle);
+    const limit = tuning.turretHomingRate * dt;
+    const next = angle + Math.max(-limit, Math.min(limit, change));
+    shot.vx = Math.cos(next) * speed;
+    shot.vy = Math.sin(next) * speed;
+}
+
 // Step one projectile through shields and refuge before its swept moving-player hit can apply.
 function moveProjectile(world, shot, dt, previousPlayer) {
     if (![shot.x, shot.y, shot.vx, shot.vy].every(Number.isFinite)) return false;
     shot.expiresAt ??= world.elapsed + tuning.bulletLifetime;
     if (shot.expiresAt <= world.elapsed) return false;
+    steerTurretShot(world, shot, dt);
     const radius = Number.isFinite(shot.radius) ? Math.max(0, shot.radius) : tuning.bulletRadius;
     const start = { x: shot.x, y: shot.y };
     let end = { x: shot.x + shot.vx * dt, y: shot.y + shot.vy * dt };
@@ -984,7 +1002,30 @@ function moveCargoWithBounce(pickup, dt) {
     }
 }
 
-// Steer gently toward a pilot, travelling around the planet when its surface blocks the direct route.
+// Derive availability from current planet ownership, so capture transfers collection rights immediately.
+export function canCollectCargo(world, pickup, player = world.player) {
+    if (pickup.bodyId === undefined || pickup.bodyId === null) return true;
+    const body = bodyFor(pickup.bodyId);
+    return Boolean(body && (body.station || world.planets[body.id]?.owner === player.id));
+}
+
+// Keep an entire planet pod within its inner bubble and remove outward radial motion at the boundary.
+function containPlanetCargo(pickup, body) {
+    const dx = pickup.x - body.x, dy = pickup.y - body.y;
+    const distance = Math.hypot(dx, dy);
+    const radius = body.radius + tuning.smallShieldAltitude - 5;
+    if (distance <= radius || distance < 1e-8) return;
+    const nx = dx / distance, ny = dy / distance;
+    pickup.x = body.x + nx * radius; pickup.y = body.y + ny * radius;
+    const outward = (pickup.vx || 0) * nx + (pickup.vy || 0) * ny;
+    if (outward > 0) {
+        pickup.vx = (pickup.vx || 0) - outward * nx;
+        pickup.vy = (pickup.vy || 0) - outward * ny;
+    }
+}
+
+// Pull planet cargo toward its owner, routing around the surface and strengthening closer to the planet.
+
 function attractBubbleCargo(pickup, player, body, dt) {
     const dx = player.x - pickup.x, dy = player.y - pickup.y;
     const distance = Math.hypot(dx, dy);
@@ -999,11 +1040,14 @@ function attractBubbleCargo(pickup, player, body, dt) {
         directionX = -radialY / radius * turn;
         directionY = radialX / radius * turn;
     }
-    const speed = Math.min(tuning.cargoBubbleSpeed, distance * 0.6);
+    const altitude = Math.max(0, Math.hypot(player.x - body.x, player.y - body.y) - body.radius);
+    const proximity = Math.max(0, 1 - altitude / tuning.smallShieldAltitude);
+    const strength = .55 + .45 * proximity;
+    const speed = Math.min(tuning.cargoBubbleSpeed * strength, distance * 1.5);
     const changeX = directionX * speed - (pickup.vx || 0);
     const changeY = directionY * speed - (pickup.vy || 0);
     const change = Math.hypot(changeX, changeY);
-    const blend = change > 0 ? Math.min(1, tuning.cargoBubbleAcceleration * dt / change) : 0;
+    const blend = change > 0 ? Math.min(1, tuning.cargoBubbleAcceleration * strength * dt / change) : 0;
     pickup.vx = (pickup.vx || 0) + changeX * blend;
     pickup.vy = (pickup.vy || 0) + changeY * blend;
 }
@@ -1012,11 +1056,13 @@ function attractBubbleCargo(pickup, player, body, dt) {
 function movePickups(world, dt, previousPlayer) {
     world.pickups = world.pickups.filter(pickup => {
         if (pickup.expiresAt <= world.elapsed || !Number.isFinite(pickup.amount) || pickup.amount <= 0) return false;
+        const body = bodyFor(pickup.bodyId);
+        const planetBody = body && !body.station ? body : null;
+        if (planetBody) containPlanetCargo(pickup, planetBody);
         const pickupStart = { x: pickup.x, y: pickup.y };
         const pilots = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
-        const alive = pilots.filter(player => !player.deadUntil);
-        const body = bodyFor(pickup.bodyId);
-        const bubble = body && !body.station && world.planets[body.id]?.owner ? body : null;
+        const alive = pilots.filter(player => !player.deadUntil && canCollectCargo(world, pickup, player));
+        const bubble = planetBody && world.planets[body.id]?.owner ? body : null;
         const insideBubble = player => bubble && Math.hypot(player.x - bubble.x, player.y - bubble.y)
             <= bubble.radius + tuning.smallShieldAltitude;
         const eligible = alive.filter(player => insideBubble(player)
@@ -1028,7 +1074,7 @@ function movePickups(world, dt, previousPlayer) {
             pickup.vx = (pickup.vx || 0) + gravity.ax * dt;
             pickup.vy = (pickup.vy || 0) + gravity.ay * dt;
         }
-        // Bubble occupants attract this planet's cargo; other pilots retain the nearby-pickup magnet.
+        // Only the owner attracts planet pods; dropped cargo keeps its public nearby-pickup magnet.
         const dx = nearest ? nearest.x - pickup.x : 0;
         const dy = nearest ? nearest.y - pickup.y : 0;
         const distance = Math.hypot(dx, dy);
@@ -1040,6 +1086,7 @@ function movePickups(world, dt, previousPlayer) {
             pickup.vy = (pickup.vy || 0) + dy / distance * acceleration * dt;
         }
         moveCargoWithBounce(pickup, dt);
+        if (planetBody) containPlanetCargo(pickup, planetBody);
         const contacts = alive.map(player => {
             const previous = world.previousPlayers?.[player.id] || previousPlayer;
             const fraction = circleHit({ x: pickupStart.x - previous.x, y: pickupStart.y - previous.y },

@@ -1,9 +1,9 @@
 import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-station-prototype';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-round-hole-landing';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-round-hole-landing';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-round-hole-landing';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-owner-cargo-homing';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-owner-cargo-homing';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-owner-cargo-homing';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -801,7 +801,9 @@ export class ConquestApp {
             const progress = hack.progress ?? hack.count ?? 0;
             const required = hack.required ?? hack.total ?? 1;
             this.text('digitButton', String(hack.digit));
-            this.ui.digitButton.setAttribute('aria-label', 'Enter the displayed number, 1 through 4');
+            const maxDigit = Math.min(6, 3 + world.planets[hack.bodyId].level);
+            this.text('hackInstruction', `Enter the displayed numbers · 1–${maxDigit}`);
+            this.ui.digitButton.setAttribute('aria-label', `Enter the displayed number, 1 through ${maxDigit}`);
 
         } else if (shopOpen) {
             const upgrade = nextUpgrade(world);

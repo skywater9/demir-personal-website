@@ -14,7 +14,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Players start at a small protected station, owning no planet. The station refuels,
   provides one cargo per minute directly to its pilot, and sells rocket upgrades.
 - Planets are 20% smaller and have no separate relays. Aim the cursor at a planet,
-  approach within 250 m of its surface and press E, then enter four displayed numbers from 1–4. Capture has no speed or heading restriction.
+  approach within 250 m of its surface and press E, then enter the displayed numbers: eight presses from 1–3 for neutral planets. Capture has no speed or heading restriction.
   Active turrets prevent capture; destroy every turret first. Moving the cursor away
   or leaving range cancels progress.
 - Captured planets produce orbiting cargo and offer defense upgrades through E.
@@ -44,10 +44,12 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 ## Combat and room activity
 
+- Capture difficulty is 8 presses using 1–3 for neutral/tier-zero planets, then 10 using 1–4, 12 using 1–5, and 14 using 1–6 for tiers one through three.
+
 - Gentle planet bumps rebound at contact. Only slow upright pad contact lands, and landed rockets stay at their actual contact point rather than snapping to the pad center.
 
-- Turrets lead moving rockets using current velocity and bullet travel time, with direct aim when no intercept is reachable before the bullet expires. The shared head angle matches the shot direction.
-- A planet's initial inner bubble matches its capture-range ring. While inside it, that planet's cargo gently steers toward you at up to 40 m/s and 20 m/s², routing around the surface when needed. Outside it, the normal nearby pickup attraction still applies.
+- Turrets lead moving rockets, fire every 1.4 seconds, and launch slightly homing bullets. Bullets steer toward their original target at up to 0.28 radians/second while preserving speed; they stop steering if the target dies or leaves. Ordinary player bullets remain unguided.
+- A planet's initial inner bubble matches its capture-range ring. While inside it, only its owner can attract and collect that planet's cargo. Pods stay within the bubble, route around the surface, and pull increasingly strongly as the owner approaches the planet (up to 100 m/s and 100 m/s²). Unavailable pods are faded gray; available pods glow gold. Dropped death cargo remains shareable and looks larger/brighter for larger amounts.
 
 - Local and remote rockets have a faint steady glow in their player color beneath the crisp pixel hull.
 

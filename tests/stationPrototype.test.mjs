@@ -35,13 +35,14 @@ test('prototype starts at a shielded station with no owned planets and pays one 
     assert.ok(nextRocketUpgrade(world).available);
 });
 
-test('E starts a 1–4 challenge from 200 m without matching the rocket heading', () => {
+test('E starts an eight-press 1–3 challenge from 200 m without matching the rocket heading', () => {
     const world = createWorld('capture', 0);
     assert.ok(startMoonHack(world).ok);
-    assert.ok(world.hack.digit >= 1 && world.hack.digit <= 4);
+    assert.ok(world.hack.digit >= 1 && world.hack.digit <= 3);
     advance(world, 0.2, { captureBody: 'moon' });
     assert.equal(world.hack.progress, 0, 'time alone must not advance hacking');
-    for (let index = 0; index < 4; index++) {
+    assert.equal(world.hack.required, 8);
+    for (let index = 0; index < 8; index++) {
         assert.ok(hackDigit(world, world.hack.digit).ok);
         hackDigit(world, null);
         advance(world, 0.15, { captureBody: 'moon' });

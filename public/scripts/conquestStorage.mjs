@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-round-hole-landing';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-owner-cargo-homing';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;

@@ -11,7 +11,7 @@ function scene() {
     const context = new Proxy(state, {
         get(target, name) {
             if (name in target) return target[name];
-            return (...args) => calls.push({ name, args, color: target.strokeStyle, fill: target.fillStyle, shadow: target.shadowColor, alpha: target.globalAlpha });
+            return (...args) => calls.push({ name, args, color: target.strokeStyle, fill: target.fillStyle, shadow: target.shadowColor, blur: target.shadowBlur, alpha: target.globalAlpha });
         },
         set(target, name, value) { target[name] = value; return true; }
     });
@@ -154,4 +154,35 @@ test('black hole uses circular rings and orbiting particles around its dark core
     const movedParticle = calls.find(call => call.name === 'fillRect');
     assert.notDeepEqual(firstParticle.args, movedParticle.args);
     assert.ok(calls.some(call => call.name === 'fill' && call.fill === '#010103'));
+});
+
+
+test('unavailable planet cargo is faded gray while its owner sees glowing gold', () => {
+    const { renderer, world, moon, calls } = scene();
+    world.planets.moon.owner = 'enemy';
+    world.pickups = [{ bodyId: moon.id, x: moon.x + moon.radius + 80, y: moon.y }];
+    renderer.drawObjects(world);
+    assert.ok(calls.some(call => call.name === 'fillRect' && call.fill === '#9aa3a9' && call.alpha === .28));
+    assert.ok(!calls.some(call => call.name === 'fillRect' && call.fill === '#f4d997'));
+    assert.ok(calls.some(call => call.name === 'clip'));
+    calls.length = 0; world.planets.moon.owner = world.player.id;
+    renderer.drawObjects(world);
+    assert.ok(calls.some(call => call.name === 'fillRect' && call.fill === '#f4d997' && call.alpha > .8));
+});
+
+
+test('higher-value death cargo has a larger sprite and stronger glow with bounded rendering size', () => {
+    const { renderer, world, moon, calls } = scene();
+    const styles = [];
+    for (const amount of [1, 16, 256, 1000000]) {
+        world.pickups = [{ x: moon.x + moon.radius + 80, y: moon.y, amount }];
+        calls.length = 0;
+        renderer.drawObjects(world);
+        const scale = calls.find(call => call.name === 'scale');
+        const crate = calls.find(call => call.name === 'fillRect');
+        styles.push({ scale: scale.args[0], blur: crate.blur });
+    }
+    assert.ok(styles[1].scale > styles[0].scale && styles[2].scale > styles[1].scale);
+    assert.ok(styles[1].blur > styles[0].blur && styles[2].blur > styles[1].blur);
+    assert.ok(styles[3].scale <= 2.8 * 1.18 && styles[3].blur <= 32);
 });

@@ -1129,3 +1129,19 @@ for the black hole rings, they can just be circles around it, and we can have so
 185.
 
 for some reason bumping on an owned planet teleports the player to the landing pad? fix that
+
+186.
+
+the cargo is contained within the radius of the planet bubble, and only the planet owner can collect cargo, unavailable cargo is low opacity and greyish color, also cargo should be much more pulled toward the player rocket once they get close to their planet. make it so these are true
+
+187.
+
+make so turrets shoot faster and turret bullets are sightly homing
+
+188.
+
+also make neutral planets require only numbers 1-3, and still take twice as long to capture so twice as many letters. Then upgraded planets require number 4, then 5, then finally also 6, and each upgrade adds so you have to enter 2 more numbers to capture.
+
+189.
+
+dropped death cargo i think right now just looks like one cargo that has many inside, the more "dense" a cargo is, the larger it should be, and more glowing,

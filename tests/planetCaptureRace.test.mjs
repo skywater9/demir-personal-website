@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameRoom } from '../server/room.mjs';
-import { createWorld, planetBodies, turretPositions, tuning, stepWorld, interact } from '../public/scripts/conquestPhysics.mjs';
+import { createWorld, planetBodies, turretPositions, tuning, stepWorld, interact, hackDigit } from '../public/scripts/conquestPhysics.mjs';
 import { validateSave } from '../server/persistence.mjs';
 
 // Put competing pilots within interaction range without occupying their starter stations.
@@ -26,7 +26,7 @@ test('first completed capture wins, cancels all rivals and enforces a five-secon
     for (const id of [a, b]) assert.ok(room.action(id, { action: 'interact', bodyId: body.id }).ok);
     assert.ok(press(room, b).ok);
     const stale = { action: 'digit', digit: room.world.players[b].hack.digit, challengeId: room.world.players[b].hack.challengeId };
-    for (let index = 0; index < 4; index++) assert.ok(press(room, a).ok);
+    for (let index = 0; index < 8; index++) assert.ok(press(room, a).ok);
     assert.equal(room.world.planets.moon.owner, a);
     assert.equal(room.world.players[a].hack, null); assert.equal(room.world.players[b].hack, null);
     assert.equal(room.view(b).captures.length, 0);
@@ -78,4 +78,40 @@ test('basic rocket can fire eight shots before a full overheat cooldown', () => 
     stepWorld(world, { fire: true }, 1);
     assert.equal(world.stats.shots, count);
     assert.ok(world.player.gunOverheatedUntil > world.elapsed);
+});
+
+
+test('planet tiers expand the digit pool from 1–3 through 1–6 and require 8/10/12/14 presses', () => {
+    const originalRandom = Math.random;
+    Math.random = () => .999;
+    try {
+        for (const level of [0, 1, 2, 3]) {
+            const world = createWorld(`challenge-${level}`, 0);
+            const body = planetBodies.find(body => body.id === 'moon');
+            Object.assign(world.player, { x: body.x, y: body.y - body.radius - 150, landedOn: null, docked: null });
+            Object.assign(world.planets.moon, { owner: level ? 'enemy' : null, level,
+                turrets: Array.from({ length: level }, () => ({ health: 0, angle: 0, disabledUntil: 0, nextShotAt: 0 })) });
+            assert.equal(interact(world, body.id).ok, true);
+            assert.equal(world.hack.required, 8 + level * 2);
+            assert.equal(world.hack.digit, 3 + level);
+            const required = world.hack.required;
+            for (let count = 0; count < required; count++) {
+                assert.ok(world.hack.digit >= 1 && world.hack.digit <= 3 + level);
+                world.elapsed += tuning.hackPressInterval + .01;
+                assert.equal(hackDigit(world, world.hack.digit).ok, true);
+                hackDigit(world, null);
+                assert.equal(world.hack === null, count === required - 1);
+            }
+            assert.equal(world.planets.moon.owner, world.player.id);
+        }
+    } finally { Math.random = originalRandom; }
+});
+
+
+test('server restart clears old partial challenges before applying the new capture difficulty', () => {
+    const { room, a, body } = contenders();
+    assert.ok(room.action(a, { action: 'interact', bodyId: body.id }).ok);
+    assert.ok(room.world.players[a].hack);
+    const restored = new GameRoom(structuredClone(room.saved()), 2000);
+    assert.equal(restored.world.players[a].hack, null);
 });

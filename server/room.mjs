@@ -34,7 +34,7 @@ export class GameRoom {
             session.connected = false;
         }
         for (const id of Object.keys(this.world.players)) withPlayer(this.world, id, () => {
-            if (this.world.player.docked) interact(this.world);
+            if (this.world.player.docked || this.world.hack) interact(this.world);
         });
         this.expire(now);
     }

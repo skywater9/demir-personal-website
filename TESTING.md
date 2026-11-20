@@ -209,3 +209,11 @@ Run `node --test tests/landingContact.test.mjs tests/planetInteraction.test.mjs`
 - Slowly bump the left, right or underside of an owned planet. The rocket rebounds near contact and does not acquire a landing flag or move to the pad. Check a genuine upright pad landing stays at its actual contact point and still refuels.
 - Repeat side contact in shared multiplayer and restore an older invalid side-contact save; neither should snap the rocket to the top pad.
 - Black-hole rings are circles in flight and on the map. Particles travel on circular orbits; reduced motion keeps their positions static. Gravity, core size and placement are unchanged in this visual revision.
+
+## Owner-only cargo, homing turrets and scaled capture codes
+
+- Planet pods remain inside the inner bubble, including at high velocity and after restoring old out-of-bounds pods. Their drawn sprite/glow is clipped to the bubble too. Rivals cannot attract or collect them; changing ownership transfers collection rights immediately. Death cargo remains shareable.
+- Foreign pods are low-opacity gray without a gold glow. Owned pods are gold; larger cargo bundles have larger sprites and stronger, bounded glow.
+- Owner attraction is stronger near the planet surface, with a 100 m/s approach-speed target and up to 100 m/s² steering. Pods still route around the solid surface.
+- Turrets fire again after 1.4 seconds. Their bullets turn at no more than 0.28 rad/s toward the original target and preserve current speed. Player bullets do not home, and dead/missing targets stop steering.
+- Capture difficulty: tier 0 = eight presses, digits 1–3; tiers 1/2/3 = 10/12/14 presses, digits 1–4/1–5/1–6. Wrong and held keys retain their rejection rules. Old partial captures reset on restart.

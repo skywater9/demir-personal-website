@@ -1,6 +1,6 @@
 import {
-    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-round-hole-landing';
+    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, canCollectCargo, fuelZone, blackHole
+} from './conquestPhysics.mjs?v=20261119-owner-cargo-homing';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -534,15 +534,23 @@ export class ConquestRenderer {
             if (!this.inView(point, 5)) continue;
             const phase = this.random(Math.floor(pickup.x * 0.013 + pickup.y * 0.017)) * fullCircle;
             const pulse = 1 + Math.sin(this.visualTime * 5 + phase) * 0.18;
+            const density = Math.log2(Math.max(1, Number(pickup.amount) || 1));
+            const bundleScale = Math.min(2.8, 1 + density * .18);
             ctx.save();
+            const body = bodies.find(body => body.id === pickup.bodyId && !body.station);
+            if (body) {
+                const center = this.screen(body.x, body.y);
+                ctx.beginPath(); ctx.arc(center.x, center.y, (body.radius + tuning.smallShieldAltitude) * this.camera.zoom / 2, 0, fullCircle); ctx.clip();
+            }
             ctx.translate(point.x, point.y);
-            ctx.scale(pulse, pulse);
-            ctx.globalAlpha = 0.85 + (pulse - 0.82) * 0.5;
-            ctx.shadowColor = '#e8c57b';
-            ctx.shadowBlur = 7 + pulse * 5;
-            ctx.fillStyle = '#283f43'; ctx.fillRect(-4, -4, 9, 9);
-            ctx.strokeStyle = '#e8c57b'; ctx.lineWidth = 1; ctx.strokeRect(-3, -3, 7, 7);
-            ctx.fillStyle = '#f4d997'; ctx.fillRect(-1, -1, 3, 3);
+            ctx.scale(pulse * bundleScale, pulse * bundleScale);
+            const available = canCollectCargo(world, pickup);
+            ctx.globalAlpha = available ? Math.min(1, .85 + (pulse - .82) * .5 + density * .02) : .28;
+            ctx.shadowColor = available ? '#e8c57b' : 'transparent';
+            ctx.shadowBlur = available ? Math.min(32, 7 + pulse * 5 + density * 3) : 0;
+            ctx.fillStyle = available ? '#283f43' : '#343c43'; ctx.fillRect(-4, -4, 9, 9);
+            ctx.strokeStyle = available ? '#e8c57b' : '#8a969e'; ctx.lineWidth = 1; ctx.strokeRect(-3, -3, 7, 7);
+            ctx.fillStyle = available ? '#f4d997' : '#9aa3a9'; ctx.fillRect(-1, -1, 3, 3);
             ctx.restore();
         }
         for (const shot of world.projectiles || []) {
