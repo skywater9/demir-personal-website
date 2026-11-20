@@ -7,9 +7,9 @@
     <meta name="theme-color" content="#101921">
     <meta name="description" content="Orbital Freight: explore three star systems, hack relays, collect cargo, and build a planetary empire. A local pixel-art conquest game.">
     <title>Orbital Freight — Conquest</title>
-    <link rel="stylesheet" href="conquest.css?v=20261119-planet-services">
+    <link rel="stylesheet" href="conquest.css?v=20261119-planet-levels-repair">
     <script type="module" src="scripts/visitLog.mjs?v=20261118-fuel-damage"></script>
-    <script type="module" src="scripts/conquestApp.mjs?v=20261119-owner-cargo-homing"></script>
+    <script type="module" src="scripts/conquestApp.mjs?v=20261119-planet-levels-repair"></script>
     <script type="module" src="scripts/siteAnalytics.js?v=20261118-fuel-damage"></script>
 </head>
 <body>
@@ -61,6 +61,7 @@
                         <button id="upgradeButton" type="button" data-analytics-id="conquestUpgrade" aria-keyshortcuts="T"><kbd>T</kbd> <span id="planetUpgradeLabel">PLANET</span><span id="planetUpgradeCost" class="upgrade-cost"><output id="planetUpgradeCostValue">0</output><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10" fill="#283f43" stroke="currentColor"/><rect x="4.5" y="4.5" width="3" height="3" fill="currentColor" stroke="none"/></svg></span></button>
                         <p id="upgradeName" class="upgrade-name"></p>
                         <p id="upgradeDescription"></p>
+                        <div id="turretRepairs" class="turret-repairs" aria-label="Turret repairs"></div>
                     </div>
                 </div>
             </div>

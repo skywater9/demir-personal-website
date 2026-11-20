@@ -1,6 +1,6 @@
 import {
-    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-owner-cargo-homing';
+    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, planetShield, canCollectCargo, fuelZone, blackHole
+} from './conquestPhysics.mjs?v=20261119-planet-levels-repair';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -302,7 +302,7 @@ export class ConquestRenderer {
             const progress = Math.max(0, this.visualTime - effect.startedAt);
             const color = effect.owner && world ? this.captureColor(effect.owner, world) : effect.color;
             const center = this.screen(body.x, body.y);
-            const radius = (body.radius + tuning.smallShieldAltitude) * this.camera.zoom / 2;
+            const radius = (planetShield(body, world?.planets[body.id]).radius) * this.camera.zoom / 2;
             ctx.save();
             ctx.fillStyle = color; ctx.globalAlpha = (1 - progress) * 0.32;
             ctx.beginPath(); ctx.arc(center.x, center.y, body.radius * this.camera.zoom / 2, 0, fullCircle); ctx.fill();
@@ -313,7 +313,7 @@ export class ConquestRenderer {
         }
     }
 
-    // Show ownership and the distinct weak field, bullet barrier, outer field, or home shield.
+    // Show the progressively larger soft planet field and the protected starter-station shield.
     drawShields(body, world) {
         const state = world.planets[body.id];
         if (!state?.owner) return;
@@ -321,11 +321,10 @@ export class ConquestRenderer {
         const center = this.screen(body.x, body.y);
         const scale = this.camera.zoom / 2;
         const home = world.player.homeId === body.id || Boolean(state.home);
-        const smallRadius = body.radius + (home ? tuning.homeShieldAltitude : tuning.smallShieldAltitude);
+        const smallRadius = home ? body.radius + tuning.homeShieldAltitude : planetShield(body, state).radius;
         // Breathe the station field visually while keeping its physical protection radius stable.
         const fieldRadius = smallRadius * scale + (body.station && !this.reducedMotion ? Math.sin(this.visualTime * 2.2) * 1.5 : 0);
-        const outerRadius = body.radius + tuning.outerFieldAltitude;
-        const maxRadius = (state.level >= 3 ? outerRadius : smallRadius) * scale;
+        const maxRadius = smallRadius * scale;
         if (!this.inView(center, maxRadius)) return;
         const color = this.ownerColor(state.owner, world.player);
         ctx.save();
@@ -342,11 +341,6 @@ export class ConquestRenderer {
             ctx.globalAlpha = 0.4;
             ctx.lineWidth = 1;
             ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius + 3, 0, fullCircle); ctx.stroke();
-        }
-        if (state.level >= 3) {
-            ctx.globalAlpha = 0.35;
-            ctx.setLineDash([6, 5]);
-            ctx.beginPath(); ctx.arc(center.x, center.y, outerRadius * scale, 0, fullCircle); ctx.stroke();
         }
         ctx.restore();
     }
@@ -425,7 +419,7 @@ export class ConquestRenderer {
         ctx.shadowColor = '#ffd15a'; ctx.shadowBlur = 6;
         ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
         ctx.restore();
-        this.label('FUEL ZONE', (topLeft.x + bottomRight.x) / 2, topLeft.y - 5, '#ffe283', 'center');
+        this.label('FUEL', (topLeft.x + bottomRight.x) / 2, topLeft.y - 8, '#ffe283', 'center', false, 16);
     }
 
     // Keep the black-hole halo circular, with glowing pixels orbiting on matching round paths.
@@ -540,7 +534,7 @@ export class ConquestRenderer {
             const body = bodies.find(body => body.id === pickup.bodyId && !body.station);
             if (body) {
                 const center = this.screen(body.x, body.y);
-                ctx.beginPath(); ctx.arc(center.x, center.y, (body.radius + tuning.smallShieldAltitude) * this.camera.zoom / 2, 0, fullCircle); ctx.clip();
+                ctx.beginPath(); ctx.arc(center.x, center.y, (planetShield(body, world?.planets[body.id]).radius) * this.camera.zoom / 2, 0, fullCircle); ctx.clip();
             }
             ctx.translate(point.x, point.y);
             ctx.scale(pulse * bundleScale, pulse * bundleScale);

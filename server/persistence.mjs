@@ -66,12 +66,13 @@ export function validateSave(data) {
     for (const body of bodies) {
         const planet = world.planets[body.id];
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
-            || planet.level < 0 || planet.level > 3 || !Number.isFinite(planet.stock) || planet.stock < 0
+            || planet.level < 0 || planet.level > tuning.maxPlanetLevel || !Number.isFinite(planet.stock) || planet.stock < 0
             || typeof planet.home !== 'boolean' || (planet.home && !planet.owner)) throw new Error('Invalid saved territory.');
         if (planet.recaptureAt !== undefined && (!Number.isFinite(planet.recaptureAt) || planet.recaptureAt < 0 || planet.recaptureAt > 1e8)) throw new Error('Invalid saved recapture timer.');
         if (planet.turrets !== undefined && (!Array.isArray(planet.turrets) || planet.turrets.length !== planet.level
             || !planet.turrets.every(turret => turret && ['health', 'angle', 'disabledUntil', 'nextShotAt'].every(key =>
                 Number.isFinite(turret[key]) && Math.abs(turret[key]) < 1e8)
+                && (turret.repairAt === undefined || Number.isFinite(turret.repairAt) && turret.repairAt >= 0 && turret.repairAt < 1e8)
                 && turret.health >= 0 && turret.health <= 5))) throw new Error('Invalid saved turret array.');
         if (planet.turretHealth !== undefined && (!Number.isFinite(planet.turretHealth) || planet.turretHealth < 0 || planet.turretHealth > 5)) throw new Error('Invalid saved turret health.');
         for (const key of ['turretAngle', 'turretDisabledUntil']) {

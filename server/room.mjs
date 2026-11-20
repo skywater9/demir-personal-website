@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit,
+import { bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, repairTurret,
     upgradePlanet, upgradeRocket, killPlayer, setTarget, nearestRelay, dockingPoint } from '../public/scripts/conquestPhysics.mjs';
 
 export const reconnectMs = 30000;
@@ -156,6 +156,7 @@ export class GameRoom {
                     const result = hackDigit(this.world, message.digit, { challengeId: message.challengeId });
                     hackDigit(this.world, null); return result;
                 }
+                case 'repairTurret': return repairTurret(this.world, message.turretIndex);
                 case 'planetUpgrade': return upgradePlanet(this.world);
                 case 'rocketUpgrade': return upgradeRocket(this.world);
                 case 'selfDestruct': return { ok: killPlayer(this.world, 'Self-destruct.') };

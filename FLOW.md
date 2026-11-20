@@ -18,17 +18,17 @@ flowchart TD
     spawn --> guide[Target nearby neutral relay; large capture and cargo arrow for every home]
     guide --> shared[Fly in the shared galaxy; server owns outcomes]
     recover --> shared
-    shared --> hack[Target planet; destroy every turret; enter changing code: 8 to 14 presses by tier]
+    shared --> hack[Target planet; destroy every turret; start capture; aim may move away; enter 8 + 2 per level code presses]
     hack -->|Wrong code| feedback[Flash red; progress unchanged]
     feedback --> hack
     hack -->|Correct code| progress{Capture complete?}
     progress -->|No| hack
     progress -->|Yes| capture[First completion wins; cancel rivals; lock recapture for five seconds; reset defenses and announce]
     capture --> shop[T planet purchase or R rocket purchase at owned relay]
-    shop -->|Server validates cargo and tier| purchase[Charge once; planet upgrade adds one independently operating turret, up to three; save and confirm]
+    shop -->|Server validates cargo and tier| purchase[Charge once; planet upgrade adds one independently operating turret, up to twenty; grow and strengthen soft shield; save and confirm]
     purchase --> shop
     shop -->|E detach| shared
-    hack -->|E detach or disconnect| cancel[Reset partial hack]
+    hack -->|E cancel, out of range or disconnect| cancel[Reset partial hack]
     cancel --> shared
     shared --> pickup[Planet pods stay inside its bubble; only its owner attracts and collects them; death drops remain public]
     pickup --> shared
@@ -40,9 +40,13 @@ flowchart TD
     fuelWarning -->|Reach owned pad| refuel
     fuelWarning -->|Fresh Space press or click| death[Death drops cargo and removes one rocket tier]
     shared -->|Lethal damage| death
-    shared -->|Shoot hostile turret inside its shield| turretDamage[Show hit turret health bar; one hit destroys only that turret]
-    turretDamage --> turretRecovery[Destroyed turret never reactivates; destroy all remaining guns before capture]
-    turretRecovery --> shared
+    shared -->|Shoot hostile turret through soft shield| turretDamage[One hit destroys only that turret; privately notify owner]
+    turretDamage --> turretRecovery[Wait five seconds; gun stays destroyed until owner pays for repair]
+    turretRecovery -->|Owner in range pays two times planet level cargo| repaired[Repair one gun; validate cargo; save and confirm]
+    repaired --> shared
+    turretRecovery -->|No repair| shared
+    hack --> ownerAlert[Privately notify planet owner of capture attempt]
+    ownerAlert --> hack
     shared --> mapPilots[Map shows all pilots; distant pilots use edge direction markers]
     mapPilots --> shared
     death --> notice[Show tier loss during death and respawn at home]
@@ -168,9 +172,7 @@ flowchart TD
   defenses expand the digit pool and increase required presses. Detaching resets.
 - Cargo is one resource. Owned planets produce it; owned-pad landings automatically
   collect it. Any owned relay can upgrade only its own planet.
-- The upgrade sequence is bullet barrier plus first turret → second turret → outer field plus third turret. Newly captured
-  worlds have a weak field. Small fields gently repel hostile rockets; hard bullet
-  barriers still allow rockets inside. Friendly shots ignore friendly barriers.
+- Every planet upgrade adds one turret and grows/strengthens its soft field, up to level twenty. Guns are evenly spaced. Hostile bullets are slowed and deflected but can always penetrate; friendly shots ignore the field. Destroyed turrets become repairable after five seconds for two times the current level in cargo.
 - Home cannot be captured and has a hard shield against hostile ships/shots.
 - Turret shots are blocked around the relay refuge; player shots are not.
   The simulation supports these rules, but the local galaxy contains no opponents.

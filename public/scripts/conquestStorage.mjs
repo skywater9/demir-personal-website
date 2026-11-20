@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-owner-cargo-homing';
+import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-planet-levels-repair';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -27,13 +27,14 @@ export function validWorld(world) {
     for (const body of bodies) {
         const state = world.planets[body.id];
         if (!state || !(state.owner === null || state.owner === 'pilot')
-            || !Number.isInteger(state.level) || state.level < 0 || state.level > 3
+            || !Number.isInteger(state.level) || state.level < 0 || state.level > tuning.maxPlanetLevel
             || !Number.isFinite(state.stock) || state.stock < 0 || state.stock > 1e6) return false;
         if (state.nextCargoAt !== undefined && (!Number.isFinite(state.nextCargoAt) || Math.abs(state.nextCargoAt) > 1e8)) return false;
         if (state.recaptureAt !== undefined && (!Number.isFinite(state.recaptureAt) || state.recaptureAt < 0 || state.recaptureAt > 1e8)) return false;
         if (state.turrets !== undefined && (!Array.isArray(state.turrets) || state.turrets.length !== state.level
             || !state.turrets.every(turret => turret && ['health', 'angle', 'disabledUntil', 'nextShotAt'].every(key =>
                 Number.isFinite(turret[key]) && Math.abs(turret[key]) < 1e8)
+                && (turret.repairAt === undefined || Number.isFinite(turret.repairAt) && turret.repairAt >= 0 && turret.repairAt < 1e8)
                 && turret.health >= 0 && turret.health <= 5))) return false;
         if (state.turretHealth !== undefined && (!Number.isFinite(state.turretHealth) || state.turretHealth < 0 || state.turretHealth > 5)) return false;
         for (const key of ['turretAngle', 'turretDisabledUntil']) {

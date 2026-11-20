@@ -1145,3 +1145,19 @@ also make neutral planets require only numbers 1-3, and still take twice as long
 189.
 
 dropped death cargo i think right now just looks like one cargo that has many inside, the more "dense" a cargo is, the larger it should be, and more glowing,
+
+190.
+
+I want to revamo the planet "upgrades". Each upgrade should do the same thing, add a turret and strengthen shield. What this means is: a shield "strengthening, means that at the start the bubble starts small, and it just repels and slows down enemy bullets a little, with each upgrade the shield grows a little and repels bullets more. however although it repels it should never be impossible to hit the turrets. Also when a planet adds turrets, it just adds one evenly spaced out. When a turret is destroyed, there is a 5 second cooldown, then the owner of the planet can repair for the amount of cargo equal to the amount of upgrades made on the planet times two, so if the planet is level 1 it takes 2 cargo, 4 if level 2, and so on. Also have a notifcation to the owner of the planet if planet is being captured or a turret is destroyed
+
+191.
+
+Make fuel zone just say FUEL in large letters instead of fuel zone
+
+192.
+
+planet upgrades can go on until like 20
+
+193.
+
+also after clicking the capturing dialogue, the player can move their mouse away from the planet and continue capturing as long as the rocket is within range, if rocket goes out of range capturing sequence is reset

@@ -15,8 +15,8 @@ without an endpoint the game runs locally. The shared class-box service is live;
   provides one cargo per minute directly to its pilot, and sells rocket upgrades.
 - Planets are 20% smaller and have no separate relays. Aim the cursor at a planet,
   approach within 250 m of its surface and press E, then enter the displayed numbers: eight presses from 1–3 for neutral planets. Capture has no speed or heading restriction.
-  Active turrets prevent capture; destroy every turret first. Moving the cursor away
-  or leaving range cancels progress.
+  Active turrets prevent capture; destroy every turret first. Once started, capture continues
+  when the cursor moves away. Leaving range, cancelling, dying or disconnecting resets progress.
 - Captured planets produce orbiting cargo and offer defense upgrades through E.
   Return to the starter station for rocket upgrades. Planet ownership excludes stations.
 - Prototype saves use a separate local storage key. Existing multiplayer save files
@@ -33,8 +33,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
   Defenders see red enemy capture progress; completion pulses green and leaves a
   gently glowing ownership outline. Neutral planets have no idle labels or range rings. The panel uses a white code key with an outward square pulse; progress is displayed on the planet.
 - Planet shops open in flight without teleporting, slowing, or attaching the rocket.
-  The yellow FUEL ZONE square refuels owned ships at any orientation. Turret slots
-  begin beside that zone and distribute around the surface without overlapping it.
+  The yellow **FUEL** square refuels owned ships at any orientation. Turrets redistribute evenly around the surface after each upgrade.
 - E docks anywhere inside the home station bubble, at any speed or orientation.
 - Dropped cargo uses swept planet collisions and bounces off surfaces.
 - A larger black hole sits above the three-system center, with circular glowing rings and orbiting particles, a lethal core and strong gravity extending 3,500 m beyond its surface.
@@ -44,7 +43,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 ## Combat and room activity
 
-- Capture difficulty is 8 presses using 1–3 for neutral/tier-zero planets, then 10 using 1–4, 12 using 1–5, and 14 using 1–6 for tiers one through three.
+- Capture requires 8 + 2 × planet level number presses. Neutral planets use 1–3; levels one and two add 4 and 5, then all levels from three onward use 1–6. Level twenty requires 48 presses.
 
 - Gentle planet bumps rebound at contact. Only slow upright pad contact lands, and landed rockets stay at their actual contact point rather than snapping to the pad center.
 
@@ -53,12 +52,12 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 - Local and remote rockets have a faint steady glow in their player color beneath the crisp pixel hull.
 
-- Each of the three planet upgrades adds one turret in a fixed slot around the planet (one, two, then three total), keeping the existing shield effects and prices. Each turret aims and fires independently; one hostile hit permanently destroys it.
+- Planets support twenty upgrades. Each adds one independently aiming turret and grows/strengthens a soft shield. Turrets redistribute evenly, retaining their individual health. Upgrade prices start at 8/16/28 cargo, then increase by 12 per level (40 through 232). Planet shields slow and deflect hostile shots but never form a hard bullet barrier; friendly shots pass freely. Starter-station hard shields remain protected.
 - Capture progress is split into equal pie sectors for simultaneous hackers. Enemy sectors and takeover flashes are red from your view. The first completion wins, exits other capture panels and locks recapture for five seconds.
 - Basic guns fire roughly eight consecutive shots before overheating; firing speed and the 2.5-second cooldown are unchanged.
 - Hover arrowheads keep following the actual cursor over planets.
 - Turret heads share one server-controlled aim for owners and attackers. Bright bases and outlined barrels make them easier to spot.
-- One hostile player-bullet hit destroys a turret permanently. Enter its bullet shield before shooting it. Every remaining turret must be destroyed before capture; friendly shots do not damage them. Later upgrades add new guns without restoring destroyed ones.
+- One hostile player-bullet hit destroys a turret. After five seconds, its owner can repair that gun in the planet shop for **2 × current planet level** cargo. Repairs are manual and charge once; upgrading adds a new gun without repairing old ones. Every live gun must be destroyed before capture. Owners receive private notifications when capture begins or a turret is destroyed.
 - New pilots at every home get a large flashing relay arrow and “CAPTURE PLANETS TO GAIN CARGO” guidance until their first capture. Earth prefers Moon when neutral; other homes target nearby neutral relays.
 - The map shows every pilot using generated labels and ownership colors. Distant off-map pilots get edge direction markers; disconnected pilots dim during their grace window. The flight view still reveals nearby or recently firing ships only.
 - Room chat announces joins, disconnects, returns, departures, and deaths, including the attacker for projectile kills. Activity messages are transient and do not save chat text or credentials.
@@ -80,8 +79,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
   extends 200 m above the surface. Refilling is free of cargo cost, faster when empty,
   slower near full, and faster at home. Zero fuel leaves you coasting, with an explicit
   self-destruct choice.
-- At any owned non-home relay, buy that planet's next defense: bullet
-  barrier, turret, then large outer field. Home keeps its special hard shield.
+- At an owned planet shop, buy the next turret and stronger soft shield, up to level twenty. Starter stations keep their special hard shields.
 - Shots cost 5 fuel points. Fast impacts cost more fuel as speed rises above the
   former crash thresholds (25 m/s at surfaces, 30 m/s at stations): half a fuel
   point per excess m/s, rounded up with a minimum of one. Damage briefly flashes the hull red for the pilot and nearby players, and releases white

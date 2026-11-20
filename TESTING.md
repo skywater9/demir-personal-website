@@ -217,3 +217,11 @@ Run `node --test tests/landingContact.test.mjs tests/planetInteraction.test.mjs`
 - Owner attraction is stronger near the planet surface, with a 100 m/s approach-speed target and up to 100 m/s² steering. Pods still route around the solid surface.
 - Turrets fire again after 1.4 seconds. Their bullets turn at no more than 0.28 rad/s toward the original target and preserve current speed. Player bullets do not home, and dead/missing targets stop steering.
 - Capture difficulty: tier 0 = eight presses, digits 1–3; tiers 1/2/3 = 10/12/14 presses, digits 1–4/1–5/1–6. Wrong and held keys retain their rejection rules. Old partial captures reset on restart.
+
+## Twenty-level defenses, repairs and capture continuity
+
+- Run `node --test tests/planetUpgradeRepair.test.mjs tests/stationPrototype.test.mjs` for all twenty purchases, equal turret spacing, maximum-level shield penetrability, atomic repairs/cooldown/range/ownership validation, save recovery, and cursor-independent capture with range reset.
+- Run `node --test --test-name-pattern='planet owners' server/tests/network.test.mjs` for private owner alerts, cooldown rejection, saved repair outcomes and duplicate-action protection over real WebSocket connections.
+- In two browser windows, capture a planet, buy upgrades and shoot a turret from the other pilot. Only the owner should receive the destruction notification. In its shop, wait five seconds and repair for twice the level; a second click must not charge again. Upgrade again while another gun is destroyed: that gun stays destroyed and all slots redistribute evenly.
+- Start capture, move the cursor elsewhere and continue entering numbers. Fly out of range: the panel and progress clear. Re-enter and initiate capture again: progress starts at zero. Confirm the fuel pad displays large FUEL.
+- Earlier three-stage shield, automatic turret recovery and cursor-cancel checklist entries above are historical and superseded by this section.

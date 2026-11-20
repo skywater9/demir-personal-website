@@ -1,15 +1,15 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-station-prototype';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-planet-levels-repair';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
-    setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-owner-cargo-homing';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-owner-cargo-homing';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-owner-cargo-homing';
+    setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet, repairTurret,
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-planet-levels-repair';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-planet-levels-repair';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-planet-levels-repair';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
     detached: 'detached', hackStarted: 'hackStarted', hackProgress: 'hackProgress', hackCancelled: 'hackCancelled',
     rocketUpgraded: 'upgraded', captured: 'captured', cargoCollected: 'cargoCollected', cargoDropped: 'cargoDropped', cargoPickedUp: 'cargoPickedUp',
-    refuelStarted: 'refuelStarted', refuelEnded: 'refuelEnded', upgraded: 'upgraded' };
+    turretRepaired: 'upgraded', refuelStarted: 'refuelStarted', refuelEnded: 'refuelEnded', upgraded: 'upgraded' };
 
 // Format simulation time as minutes and tenths without depending on a wall-clock timer.
 export function formatTime(seconds) {
@@ -66,6 +66,7 @@ export class ConquestApp {
             onEvent: event => { this.world.events.push(event); this.drainEvents(); },
             onChat: message => this.appendChat(message.text, false, message),
             onAnnouncement: message => this.appendChat(message.text, false, { ...message, system: true }),
+            onAlert: message => { this.message(message.text, 8); this.appendChat(message.text, false, { system: true, color: '#ff947b' }); },
             onCapture: message => {
                 if (message.owner === this.world.player.id) return;
                 const body = bodies.find(body => body.id === message.bodyId);
@@ -156,6 +157,10 @@ export class ConquestApp {
         this.ui.chatInput.addEventListener('focus', () => this.clearInput());
         this.ui.interactButton.addEventListener('click', () => this.interact());
         this.ui.upgradeButton.addEventListener('click', () => this.upgrade());
+        this.ui.turretRepairs.addEventListener('click', event => {
+            const button = event.target.closest('[data-turret-index]');
+            if (button && !button.disabled) this.repairTurret(Number(button.dataset.turretIndex));
+        });
         this.ui.rocketUpgradeButton.addEventListener('click', () => this.rocketUpgrade());
         this.ui.leaveGalaxyButton.addEventListener('click', () => {
             if (this.connection) this.emit('left');
@@ -514,6 +519,43 @@ export class ConquestApp {
         this.checkpoint();
     }
 
+    // Submit a repair through the same authoritative purchase path as planet upgrades.
+    async repairTurret(turretIndex) {
+        if (this.mode !== 'flight') return;
+        const result = this.connection ? await this.connection.action('repairTurret', { turretIndex }) : repairTurret(this.world, turretIndex);
+        if (!result.ok) this.message(result.reason);
+        this.drainEvents();
+        this.updateHud({});
+        this.checkpoint();
+    }
+
+    // Reuse repair buttons across frames so countdown updates do not interrupt clicks or focus.
+    updateTurretRepairs(body) {
+        const container = this.ui.turretRepairs;
+        const planet = this.world.planets[body.id];
+        const destroyed = body.station ? [] : (planet.turrets || []).map((turret, index) => ({ turret, index }))
+            .filter(({ turret }) => turret.health === 0);
+        const key = `${body.id}:${destroyed.map(({ index }) => index).join(',')}`;
+        if (container.dataset.repairKey !== key) {
+            container.replaceChildren();
+            for (const { index } of destroyed) {
+                const button = this.page.createElement('button');
+                button.type = 'button'; button.dataset.turretIndex = index;
+                container.append(button);
+            }
+            container.dataset.repairKey = key;
+        }
+        for (const { turret, index } of destroyed) {
+            const button = container.querySelector(`[data-turret-index="${index}"]`);
+            const seconds = Math.max(0, Math.ceil((turret.repairAt || 0) - this.world.elapsed));
+            const cost = planet.level * 2;
+            button.textContent = seconds ? `TURRET ${index + 1} · ${seconds}s` : `REPAIR ${index + 1} · ${cost} ▣`;
+            button.setAttribute('aria-label', `Repair turret ${index + 1} for ${cost} cargo${seconds ? `, ready in ${seconds} seconds` : ''}`);
+            button.disabled = seconds > 0 || this.world.player.cargo < cost;
+        }
+        container.hidden = destroyed.length === 0;
+    }
+
     // Let E use the nearby home station without precise aiming, while planets still require a cursor target.
     interactionBody() {
         const aimedBody = this.captureBody();
@@ -824,6 +866,7 @@ export class ConquestApp {
                 ? `Upgrade planet for ${upgrade.cost} cargo` : 'Planet fully upgraded');
             this.text('upgradeName', upgrade?.available ? upgrade.name : 'FULLY UPGRADED');
             this.ui.upgradeButton.disabled = !upgrade?.available || player.cargo < upgrade.cost;
+            this.updateTurretRepairs(body);
         }
     }
 

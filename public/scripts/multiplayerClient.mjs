@@ -22,9 +22,9 @@ export function multiplayerUrl(page, browserWindow) {
 export class MultiplayerClient {
     // Inject transport and callbacks so reconnect and command behavior can be checked independently.
     constructor({ url, storage, WebSocketClass = globalThis.WebSocket, onWorld = () => {}, onEvent = () => {},
-        onChat = () => {}, onAnnouncement = () => {}, onCapture = () => {}, onDeath = () => {}, onStatus = () => {} }) {
+        onChat = () => {}, onAlert = () => {}, onAnnouncement = () => {}, onCapture = () => {}, onDeath = () => {}, onStatus = () => {} }) {
         this.url = url; this.storage = storage; this.WebSocketClass = WebSocketClass;
-        this.onWorld = onWorld; this.onEvent = onEvent; this.onChat = onChat; this.onAnnouncement = onAnnouncement; this.onCapture = onCapture; this.onDeath = onDeath; this.onStatus = onStatus;
+        this.onWorld = onWorld; this.onEvent = onEvent; this.onChat = onChat; this.onAlert = onAlert; this.onAnnouncement = onAnnouncement; this.onCapture = onCapture; this.onDeath = onDeath; this.onStatus = onStatus;
         this.pending = new Map(); this.sequence = 0; this.actionId = 0; this.connected = false;
         this.connecting = null; this.socket = null; this.stopped = false; this.lastInputAt = -Infinity;
         this.key = `orbital.multiplayer.${new URL(url).origin}`;
@@ -57,6 +57,7 @@ export class MultiplayerClient {
                     resolve();
                 } else if (message.type === 'state' && message.world) this.onWorld(message.world);
                 else if (message.type === 'event') this.onEvent(message.event);
+                else if (message.type === 'alert') this.onAlert(message);
                 else if (message.type === 'chat') this.onChat(message);
                 else if (message.type === 'announcement') this.onAnnouncement(message);
                 else if (message.type === 'capture') this.onCapture(message);

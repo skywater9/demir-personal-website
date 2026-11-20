@@ -182,3 +182,45 @@ test('handshake rejects other origins and HTTP health exposes no private state',
         await assert.rejects(once(socket, 'open'));
     } finally { await game.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+// Verify private defense alerts and idempotent repair purchases through real sockets.
+test('planet owners receive private capture and turret alerts and can pay for repairs', async t => {
+    const dir = resolve(testRuntimeRoot, randomUUID());
+    const game = await createGameServer({ dataFile: resolve(dir, 'galaxy.json'), allowedOrigins: ['https://test.invalid'], timers: false });
+    game.server.listen(0, '127.0.0.1'); await once(game.server, 'listening');
+    const url = `ws://127.0.0.1:${game.server.address().port}/game`;
+    const owner = await peer(url), enemy = await peer(url), observer = await peer(url);
+    t.after(async () => {
+        for (const client of [owner, enemy, observer]) client.socket.terminate();
+        await game.close(); await rm(dir, { recursive: true, force: true });
+    });
+    const { bodies } = await import('../../public/scripts/conquestPhysics.mjs');
+    const body = bodies.find(body => body.id === 'moon');
+    const oid = owner.welcome.playerId, eid = enemy.welcome.playerId;
+    const planet = game.room.world.planets[body.id];
+    planet.owner = oid;
+    for (const id of [oid, eid]) Object.assign(game.room.world.players[id].player,
+        { x: body.x, y: body.y - body.radius - 150, docked: null, landedOn: null });
+    enemy.socket.send(JSON.stringify({ type: 'action', sequence: 1, actionId: 1, action: 'interact', bodyId: body.id }));
+    assert.ok((await enemy.wait(message => message.type === 'result')).result.ok);
+    assert.equal((await owner.wait(message => message.type === 'alert')).kind, 'hackStarted');
+    assert.equal(observer.messages.some(message => message.type === 'alert'), false);
+    assert.equal(enemy.messages.some(message => message.type === 'alert'), false);
+    planet.level = 1; planet.turrets = [{ health: 0, angle: 0, disabledUntil: 0, nextShotAt: 0, repairAt: 5 }];
+    game.room.world.events.push({ type: 'turretDestroyed', playerId: eid, bodyId: body.id, turretIndex: 0 });
+    const actor = game.room.world.players[oid]; actor.player.cargo = 2;
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 1, actionId: 1, action: 'interact', bodyId: body.id }));
+    await owner.wait(message => message.type === 'result' && message.actionId === 1);
+    await owner.wait(message => message.type === 'alert' && message.kind === 'turretDestroyed');
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 2, action: 'repairTurret', turretIndex: 0 }));
+    assert.equal((await owner.wait(message => message.type === 'result' && message.actionId === 2)).result.ok, false);
+    game.room.world.elapsed = 5;
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 3, actionId: 3, action: 'repairTurret', turretIndex: 0 }));
+    assert.ok((await owner.wait(message => message.type === 'result' && message.actionId === 3)).result.ok);
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 4, actionId: 3, action: 'repairTurret', turretIndex: 0 }));
+    await owner.wait(message => message.type === 'result' && message.result.reason === 'Duplicate action ignored.');
+    assert.equal(actor.player.cargo, 0); assert.equal(planet.turrets[0].health, 1);
+    const saved = await new GalaxyStore(resolve(dir, 'galaxy.json')).load();
+    assert.equal(saved.world.planets[body.id].turrets[0].health, 1);
+    assert.equal(observer.messages.some(message => message.type === 'alert'), false);
+});

@@ -52,7 +52,7 @@ test('E starts an eight-press 1–3 challenge from 200 m without matching the ro
     assert.equal(world.stats.captures, 1);
 });
 
-test('wrong or repeated digits do not advance capture; losing the cursor cancels it', () => {
+test('wrong or repeated digits do not advance capture; moving the cursor away preserves it', () => {
     const world = createWorld('cancel', 0);
     startMoonHack(world);
     assert.equal(hackDigit(world, 9).ok, false);
@@ -61,7 +61,15 @@ test('wrong or repeated digits do not advance capture; losing the cursor cancels
     assert.equal(hackDigit(world, world.hack.digit, { repeat: true }).ok, false);
     assert.equal(world.hack.progress, 1);
     advance(world, 0.1, { captureBody: null });
+    assert.equal(world.hack.progress, 1);
+    const moon = bodies.find(body => body.id === 'moon');
+    world.player.x = moon.x + moon.radius + tuning.shipRadius + tuning.hackingDistance + 10;
+    world.player.y = moon.y;
+    advance(world, 0.01);
     assert.equal(world.hack, null);
+    world.player.x = moon.x; world.player.y = moon.y - moon.radius - 100;
+    assert.ok(interact(world, moon.id).ok);
+    assert.equal(world.hack.progress, 0);
 });
 
 test('all turrets must be destroyed before starting capture', () => {
