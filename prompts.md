@@ -1321,3 +1321,27 @@ deploy these changes
 232.
 
 also black hole cargo is not moving toward the player for some reason
+
+233.
+
+place planets scattered around away from the solar systems too, less density then solar systems but still there
+
+234.
+
+increase cargo collection attraction for black hole and sun
+
+235.
+
+make sure new stations spawn closer to the middle of the map, unless the map is very full
+
+236.
+
+decrease sun and black hole capture and shield size/distance, also increase the distance that cargo can get close to sun and black hole, and increase attraction distance from cargo to rocket, for sun and black hole, but more for black hole
+
+237.
+
+and deploy these changes
+
+238.
+
+also why are sun and black hole turrets high opacity?

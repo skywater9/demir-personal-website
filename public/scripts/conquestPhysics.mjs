@@ -31,13 +31,15 @@ export const tuning = Object.freeze({
     pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
     cargoBubbleSpeed: 100, cargoBubbleAcceleration: 100,
+    stellarCargoAttractionRadius: 520, blackHoleCargoAttractionRadius: 850,
+    stellarCargoRailClearance: 65, stellarCargoPullMultiplier: 2.5,
     refuelRate: 24, homeRefuelRate: 48, refuelSnap: 0.05,
     recaptureCooldown: 5, blackHoleInfluenceAltitude: 3500,
     hackPressInterval: 0.1, hackBasePresses: 8, hackExtraPresses: 2, captureDecayRate: .65,
     maxPlanetLevel: 10, maxRocketLevel: 10, turretRepairCooldown: 5,
     upgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
     stationMinimumSeparation: 5000,
-    starCaptureAltitude: 750, blackHoleCaptureAltitude: 1600,
+    starCaptureAltitude: 500, blackHoleCaptureAltitude: 1050,
     starCaptureMultiplier: 2, blackHoleCaptureMultiplier: 3,
     homeShieldAltitude: 150, smallShieldAltitude: 190, outerFieldAltitude: 1000,
     rocketRepulsion: 24, newCaptureRepulsion: 110, rocketFieldDrag: 0.55,
@@ -75,7 +77,7 @@ const planetColors = ['#4b91b5', '#a4a9b5', '#d7ad6b', '#a99786', '#bc7155', '#c
 const planetGravity = [9.81, 1.62, 8.87, 3.7, 3.71, 24.79, 10.44, 11.15];
 
 // Scatter eight stationary planets around each star without imposing a route or spawning opponents.
-export const planetBodies = Object.freeze(systems.flatMap((system, systemIndex) =>
+const systemPlanets = systems.flatMap((system, systemIndex) =>
     planetNames[systemIndex].map((name, index) => {
         const angle = index * Math.PI / 4 + systemIndex * 0.18;
         const orbit = 2000 + (index % 3) * 450;
@@ -88,7 +90,21 @@ export const planetBodies = Object.freeze(systems.flatMap((system, systemIndex) 
             gas: index >= 5, systemId: system.id
         });
     })
-));
+);
+
+// Place neutral worlds in open space, clear of system clusters and starter stations.
+export const roguePlanets = Object.freeze([
+    ['Drift', -5700, -800, 150, 4.2, '#8faeb3'],
+    ['Haven', 4300, 3600, 185, 6.7, '#86ab86'],
+    ['Rime', 4300, -10200, 145, 3.4, '#a7c6df'],
+    ['Dusk', -10700, -4600, 170, 5.8, '#a78bba'],
+    ['Sable', -1600, 5900, 155, 4.8, '#bf9a78'],
+    ['Cairn', 11400, -2200, 160, 5.2, '#9caab5']
+].map(([name, x, y, radius, gravity, color]) => Object.freeze({
+    id: `rogue-${name.toLowerCase()}`, name, x, y, radius, gravity, color, land: '#687982'
+})));
+
+export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 
 // Reserve protected, widely separated outposts so the server can assign a random free home.
 export const starterStations = Object.freeze([
@@ -138,7 +154,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 1, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -385,10 +401,11 @@ export function planetInteractionDistance(body, planet) {
 // Preserve earned levels where possible while moving old combined upgrades into separate tracks.
 export function migrateUpgradeTracks(world) {
     world.planets ||= {};
-    for (const body of celestialBodies) world.planets[body.id] ||= {
+    for (const body of [...celestialBodies, ...roguePlanets]) world.planets[body.id] ||= {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
     world.celestialTargetsVersion = 1;
+    world.roguePlanetsVersion = 1;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {
@@ -1155,7 +1172,7 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
 // Keep cargo outside stellar turret rails and clear of ordinary planet surfaces.
 function cargoInnerRadius(body) {
     const stellar = celestialBodies.some(candidate => candidate.id === body.id);
-    return (stellar ? dysonFrameRadius(body) : body.radius) + 5;
+    return stellar ? dysonFrameRadius(body) + tuning.stellarCargoRailClearance : body.radius + 5;
 }
 
 // Sweep cargo against planets and stellar rails, including pods restored inside a boundary.
@@ -1246,7 +1263,9 @@ function attractBubbleCargo(pickup, player, body, dt, planet) {
     }
     const altitude = Math.max(0, Math.hypot(player.x - body.x, player.y - body.y) - body.radius);
     const proximity = Math.max(0, 1 - altitude / planetShield(body, planet).altitude);
-    const strength = .55 + .45 * proximity;
+    const stellar = celestialBodies.includes(body);
+    const pullMultiplier = stellar ? tuning.stellarCargoPullMultiplier : 1;
+    const strength = (.55 + .45 * proximity) * pullMultiplier;
     const speed = Math.min(tuning.cargoBubbleSpeed * strength, distance * 1.5);
     const changeX = directionX * speed - (pickup.vx || 0);
     const changeY = directionY * speed - (pickup.vy || 0);
@@ -1269,12 +1288,16 @@ function movePickups(world, dt, previousPlayer) {
         const bubble = planetBody && world.planets[body.id]?.owner ? body : null;
         const insideBubble = player => bubble && Math.hypot(player.x - bubble.x, player.y - bubble.y)
             <= planetShield(bubble, world.planets[bubble.id]).radius;
+        const stellarBody = Number.isFinite(pickup.orbitRadius) ? blackHole
+            : celestialBodies.includes(planetBody) ? planetBody : null;
+        const attractionRadius = stellarBody === blackHole ? tuning.blackHoleCargoAttractionRadius
+            : stellarBody ? tuning.stellarCargoAttractionRadius : tuning.cargoAttractionRadius;
         const eligible = alive.filter(player => insideBubble(player)
-            || Math.hypot(player.x - pickup.x, player.y - pickup.y) < tuning.cargoAttractionRadius);
+            || Math.hypot(player.x - pickup.x, player.y - pickup.y) < attractionRadius);
         const nearest = eligible.reduce((best, player) => !best || Math.hypot(player.x - pickup.x, player.y - pickup.y)
             < Math.hypot(best.x - pickup.x, best.y - pickup.y) ? player : best, null);
         if (pickup.blackHoleOrbit) {
-            const approaching = alive.some(player => Math.hypot(player.x - pickup.x, player.y - pickup.y) < tuning.cargoAttractionRadius);
+            const approaching = alive.some(player => Math.hypot(player.x - pickup.x, player.y - pickup.y) < attractionRadius);
             if (approaching) pickup.blackHoleOrbit = false;
             else {
                 pickup.orbitAngle += pickup.orbitSpeed * dt;
@@ -1292,8 +1315,8 @@ function movePickups(world, dt, previousPlayer) {
         const dx = nearest ? nearest.x - pickup.x : 0;
         const dy = nearest ? nearest.y - pickup.y : 0;
         const distance = Math.hypot(dx, dy);
-        if (nearest && !pickup.blackHoleOrbit && Number.isFinite(pickup.orbitRadius)) {
-            attractBubbleCargo(pickup, nearest, blackHole, dt, world.planets[blackHole.id]);
+        if (nearest && stellarBody && !pickup.blackHoleOrbit) {
+            attractBubbleCargo(pickup, nearest, stellarBody, dt, world.planets[stellarBody.id]);
         } else if (nearest && insideBubble(nearest)) {
             attractBubbleCargo(pickup, nearest, bubble, dt, world.planets[bubble.id]);
         } else if (nearest && distance > 0 && distance < tuning.cargoAttractionRadius) {

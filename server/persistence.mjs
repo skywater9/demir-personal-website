@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { bodies, territoryBodies, celestialBodies, planetBodies, starterStations, dockingPoint, tuning, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, planetBodies, starterStations, dockingPoint, tuning, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
 
 // Move legacy planet homes to stations without erasing earned territory or pilot resources.
 export function migrateStationHomes(data) {
@@ -9,7 +9,7 @@ export function migrateStationHomes(data) {
     const legacy = data.world;
     const actors = Object.values(legacy.players);
     const homeIds = new Set();
-    if (actors.length > starterStations.length || planetBodies.some(body => !legacy.planets[body.id])) {
+    if (actors.length > starterStations.length || planetBodies.some(body => !roguePlanets.includes(body) && !legacy.planets[body.id])) {
         throw new Error('Invalid legacy galaxy; station migration stopped.');
     }
     for (const actor of actors) {
@@ -22,7 +22,9 @@ export function migrateStationHomes(data) {
     }
     const migrated = structuredClone(data);
     const world = migrated.world;
-    for (const body of planetBodies) world.planets[body.id].home = false;
+    for (const body of planetBodies) {
+        if (world.planets[body.id]) world.planets[body.id].home = false;
+    }
     for (const station of starterStations) world.planets[station.id] = {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
@@ -66,6 +68,7 @@ export function validateSave(data) {
     }
     for (const body of territoryBodies) {
         const planet = world.planets[body.id];
+        if (!planet && roguePlanets.includes(body) && world.roguePlanetsVersion !== 1) continue;
         if (!planet && celestialBodies.some(candidate => candidate.id === body.id) && world.celestialTargetsVersion !== 1) continue;
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
             || planet.level < 0 || planet.level > (world.upgradeTracksVersion === 2 ? tuning.maxPlanetLevel : 20) || !Number.isFinite(planet.stock) || planet.stock < 0
@@ -113,7 +116,7 @@ export class GalaxyStore {
             const original = await readFile(this.file, 'utf8');
             const result = migrateStationHomes(JSON.parse(original));
             const data = validateSave(result.data);
-            if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1) {
+            if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1 || data.world.roguePlanetsVersion !== 1) {
                 await writeFile(`${this.file}.pre-upgrades-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });
             }
             migrateUpgradeTracks(data.world);

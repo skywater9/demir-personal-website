@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-black-hole-magnet';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-stellar-balance';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-black-hole-magnet';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-black-hole-magnet';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-black-hole-magnet';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-stellar-balance';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-stellar-balance';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-stellar-balance';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',

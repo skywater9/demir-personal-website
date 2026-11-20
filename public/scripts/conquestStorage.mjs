@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-black-hole-magnet';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-stellar-balance';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -10,8 +10,9 @@ export function validWorld(world) {
         || !Number.isFinite(world.createdAt) || !Number.isFinite(world.updatedAt)
         || !Number.isInteger(world.eventCounter) || world.eventCounter < 0
         || !Number.isFinite(world.elapsed) || world.elapsed < 0 || world.elapsed > 31536000
-        || !world.planets || ![bodies.length, territoryBodies.length].includes(Object.keys(world.planets).length)
+        || !world.planets || Object.keys(world.planets).some(id => !territoryBodies.some(body => body.id === id))
         || world.celestialTargetsVersion !== undefined && world.celestialTargetsVersion !== 1) return false;
+    if (world.roguePlanetsVersion !== undefined && world.roguePlanetsVersion !== 1) return false;
     const player = world.player;
     for (const key of ['x', 'y', 'vx', 'vy', 'angle', 'fuel', 'cargo', 'deadUntil', 'aimAngle', 'rotationVelocity']) {
         if (!Number.isFinite(player[key]) || Math.abs(player[key]) > 1e8) return false;
@@ -28,6 +29,7 @@ export function validWorld(world) {
     if (world.upgradeTracksVersion === 2 && (!Number.isInteger(player.weaponTier) || player.weaponTier < 0 || player.weaponTier > tuning.maxRocketLevel)) return false;
     for (const body of territoryBodies) {
         const state = world.planets[body.id];
+        if (!state && roguePlanets.includes(body) && world.roguePlanetsVersion !== 1) continue;
         if (!state && celestialBodies.some(candidate => candidate.id === body.id) && world.celestialTargetsVersion !== 1) continue;
         if (!state || !(state.owner === null || state.owner === 'pilot')
             || !Number.isInteger(state.level) || state.level < 0 || state.level > (world.upgradeTracksVersion === 2 ? tuning.maxPlanetLevel : 20)

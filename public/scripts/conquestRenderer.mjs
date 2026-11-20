@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-black-hole-magnet';
+} from './conquestPhysics.mjs?v=20261119-stellar-balance';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -345,10 +345,10 @@ export class ConquestRenderer {
             ctx.stroke();
             ctx.setLineDash([]);
         }
+        ctx.restore();
         if (state.owner && celestialBodies.some(candidate => candidate.id === body.id)) {
             this.drawDysonStructure(body, world, color);
         }
-        ctx.restore();
     }
 
     // Add the captured system's Dyson frame and evenly spaced floating defensive turrets.
