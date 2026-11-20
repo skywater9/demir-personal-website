@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadius, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-larger-fuel-zone';
+} from './conquestPhysics.mjs?v=20261119-inner-station-layout';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -1095,9 +1095,10 @@ export class ConquestRenderer {
             const x = Math.round(point.x);
             const y = Math.round(point.y);
             const owner = world.planets[body.id]?.owner;
-            ctx.fillStyle = this.ownerColor(owner, world.player);
+            const ownHome = body.id === world.player.homeId;
+            ctx.fillStyle = body.station && !ownHome ? neutralColor : this.ownerColor(owner, world.player);
             ctx.beginPath(); ctx.arc(x, y, Math.max(3, body.radius * layout.scale), 0, fullCircle); ctx.fill();
-            if (body.id === world.player.homeId || world.planets[body.id]?.home) {
+            if (ownHome) {
                 const homeColor = this.ownerColor(owner, world.player);
                 ctx.strokeStyle = homeColor; ctx.beginPath(); ctx.moveTo(x - 4, y - 5); ctx.lineTo(x, y - 9); ctx.lineTo(x + 4, y - 5); ctx.stroke();
                 ctx.fillStyle = homeColor; ctx.fillText('H', x + 9, y + 3);

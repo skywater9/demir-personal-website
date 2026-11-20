@@ -77,7 +77,7 @@ export const systems = Object.freeze([
 export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black hole',
     ...galaxyCenter,
     radius: 320, gravity: 360 });
-export const galaxyRadius = 8800;
+export const galaxyRadius = 8400;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
@@ -92,7 +92,7 @@ const planetGravity = [9.81, 1.62, 8.87, 3.7, 3.71, 24.79, 10.44, 11.15];
 const systemPlanets = systems.flatMap((system, systemIndex) =>
     planetNames[systemIndex].map((name, index) => {
         const angle = index * Math.PI / 4 + systemIndex * 0.18;
-        const orbit = 2000 + (index % 3) * 450;
+        const orbit = 1850 + (index % 3) * 400;
         return Object.freeze({
             id: name.toLowerCase(), name,
             x: systemIndex === 0 && (index === 1 || index === 7) ? 2000 : system.x + Math.cos(angle) * orbit,
@@ -124,7 +124,7 @@ export const roguePlanets = Object.freeze([
     const dy = y - blackHole.y;
     const distance = Math.hypot(dx, dy);
     // Contract the outskirts while keeping the developed inner clusters in place.
-    const scale = distance > 8000 ? (8000 + (distance - 8000) * 0.08) / distance : 1;
+    const scale = distance > 7600 ? (7600 + (distance - 7600) * 0.08) / distance : 1;
     return Object.freeze({
         id: `rogue-${name.toLowerCase()}`, name, x: Math.round(blackHole.x + dx * scale),
         y: Math.round(blackHole.y + dy * scale), radius, gravity, color, land: '#687982'
@@ -135,8 +135,8 @@ export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 
 // Reserve protected, widely separated outposts so the server can assign a random free home.
 export const starterStations = Object.freeze([
-    [3422, -4833], [-1520, -3227], [-440, -8310], [-6027, -11149],
-    [933, -13324], [8328, -9061], [9024, -4363], [-7680, -2710]
+    [3422, -4833], [-1520, -3227], [-440, -8310], [-5506, -10694],
+    [897, -12695], [7701, -8910], [8341, -4450], [-7027, -2930]
 ].map(([x, y], index) => Object.freeze({
     id: `station-${index + 1}`, name: `Starter station ${index + 1}`, station: true,
     x, y,

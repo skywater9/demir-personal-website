@@ -1453,3 +1453,11 @@ deploy
 265.
 
 make fuel area larger and push
+
+266.
+
+dont highlight other player home stations on map
+
+267.
+
+also make map even smaller, and have stations after first 3 also spawn a bit closer to the middle and push
