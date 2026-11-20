@@ -5,6 +5,17 @@ hack relays to capture planets, collect cargo, refuel, and upgrade your territor
 This replaces the finite story journey. A configured server hosts one shared galaxy;
 without an endpoint the game runs locally. The shared class-box service is live; its URL is configured in the frontend. See [server setup](server/README.md).
 
+## Current upgrades and capture
+
+- BOOSTER and WEAPON are independent tracks, each capped at 10. Owned planets sell both plus PLANET upgrades; home stations sell BOOSTER and WEAPON only. R buys BOOSTER, F buys WEAPON, and T buys PLANET or repairs. Each track uses prices 8/16/28/40/52/64/76/88/100/112 cargo.
+- BOOSTER increases low-speed acceleration by 15% per level; the extra acceleration fades with speed, leaving normal engine strength. Propulsion fuel use falls by 3.5% per level. WEAPON gradually increases fire rate, heat endurance and projectile lifetime. Level 3 unlocks twin shots, level 5 alternating twin shots, and level 10 a player-colored instant laser with a 12,000 m range. Lasers stop at their first target, solid surface or hostile home shield; soft planet fields do not bend them.
+- Death drops carried cargo and removes one level from both tracks, floored at zero. Both losses appear during respawn and in the death notification.
+- Initiate capture with E while aiming at a planet, then press E repeatedly. Holding E and number keys do not advance capture. Required presses are 8 + 2 × planet level; progress decays at 0.65 press-equivalents per second. Cursor movement is allowed; leaving the growing shield range resets capture. Concurrent sectors and first-finish-wins rules remain. Capturing resets defenses but preserves banked and floating cargo for the new owner to collect; no cargo is credited automatically.
+- PLANET caps at 10. Each level adds a turret, grows the shield and expands interaction range for capture, shops and repairs. Turrets added at levels 6–10 have double barrels. Larger hitboxes make one-hit turret destruction more forgiving. Nearby friendly planets prioritize shield intruders within each turret's normal range and line of sight.
+- Destroyed guns replace the PLANET button with REPAIR TURRETS. Upgrades are blocked until every gun is repaired. After all destroyed guns finish their five-second cooldowns, the same button repairs them together for 2 × planet level per gun. Only the loss of the final turret sends a private owner alert; individual losses and capture attempts do not.
+- Refueling is twice as fast, retaining its slower finish near full and faster home-station rate. Shared five-value cargo pods orbit the black hole; up to six replenish on a twelve-second cadence. First spawn shows a large blinking yellow CAPTURE PLANET arrow to the nearest capturable planet. Player colors are stronger on hulls and glow, with a light tint on the cursor and aim line.
+- Existing combined rocket upgrades migrate into separate tracks without clearing territory or cargo. Planet levels above ten are capped, with a private server backup before migration. Historical notes below describe earlier iterations when they differ from this section.
+
 ## Starter station prototype
 
 - Rollback checkpoint before this prototype: `f19dd66`.
@@ -14,7 +25,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Players start at a small protected station, owning no planet. The station refuels,
   provides one cargo per minute directly to its pilot, and sells rocket upgrades.
 - Planets are 20% smaller and have no separate relays. Aim the cursor at a planet,
-  approach within 250 m of its surface and press E, then enter the displayed numbers: eight presses from 1–3 for neutral planets. Capture has no speed or heading restriction.
+  approach within 250 m of its surface and press E, then press E repeatedly: eight presses for neutral planets, increasing by two per planet level. Capture has no speed or heading restriction.
   Active turrets prevent capture; destroy every turret first. Once started, capture continues
   when the cursor moves away. Leaving range, cancelling, dying or disconnecting resets progress.
 - Captured planets produce orbiting cargo and offer defense upgrades through E.
@@ -43,7 +54,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 ## Combat and room activity
 
-- Capture requires 8 + 2 × planet level number presses. Neutral planets use 1–3; levels one and two add 4 and 5, then all levels from three onward use 1–6. Level twenty requires 48 presses.
+- Capture requires 8 + 2 × planet level fresh E presses, with slow backward progress when idle. Level ten requires 28 press-equivalents.
 
 - Gentle planet bumps rebound at contact. Only slow upright pad contact lands, and landed rockets stay at their actual contact point rather than snapping to the pad center.
 
@@ -52,12 +63,12 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 - Local and remote rockets have a faint steady glow in their player color beneath the crisp pixel hull.
 
-- Planets support twenty upgrades. Each adds one independently aiming turret and grows/strengthens a soft shield. Turrets redistribute evenly, retaining their individual health. Upgrade prices start at 8/16/28 cargo, then increase by 12 per level (40 through 232). Planet shields slow and deflect hostile shots but never form a hard bullet barrier; friendly shots pass freely. Starter-station hard shields remain protected.
+- Planets support ten upgrades. Each adds one independently aiming turret and grows/strengthens a soft shield. Turrets redistribute evenly, retaining their individual health. Upgrade prices start at 8/16/28 cargo, then increase by 12 per level (40 through 112). Planet shields slow and deflect hostile shots but never form a hard bullet barrier; friendly shots pass freely. Starter-station hard shields remain protected.
 - Capture progress is split into equal pie sectors for simultaneous hackers. Enemy sectors and takeover flashes are red from your view. The first completion wins, exits other capture panels and locks recapture for five seconds.
 - Basic guns fire roughly eight consecutive shots before overheating; firing speed and the 2.5-second cooldown are unchanged.
 - Hover arrowheads keep following the actual cursor over planets.
 - Turret heads share one server-controlled aim for owners and attackers. Bright bases and outlined barrels make them easier to spot.
-- One hostile player-bullet hit destroys a turret. After five seconds, its owner can repair that gun in the planet shop for **2 × current planet level** cargo. Repairs are manual and charge once; upgrading adds a new gun without repairing old ones. Every live gun must be destroyed before capture. Owners receive private notifications when capture begins or a turret is destroyed.
+- One hostile player-bullet hit destroys a turret. After five seconds, its owner can use REPAIR TURRETS to restore the destroyed guns for **2 × current planet level per gun**. Repairs are manual and charge once; upgrades are blocked until every gun is repaired. Every live gun must be destroyed before capture. Owners receive a private notification only when all their turrets are destroyed.
 - New pilots at every home get a large flashing relay arrow and “CAPTURE PLANETS TO GAIN CARGO” guidance until their first capture. Earth prefers Moon when neutral; other homes target nearby neutral relays.
 - The map shows every pilot using generated labels and ownership colors. Distant off-map pilots get edge direction markers; disconnected pilots dim during their grace window. The flight view still reveals nearby or recently firing ships only.
 - Room chat announces joins, disconnects, returns, departures, and deaths, including the attacker for projectile kills. Activity messages are transient and do not save chat text or credentials.
@@ -79,7 +90,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
   extends 200 m above the surface. Refilling is free of cargo cost, faster when empty,
   slower near full, and faster at home. Zero fuel leaves you coasting, with an explicit
   self-destruct choice.
-- At an owned planet shop, buy the next turret and stronger soft shield, up to level twenty. Starter stations keep their special hard shields.
+- At an owned planet shop, buy the next turret and stronger soft shield, up to level ten. Starter stations keep their special hard shields.
 - Shots cost 5 fuel points. Fast impacts cost more fuel as speed rises above the
   former crash thresholds (25 m/s at surfaces, 30 m/s at stations): half a fuel
   point per excess m/s, rounded up with a minimum of one. Damage briefly flashes the hull red for the pilot and nearby players, and releases white

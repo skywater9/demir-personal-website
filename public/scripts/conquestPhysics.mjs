@@ -31,18 +31,19 @@ export const tuning = Object.freeze({
     pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
     cargoBubbleSpeed: 100, cargoBubbleAcceleration: 100,
-    refuelRate: 12, homeRefuelRate: 24, refuelSnap: 0.05,
+    refuelRate: 24, homeRefuelRate: 48, refuelSnap: 0.05,
     recaptureCooldown: 5, blackHoleInfluenceAltitude: 3500,
-    hackPressInterval: 0.12, hackBasePresses: 8, hackExtraPresses: 2,
-    maxPlanetLevel: 20, turretRepairCooldown: 5,
-    upgradeCosts: Object.freeze([8, 16, 28, ...Array.from({ length: 17 }, (_, index) => 40 + index * 12)]),
+    hackPressInterval: 0.1, hackBasePresses: 8, hackExtraPresses: 2, captureDecayRate: .65,
+    maxPlanetLevel: 10, maxRocketLevel: 10, turretRepairCooldown: 5,
+    upgradeCosts: Object.freeze([8, 16, 28, ...Array.from({ length: 7 }, (_, index) => 40 + index * 12)]),
     homeShieldAltitude: 150, smallShieldAltitude: planetCaptureRange + motionTuning.shipRadius, outerFieldAltitude: 1000,
     rocketRepulsion: 24, outerRepulsion: 14, bulletSlowFactor: 0.45,
     outerBulletSlowFactor: 0.75, dockingDistance: 100, refugeRadius: 100,
     bulletSpeed: 680, bulletRadius: 3, bulletLifetime: 5, fireCooldown: 0.24,
     turretRange: 1700, turretCooldown: 1.4, turretBulletSpeed: 190, turretHomingRate: .28,
-    turretHealth: 1, turretRadius: 22,
-    rocketUpgradeCosts: Object.freeze([8, 16, 28, 40]),
+    turretHealth: 1, turretRadius: 32,
+    rocketUpgradeCosts: Object.freeze([8, 16, 28, ...Array.from({ length: 7 }, (_, index) => 40 + index * 12)]),
+    laserRange: 12000, laserFlashDuration: .14, blackHoleCargoCount: 6, blackHoleCargoValue: 5, blackHoleCargoInterval: 12,
     maxProjectiles: 256, maxEvents: 200
 });
 
@@ -120,9 +121,9 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
-            id: 'pilot', color: '#8ac4a8', homeId: home.id,
+            id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
             vx: 0, vy: 0, angle: 0, rotationVelocity: 0,
             fuel: tuning.maxFuel, cargo: 0, landedOn: home.id, docked: null,
@@ -137,8 +138,16 @@ export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now(
         stats: { captures: 0, deaths: 0, cargoCollected: 0, shots: 0 },
         refueling: null, eventCounter: 0
     };
+    world.target = { bodyId: nearestCapturablePlanet(world).id, type: 'planet' };
     emit(world, 'started', { bodyId: home.id });
     return world;
+}
+
+// Choose the closest unowned or hostile planet for first-capture guidance at any spawn.
+export function nearestCapturablePlanet(world, player = world.player) {
+    return planetBodies.filter(body => world.planets[body.id]?.owner !== player.id)
+        .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - a.radius
+            - (Math.hypot(b.x - player.x, b.y - player.y) - b.radius))[0] || null;
 }
 
 // Measure the nearest planetary surface for altitude instruments, matching the existing motion API.
@@ -216,25 +225,18 @@ export function dockingStatus(world, bodyId = nearestRelay(world.player, world).
     const recaptureLocked = !body.station && world.planets[body.id].owner !== player.id
         && world.elapsed < (world.planets[body.id].recaptureAt || 0);
     const ready = !player.deadUntil && !player.docked && !protectedHome && !occupied && !defensesActive && !recaptureLocked
-        && distance <= (body.station ? tuning.homeShieldAltitude : tuning.hackingDistance)
+        && distance <= (body.station ? tuning.homeShieldAltitude : planetInteractionDistance(body, world.planets[body.id]))
 ;
     return { bodyId: body.id, distance, speed, angle, ready,
         reason: ready ? '' : player.deadUntil ? 'RESPAWNING'
             : recaptureLocked ? 'CAPTURE COOLDOWN' : defensesActive ? 'DESTROY TURRETS FIRST' : occupied ? 'OCCUPIED' : protectedHome ? 'PROTECTED'
-                : distance > (body.station ? tuning.homeShieldAltitude : tuning.hackingDistance) ? 'NOT IN RANGE'
+                : distance > (body.station ? tuning.homeShieldAltitude : planetInteractionDistance(body, world.planets[body.id])) ? 'NOT IN RANGE'
                     : 'UNAVAILABLE' };
 }
 
 // Treat optional home markers as hostile fixture data while always protecting the local home.
 function isHome(world, body) {
     return Boolean(body && ((world.players ? false : body.id === world.player.homeId) || world.planets[body.id]?.home));
-}
-
-// Issue a fresh challenge, avoiding the previous digit so held old keys cannot advance it.
-function challengeDigit(level, previous = null) {
-    const digits = Array.from({ length: Math.min(6, 3 + Math.max(0, Math.floor(level))) }, (_, index) => index + 1);
-    const pool = digits.filter(digit => digit !== previous);
-    return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // Cancel all partial capture progress when an attachment ends for any reason.
@@ -271,7 +273,7 @@ export function interact(world, bodyId = null) {
         if (prepareTurrets(planet).some(turret => turret.health > 0)) {
             return { ok: false, reason: 'DESTROY TURRETS FIRST' };
         }
-        world.hack = { bodyId: body.id, progress: 0, required: tuning.hackBasePresses + planet.level * tuning.hackExtraPresses, digit: challengeDigit(planet.level),
+        world.hack = { bodyId: body.id, progress: 0, required: tuning.hackBasePresses + planet.level * tuning.hackExtraPresses, digit: 0,
             heldDigit: null, lastAcceptedAt: world.elapsed - tuning.hackPressInterval, challengeId: world.eventCounter + 1 };
         emit(world, 'hackStarted', { bodyId: body.id });
         return { ok: true, reason: 'Enter the displayed numbers.' };
@@ -288,21 +290,16 @@ export function interact(world, bodyId = null) {
 }
 
 // Accept deliberate number presses without requiring the rocket to face the planet.
-export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
+export function capturePress(world, { repeat = false, challengeId } = {}) {
     const hack = world.hack;
     if (!hack || world.player.deadUntil) return { ok: false, reason: 'No active hack.' };
-    if (digit === null) { hack.heldDigit = null; return { ok: true }; }
     if (repeat || (challengeId !== undefined && challengeId !== hack.challengeId)) return { ok: false, reason: 'Stale press.' };
-    const value = Number(digit);
-    if (!Number.isInteger(value) || value < 1 || value > 6 || value === hack.heldDigit) return { ok: false, reason: 'Press the displayed number with a fresh key press.' };
-    hack.heldDigit = value;
-    if (value !== hack.digit) return { ok: false, reason: 'Wrong number.' };
     if (world.elapsed - hack.lastAcceptedAt + 1e-9 < tuning.hackPressInterval) return { ok: false, reason: 'Press too soon.' };
     if (!dockingStatus(world, hack.bodyId).ready) return { ok: false, reason: 'Connection lost.' };
     hack.progress += 1;
     hack.lastAcceptedAt = world.elapsed;
     if (hack.progress >= hack.required) {
-        Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 0, stock: 0,
+        Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 0,
             recaptureAt: world.elapsed + tuning.recaptureCooldown,
             nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
         delete world.planets[hack.bodyId].turrets;
@@ -319,22 +316,27 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
         }
         return { ok: true, reason: 'Captured.' };
     }
-    hack.digit = challengeDigit(world.planets[hack.bodyId].level, hack.digit);
-    hack.challengeId += 1;
     emit(world, 'hackProgress', { bodyId: hack.bodyId, amount: hack.progress });
     return { ok: true };
 }
 
+// Retain the old exported API without allowing removed number-code input to advance capture.
+export function hackDigit(world, digit) {
+    return digit === null ? { ok: true } : { ok: false, reason: 'Press E to capture.' };
+}
+
 // Keep an initiated capture active independently of aim, until the rocket leaves interaction range.
-function updatePlanetCapture(world, input) {
+function updatePlanetCapture(world, input, dt = 0) {
     const shoppingOn = world.player.shoppingOn;
     if (shoppingOn && (world.planets[shoppingOn]?.owner !== world.player.id
-        || dockingStatus(world, shoppingOn).distance > tuning.hackingDistance)) world.player.shoppingOn = null;
+        || dockingStatus(world, shoppingOn).distance > planetInteractionDistance(bodyFor(shoppingOn), world.planets[shoppingOn]))) world.player.shoppingOn = null;
     if (!world.hack) return;
     const hack = world.hack;
     if (!dockingStatus(world, hack.bodyId).ready) {
         world.hack = null;
         emit(world, 'hackCancelled', { bodyId: hack.bodyId });
+    } else {
+        hack.progress = Math.max(0, hack.progress - tuning.captureDecayRate * dt);
     }
 }
 
@@ -357,6 +359,48 @@ const upgrades = Object.freeze(Array.from({ length: tuning.maxPlanetLevel }, (_,
     description: 'Adds one turret and enlarges the soft shield, increasing enemy bullet resistance.'
 })));
 
+// Match planet services and capture access to the visible growing shield boundary.
+export function planetInteractionDistance(body, planet) {
+    return planetShield(body, planet).altitude - tuning.shipRadius;
+}
+
+// Preserve earned levels where possible while moving old combined upgrades into separate tracks.
+export function migrateUpgradeTracks(world) {
+    if (world.upgradeTracksVersion === 2) return world;
+    const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
+    for (const actor of actors) {
+        const player = actor.player;
+        player.weaponTier = [0, 1, 3, 4, 5][player.rocketTier || 0] || 0;
+        player.rocketTier = Math.min(tuning.maxRocketLevel, player.rocketTier || 0);
+        actor.hack = null;
+    }
+    world.hack = null;
+    for (const planet of Object.values(world.planets)) {
+        planet.level = Math.min(tuning.maxPlanetLevel, planet.level);
+        if (Array.isArray(planet.turrets)) {
+            planet.turrets.length = Math.min(planet.turrets.length, planet.level);
+            planet.turrets.forEach((turret, index) => { turret.double = index >= 5; });
+        }
+    }
+    world.upgradeTracksVersion = 2;
+    return world;
+}
+
+// Fade only the extra booster acceleration with speed, leaving normal engine strength intact.
+export function boosterStats(player) {
+    const level = Math.max(0, Math.min(tuning.maxRocketLevel, player.rocketTier || 0));
+    const speed = Math.hypot(player.vx || 0, player.vy || 0);
+    return { bonus: level * .15 / (1 + (speed / 180) ** 2), fuelFactor: 1 - level * .035 };
+}
+
+// Define progressive firing, heat endurance and the three visible weapon milestones independently.
+export function weaponStats(player) {
+    const level = Math.max(0, Math.min(tuning.maxRocketLevel, player.weaponTier || 0));
+    return { level, cooldown: tuning.fireCooldown * .94 ** level,
+        heat: tuning.gunHeatPerShot * .94 ** level, lifetime: tuning.bulletLifetime * (1 + level * .04),
+        double: level >= 3, alternating: level >= 5, laser: level >= 10 };
+}
+
 // Share one bounded field definition across physics, cargo containment, and rendering.
 export function planetShield(body, planet) {
     const level = Math.max(0, Math.min(tuning.maxPlanetLevel, planet?.level || 0));
@@ -375,9 +419,10 @@ export function nextUpgrade(world) {
     let reason = '';
     if (world.player.deadUntil) reason = 'Respawning.';
     else if (!planet) reason = 'Open an owned planet shop.';
-    else if (dockingStatus(world, bodyId).distance > tuning.hackingDistance) reason = 'Planet is out of range.';
+    else if (dockingStatus(world, bodyId).distance > planetInteractionDistance(bodyFor(bodyId), planet)) reason = 'Planet is out of range.';
     else if (bodyFor(bodyId)?.station) reason = 'Rocket upgrades available at this station.';
     else if (planet.owner !== world.player.id) reason = 'Capture this planet first.';
+    else if (planet.turrets?.some(turret => turret.health === 0)) reason = 'Repair turrets first.';
     else if (!upgrade) reason = 'All upgrades complete.';
     const available = !reason;
     const affordable = available && world.player.cargo >= cost;
@@ -385,7 +430,7 @@ export function nextUpgrade(world) {
         available, affordable, reason: reason || (affordable ? '' : 'Not enough cargo.') };
 }
 
-// Spend cargo atomically on the one next defense tier, capped at twenty levels.
+// Spend cargo atomically on the one next defense tier, capped at ten levels.
 export function upgradePlanet(world) {
     const upgrade = nextUpgrade(world);
     if (!upgrade.available || !upgrade.affordable) return { ok: false, reason: upgrade.reason };
@@ -403,7 +448,7 @@ export function repairTurret(world, index) {
     const body = bodyFor(bodyId);
     const planet = world.planets[bodyId];
     if (world.player.deadUntil || !body || body.station || planet?.owner !== world.player.id
-        || dockingStatus(world, bodyId).distance > tuning.hackingDistance) return { ok: false, reason: 'Open your planet shop in range.' };
+        || dockingStatus(world, bodyId).distance > planetInteractionDistance(bodyFor(bodyId), planet)) return { ok: false, reason: 'Open your planet shop in range.' };
     if (!Number.isInteger(index) || index < 0 || index >= planet.level) return { ok: false, reason: 'Invalid turret.' };
     const turret = prepareTurrets(planet)[index];
     if (turret.health > 0) return { ok: false, reason: 'Turret is operational.' };
@@ -414,6 +459,29 @@ export function repairTurret(world, index) {
     Object.assign(turret, { health: tuning.turretHealth, repairAt: 0, nextShotAt: world.elapsed });
     emit(world, 'turretRepaired', { bodyId, turretIndex: index, amount: cost });
     return { ok: true, reason: 'Turret repaired.' };
+}
+
+// Describe an all-gun repair without charging or modifying the existing shop state.
+export function turretRepairStatus(world) {
+    const bodyId = world.player.shoppingOn;
+    const body = bodyFor(bodyId), planet = world.planets[bodyId];
+    const broken = (planet?.turrets || []).map((turret, index) => ({ turret, index })).filter(({ turret }) => turret.health === 0);
+    const readyAt = Math.max(0, ...broken.map(({ turret }) => turret.repairAt || 0));
+    const cost = broken.length * (planet?.level || 0) * 2;
+    const available = Boolean(broken.length && !world.player.deadUntil && body && !body.station
+        && planet.owner === world.player.id && dockingStatus(world, bodyId).distance <= planetInteractionDistance(body, planet)
+        && world.elapsed >= readyAt);
+    return { brokenCount: broken.length, readyAt, cost, available, affordable: available && world.player.cargo >= cost,
+        indices: broken.map(({ index }) => index) };
+}
+
+// Repair all destroyed guns atomically through the replacement planet-upgrade button.
+export function repairTurrets(world) {
+    const repair = turretRepairStatus(world);
+    if (!repair.available || !repair.affordable) return { ok: false,
+        reason: world.elapsed < repair.readyAt ? 'Repair cooling down.' : repair.available ? 'Not enough cargo.' : 'Repair unavailable.' };
+    for (const index of repair.indices) repairTurret(world, index);
+    return { ok: true, reason: 'Turrets repaired.' };
 }
 
 // End a refueling interval once, keeping event counts independent of frame rate.
@@ -460,6 +528,9 @@ export function killPlayer(world, reason = 'Destroyed.', cause = {}) {
     const previousTier = player.rocketTier || 0;
     player.rocketTier = Math.max(0, previousTier - 1);
     player.lastLostTier = previousTier > 0 ? previousTier : 0;
+    const previousWeaponTier = player.weaponTier || 0;
+    player.weaponTier = Math.max(0, previousWeaponTier - 1);
+    player.lastLostWeaponTier = previousWeaponTier;
     player.cargo = 0;
     player.shoppingOn = null;
     player.deadUntil = world.elapsed + tuning.respawnDelay;
@@ -468,7 +539,7 @@ export function killPlayer(world, reason = 'Destroyed.', cause = {}) {
     player.vy = 0;
     player.rotationVelocity = 0;
     world.stats.deaths += 1;
-    emit(world, 'died', { reason, previousTier, rocketTier: player.rocketTier,
+    emit(world, 'died', { reason, previousTier, rocketTier: player.rocketTier, previousWeaponTier, weaponTier: player.weaponTier,
         ...(cause.attackerId ? { attackerId: cause.attackerId, source: cause.source } : {}) });
     return true;
 }
@@ -756,24 +827,25 @@ function firePlayer(world, input) {
     if (!input.fire || player.deadUntil || player.docked || world.projectiles.length >= tuning.maxProjectiles
         || world.elapsed + 1e-9 < (player.gunOverheatedUntil || 0)
         || world.elapsed + 1e-9 < (player.nextShotAt || 0)) return;
-    const tier = player.rocketTier || 0;
-    const barrels = tier >= 2 && tier < 4 ? [-5, 5] : [tier >= 4 ? (player.nextBarrel ? 5 : -5) : 0];
+    const weapon = weaponStats(player);
+    const barrels = weapon.laser ? [0] : weapon.alternating ? [player.nextBarrel ? 5 : -5] : weapon.double ? [-5, 5] : [0];
     if (world.projectiles.length + barrels.length > tuning.maxProjectiles) return;
     const dx = Math.cos(player.aimAngle);
     const dy = Math.sin(player.aimAngle);
-    const speed = tuning.bulletSpeed * (tier >= 4 ? 1.3 : 1);
+    const speed = weapon.laser ? tuning.laserRange : tuning.bulletSpeed;
     for (const offset of barrels) world.projectiles.push({ id: `shot-${player.id}-${world.eventCounter + 1}-${offset}`, owner: player.id, source: 'player',
         x: player.x + dx * (tuning.shipRadius + 5) - dy * offset,
         y: player.y + dy * (tuning.shipRadius + 5) + dx * offset,
-        vx: player.vx + dx * speed, vy: player.vy + dy * speed,
-        radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
+        vx: (weapon.laser ? 0 : player.vx) + dx * speed, vy: (weapon.laser ? 0 : player.vy) + dy * speed,
+        laser: weapon.laser, color: player.color,
+        radius: tuning.bulletRadius, expiresAt: world.elapsed + weapon.lifetime });
     player.nextBarrel = !player.nextBarrel;
     if (!player.landedOn) {
         player.vx -= dx * tuning.shotRecoil;
         player.vy -= dy * tuning.shotRecoil;
     }
-    player.nextShotAt = world.elapsed + tuning.fireCooldown * (tier >= 4 ? .32 : tier >= 1 ? .8 : 1);
-    player.gunHeat = Math.min(1, (player.gunHeat || 0) + tuning.gunHeatPerShot * (tier >= 4 ? .28 : tier >= 1 ? .7 : 1));
+    player.nextShotAt = world.elapsed + weapon.cooldown;
+    player.gunHeat = Math.min(1, (player.gunHeat || 0) + weapon.heat);
     if (player.gunHeat >= 1) {
         player.gunHeat = 1;
         player.gunOverheatedUntil = world.elapsed + tuning.gunOverheatDuration;
@@ -823,7 +895,7 @@ function prepareTurrets(planet) {
     while (planet.turrets.length < count) {
         const index = planet.turrets.length;
         planet.turrets.push({ health: tuning.turretHealth, angle: -Math.PI / 2 + index * Math.PI * 2 / 3,
-            disabledUntil: 0, nextShotAt: 0 });
+            disabledUntil: 0, nextShotAt: 0, double: index >= 5 });
     }
     // Old five-health saves remain readable; recovery timers no longer reactivate destroyed guns.
     for (const turret of planet.turrets) {
@@ -859,6 +931,19 @@ function turretAim(x, y, target, speed = tuning.turretBulletSpeed, lifetime = tu
 // Aim and fire every independent turret at its nearest visible enemy once per galaxy step.
 function fireTurrets(world) {
     const players = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
+    // Share intrusion priorities across owned worlds while retaining each gun's range and occlusion.
+    const intruders = new Map();
+    for (const body of planetBodies) {
+        const planet = world.planets[body.id];
+        if (!planet.owner) continue;
+        for (const player of players) {
+            if (!player.deadUntil && player.id !== planet.owner
+                && Math.hypot(player.x - body.x, player.y - body.y) <= planetShield(body, planet).radius) {
+                if (!intruders.has(planet.owner)) intruders.set(planet.owner, new Set());
+                intruders.get(planet.owner).add(player.id);
+            }
+        }
+    }
     for (const body of bodies) {
         const planet = world.planets[body.id];
         if (!planet.owner || planet.level < 1) continue;
@@ -869,18 +954,24 @@ function fireTurrets(world) {
             if (turret.health <= 0) continue;
             let target = null;
             let distance = tuning.turretRange;
+            let defending = false;
             for (const player of players) {
                 if (player.deadUntil || player.id === planet.owner) continue;
                 const candidateDistance = Math.hypot(player.x - x, player.y - y);
-                if (candidateDistance < 1 || candidateDistance > distance
+                const candidateDefending = intruders.get(planet.owner)?.has(player.id) || false;
+                if (candidateDistance < 1 || candidateDistance > tuning.turretRange
+                    || defending && !candidateDefending || candidateDefending === defending && candidateDistance > distance
                     || circleHit({ x, y }, player, body, body.radius) !== null) continue;
-                target = player; distance = candidateDistance;
+                target = player; distance = candidateDistance; defending = candidateDefending;
             }
             if (!target) continue;
             turret.angle = turretAim(x, y, target);
             if (world.elapsed + 1e-9 < turret.nextShotAt || world.projectiles.length >= tuning.maxProjectiles) continue;
-            world.projectiles.push({ id: `turret-${world.eventCounter + 1}`, owner: planet.owner,
-                source: 'turret', bodyId: body.id, turretIndex: index, targetId: target.id, x, y,
+            const offsets = turret.double ? [-6, 6] : [0];
+            if (world.projectiles.length + offsets.length > tuning.maxProjectiles) continue;
+            for (const offset of offsets) world.projectiles.push({ id: `turret-${world.eventCounter + 1}-${offset}`, owner: planet.owner,
+                source: 'turret', bodyId: body.id, turretIndex: index, targetId: target.id,
+                x: x - Math.sin(turret.angle) * offset, y: y + Math.cos(turret.angle) * offset,
                 vx: Math.cos(turret.angle) * tuning.turretBulletSpeed,
                 vy: Math.sin(turret.angle) * tuning.turretBulletSpeed,
                 radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
@@ -897,7 +988,8 @@ function hitTurret(world, body, index, attackerId) {
     turret.health = 0;
     turret.nextShotAt = 0;
     turret.repairAt = world.elapsed + tuning.turretRepairCooldown;
-    const destroyed = () => emit(world, 'turretDestroyed', { bodyId: body.id, turretIndex: index });
+    const destroyed = () => emit(world, 'turretDestroyed', { bodyId: body.id, turretIndex: index,
+        allTurretsDown: world.planets[body.id].turrets.every(state => state.health === 0) });
     if (world.players?.[attackerId]) withPlayer(world, attackerId, destroyed);
     else destroyed();
 }
@@ -922,6 +1014,11 @@ function steerTurretShot(world, shot, dt) {
 // Step one projectile through shields and refuge before its swept moving-player hit can apply.
 function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
     if (![shot.x, shot.y, shot.vx, shot.vy].every(Number.isFinite)) return false;
+    if (shot.laser && shot.resolved) return shot.expiresAt > world.elapsed;
+    if (shot.laser && startFraction === 0) {
+        shot.originX = shot.x; shot.originY = shot.y;
+        shot.resolved = true; shot.expiresAt = world.elapsed + tuning.laserFlashDuration; dt = 1;
+    }
     shot.expiresAt ??= world.elapsed + tuning.bulletLifetime;
     if (shot.expiresAt <= world.elapsed) return false;
     if (startFraction === 0) steerTurretShot(world, shot, dt);
@@ -937,7 +1034,7 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
             const fraction = home ? circleHit(start, end, body, small + radius)
                 : circleCrossing(start, end, body, small + radius);
             if (fraction !== null && (home || !shot.slowedBy?.includes(`slow:${body.id}`))) {
-                interactions.push({ fraction, type: home ? 'shield' : 'slow', body });
+                interactions.push({ fraction, type: home ? 'shield' : shot.laser ? 'laserField' : 'slow', body });
             }
         }
         if (planet.owner && planet.owner !== shot.owner && planet.level >= 1 && shot.source === 'player') {
@@ -960,7 +1057,7 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
     }
     const targets = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
     for (const player of targets) if (!player.deadUntil && shot.owner !== player.id) {
-        const previous = world.previousPlayers?.[player.id] || previousPlayer;
+        const previous = shot.laser ? player : world.previousPlayers?.[player.id] || previousPlayer;
         const relativeStart = { x: start.x - (previous.x + (player.x - previous.x) * startFraction),
             y: start.y - (previous.y + (player.y - previous.y) * startFraction) };
         const relativeEnd = { x: end.x - player.x, y: end.y - player.y };
@@ -969,6 +1066,7 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
     }
     interactions.sort((a, b) => a.fraction - b.fraction);
     for (const interaction of interactions) {
+        if (interaction.type === 'laserField') continue;
         if (interaction.type === 'slow') {
             const body = interaction.body;
             const field = planetShield(body, world.planets[body.id]);
@@ -990,6 +1088,10 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
             return moveProjectile(world, shot, dt * (1 - fraction), previousPlayer,
                 startFraction + (1 - startFraction) * fraction);
         }
+        if (shot.laser) {
+            shot.x = start.x + (end.x - start.x) * interaction.fraction;
+            shot.y = start.y + (end.y - start.y) * interaction.fraction;
+        }
         if (interaction.type === 'player') {
             const reason = shot.source === 'turret' ? 'Turret hit.' : 'Projectile hit.';
             const cause = { attackerId: shot.owner, source: shot.source };
@@ -999,7 +1101,7 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
         else if (interaction.type === 'turret') hitTurret(world, interaction.body, interaction.turretIndex, shot.owner);
         else if (interaction.type === 'shield') emit(world, 'shieldBlocked', { bodyId: interaction.body.id });
         else if (interaction.type === 'refuge') emit(world, 'refugeBlocked', { bodyId: interaction.body.id });
-        return false;
+        return Boolean(shot.laser);
     }
     shot.x = end.x;
     shot.y = end.y;
@@ -1034,6 +1136,23 @@ function moveCargoWithBounce(pickup, dt) {
         }
         remaining *= 1 - hit.fraction;
     }
+}
+
+// Replenish a small shared orbiting cache, with five cargo per pod and a bounded spawn cadence.
+function produceBlackHoleCargo(world) {
+    world.nextBlackHoleCargoAt ??= 10;
+    if (world.elapsed < world.nextBlackHoleCargoAt || world.pickups.length >= tuning.maxPickups) return;
+    world.nextBlackHoleCargoAt = world.elapsed + tuning.blackHoleCargoInterval;
+    if (world.pickups.filter(pickup => pickup.blackHoleOrbit).length >= tuning.blackHoleCargoCount) return;
+    const angle = world.elapsed * 2.399963;
+    const radius = blackHole.radius + 850 + (world.eventCounter % 3) * 130;
+    const x = blackHole.x + Math.cos(angle) * radius, y = blackHole.y + Math.sin(angle) * radius;
+    const gravity = gravityAt(x, y);
+    const speed = Math.sqrt(Math.max(1, gravity.magnitude * radius));
+    world.pickups.push({ id: `black-hole-cargo-${Math.round(world.elapsed * 1000)}`, blackHoleOrbit: true,
+        orbitAngle: angle, orbitRadius: radius, orbitSpeed: speed / radius,
+        x, y, vx: -Math.sin(angle) * speed, vy: Math.cos(angle) * speed,
+        amount: tuning.blackHoleCargoValue, expiresAt: world.elapsed + 300 });
 }
 
 // Derive availability from current planet ownership, so capture transfers collection rights immediately.
@@ -1103,6 +1222,16 @@ function movePickups(world, dt, previousPlayer) {
             || Math.hypot(player.x - pickup.x, player.y - pickup.y) < tuning.cargoAttractionRadius);
         const nearest = eligible.reduce((best, player) => !best || Math.hypot(player.x - pickup.x, player.y - pickup.y)
             < Math.hypot(best.x - pickup.x, best.y - pickup.y) ? player : best, null);
+        if (pickup.blackHoleOrbit) {
+            const approaching = alive.some(player => Math.hypot(player.x - pickup.x, player.y - pickup.y) < tuning.cargoAttractionRadius);
+            if (approaching) pickup.blackHoleOrbit = false;
+            else {
+                pickup.orbitAngle += pickup.orbitSpeed * dt;
+                const x = blackHole.x + Math.cos(pickup.orbitAngle) * pickup.orbitRadius;
+                const y = blackHole.y + Math.sin(pickup.orbitAngle) * pickup.orbitRadius;
+                pickup.vx = (x - pickup.x) / dt; pickup.vy = (y - pickup.y) / dt;
+            }
+        }
         if (pickup.orbiting) {
             const gravity = gravityAt(pickup.x, pickup.y);
             pickup.vx = (pickup.vx || 0) + gravity.ax * dt;
@@ -1144,7 +1273,7 @@ function movePickups(world, dt, previousPlayer) {
 // Accelerate toward the cursor and brake before alignment so fast aim changes produce controlled lag.
 function turnTowardAim(player, aimAngle, dt, power) {
     const error = normalizeAngle(aimAngle + Math.PI / 2 - player.angle);
-    const agility = 1 + (player.rocketTier || 0) * .08;
+    const agility = 1;
     const acceleration = tuning.aimRotationAcceleration * power * agility;
     const previousRate = Number.isFinite(player.rotationVelocity) ? player.rotationVelocity : 0;
     // Damping starts braking while the cursor is still ahead, avoiding a snap at alignment.
@@ -1159,7 +1288,7 @@ function brakeVelocity(player, dt, power) {
     const speed = Math.hypot(player.vx, player.vy);
     if (speed === 0 || power <= 0) return;
     const speedMultiplier = 1 + Math.min(2, speed / 300);
-    const effectivePower = power * speedMultiplier * (1 + (player.rocketTier || 0) * .08);
+    const effectivePower = power * speedMultiplier;
     const maximumChange = tuning.brakeAcceleration * dt * effectivePower;
     const amount = speed <= maximumChange ? speed : Math.min(maximumChange,
         speed * (1 - Math.exp(-tuning.brakeResponse * dt * effectivePower)));
@@ -1194,7 +1323,7 @@ function movePlayer(world, input, dt) {
         return;
     }
     if (player.docked) detach(world);
-    const fuelCost = dt * ((player.rocketTier || 0) >= 3 ? .8 : 1) / tuning.fuelCapacityScale * ((burning ? tuning.mainFuelRate : 0)
+    const fuelCost = dt * boosterStats(player).fuelFactor / tuning.fuelCapacityScale * ((burning ? tuning.mainFuelRate : 0)
         + tuning.rcsFuelRate * (Math.abs(rcsX) + Math.abs(rcsY)) + tuning.rotationFuelRate * Math.abs(rotate));
     const power = fuelCost > 0 ? Math.min(1, player.fuel / fuelCost) : Number(player.fuel > 0);
     player.fuel = Math.max(0, player.fuel - fuelCost);
@@ -1211,8 +1340,7 @@ function movePlayer(world, input, dt) {
     if (player.landedOn && !moving) return;
     player.landedOn = null;
     const gravity = gravityAt(player.x, player.y);
-    const tier = player.rocketTier || 0;
-    const bonus = tier ? (.5 + (tier - 1) * .08) / (1 + Math.hypot(player.vx, player.vy) / 180) : 0;
+    const bonus = boosterStats(player).bonus;
     const thrust = burning ? tuning.mainAcceleration * (1 + bonus) : 0;
     const axialThrust = Math.min(0, rcsY);
     const rcsAx = (rcsX * Math.cos(player.angle) * tuning.rcsAcceleration
@@ -1254,6 +1382,7 @@ export function stepWorld(world, input = {}, dt = tuning.fixedStep) {
         world.updatedAt = world.createdAt + world.elapsed * 1000;
         coolPlayerGun(world.player, step, world.elapsed);
         produceStationCargo(world, step);
+        produceBlackHoleCargo(world);
         for (const [bodyId, planet] of Object.entries(world.planets)) {
             if (planet.owner && !isHome(world, bodyFor(bodyId))) {
                 planet.stock = Math.min(tuning.maxStock, planet.stock + tuning.cargoRate * step);
@@ -1299,26 +1428,43 @@ export function withPlayer(world, playerId, action) {
     }
 }
 
-// Describe a pilot's next sequential rocket tier without trusting client-provided prices.
-export function nextRocketUpgrade(world) {
-    const tier = world.player.rocketTier || 0;
-    const cost = tuning.rocketUpgradeCosts[tier];
-    const names = ['Agility + rapid fire', 'Twin shooter', 'Fuel efficiency', 'Alternating rapid shooter'];
-    const relay = world.planets[world.player.docked];
-    const available = !world.player.deadUntil && relay?.owner === world.player.id && Boolean(bodyFor(world.player.docked)?.station) && tier < 4;
-    return { tier, cost: cost || 0, name: names[tier] || 'Fully upgraded', available,
-        affordable: available && world.player.cargo >= cost };
+// Offer either independent rocket track at an owned planet shop or the home station.
+function nextTrackUpgrade(world, track) {
+    const tier = world.player[track] || 0;
+    const cost = tuning.rocketUpgradeCosts[tier] || 0;
+    const bodyId = world.player.shoppingOn || world.player.docked;
+    const body = bodyFor(bodyId), planet = world.planets[bodyId];
+    const inRange = body && (body.station ? world.player.docked === bodyId
+        : dockingStatus(world, bodyId).distance <= planetInteractionDistance(body, planet));
+    const available = !world.player.deadUntil && !world.hack && planet?.owner === world.player.id && inRange && tier < tuning.maxRocketLevel;
+    const name = track === 'rocketTier' ? `Booster ${tier + 1}: acceleration + efficiency`
+        : tier + 1 === 10 ? 'Weapon 10: long-range laser' : tier + 1 === 5 ? 'Weapon 5: alternating twin fire'
+            : tier + 1 === 3 ? 'Weapon 3: twin fire' : `Weapon ${tier + 1}: faster fire + endurance`;
+    return { tier, cost, name: tier >= tuning.maxRocketLevel ? 'Fully upgraded' : name, available: Boolean(available),
+        affordable: Boolean(available && world.player.cargo >= cost) };
 }
 
-// Charge one authoritative rocket purchase, retaining earlier tier benefits.
-export function upgradeRocket(world) {
-    const upgrade = nextRocketUpgrade(world);
-    if (!upgrade.available || !upgrade.affordable) return { ok: false, reason: upgrade.available ? 'Not enough cargo.' : 'Rocket upgrade unavailable.' };
+// Preserve the existing purchase API while naming its independent track BOOSTER in the interface.
+export function nextRocketUpgrade(world) { return nextTrackUpgrade(world, 'rocketTier'); }
+
+// Describe the independent weapon purchase using server-owned eligibility and prices.
+export function nextWeaponUpgrade(world) { return nextTrackUpgrade(world, 'weaponTier'); }
+
+// Charge one authoritative purchase without changing the other rocket upgrade track.
+function upgradeTrack(world, track) {
+    const upgrade = nextTrackUpgrade(world, track);
+    if (!upgrade.available || !upgrade.affordable) return { ok: false, reason: upgrade.available ? 'Not enough cargo.' : 'Upgrade unavailable.' };
     world.player.cargo -= upgrade.cost;
-    world.player.rocketTier = upgrade.tier + 1;
-    emit(world, 'rocketUpgraded', { amount: world.player.rocketTier });
+    world.player[track] = upgrade.tier + 1;
+    emit(world, track === 'rocketTier' ? 'rocketUpgraded' : 'weaponUpgraded', { amount: world.player[track] });
     return { ok: true, reason: upgrade.name };
 }
+
+// Buy the next booster level while preserving the public rocket upgrade command.
+export function upgradeRocket(world) { return upgradeTrack(world, 'rocketTier'); }
+
+// Buy the next weapon level independently of the booster.
+export function upgradeWeapon(world) { return upgradeTrack(world, 'weaponTier'); }
 
 // Advance the galaxy once per tick; each pilot moves once and entities are integrated only once.
 export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
@@ -1332,6 +1478,7 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
         world.updatedAt = world.createdAt + world.elapsed * 1000;
         world.previousPlayers = {};
         produceStationCargo(world, step);
+        produceBlackHoleCargo(world);
         for (const [bodyId, planet] of Object.entries(world.planets)) {
             if (planet.home || bodyFor(bodyId)?.station) continue;
             if (!planet.owner) continue;

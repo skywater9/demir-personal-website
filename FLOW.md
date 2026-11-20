@@ -1,8 +1,7 @@
 # Orbital Freight — runtime modes
 
 A configured public server endpoint enables one shared galaxy. An empty endpoint
-keeps the local practice experience below. The class-box service must be deployed
-and its URL configured before multiplayer is live on Firebase.
+keeps the local practice experience below. The class-box service and its matching Firebase frontend are live.
 
 ```mermaid
 flowchart TD
@@ -13,40 +12,47 @@ flowchart TD
     connect --> accepted{Connected and room has a slot?}
     accepted -->|No| retry[Show connection or full-room reason; retry]
     retry --> onlineMenu
-    accepted -->|New pilot| spawn[Assign free protected home, anonymous label and color]
+    accepted -->|New pilot| spawn[Assign protected starter station, anonymous label and color]
     accepted -->|Valid reconnect| recover[Restore server-confirmed state]
-    spawn --> guide[Target nearby neutral relay; large capture and cargo arrow for every home]
+    spawn --> guide[Large blinking yellow CAPTURE PLANET arrow toward nearest capturable planet]
     guide --> shared[Fly in the shared galaxy; server owns outcomes]
     recover --> shared
-    shared --> hack[Target planet; destroy every turret; start capture; aim may move away; enter 8 + 2 per level code presses]
-    hack -->|Wrong code| feedback[Flash red; progress unchanged]
+    shared --> hack[Target planet; destroy every turret; start capture; aim may move away; press E repeatedly; require 8 + 2 presses per level]
+    hack -->|Held key or too-fast press| feedback[Do not advance capture]
     feedback --> hack
-    hack -->|Correct code| progress{Capture complete?}
+    hack -->|Fresh E press| progress{Capture complete?}
+    hack -->|Time between presses| decay[Slowly reduce progress toward zero]
+    decay --> hack
     progress -->|No| hack
-    progress -->|Yes| capture[First completion wins; cancel rivals; lock recapture for five seconds; reset defenses and announce]
-    capture --> shop[T planet purchase or R rocket purchase at owned relay]
-    shop -->|Server validates cargo and tier| purchase[Charge once; planet upgrade adds one independently operating turret, up to twenty; grow and strengthen soft shield; save and confirm]
+    progress -->|Yes| capture[First completion wins; cancel rivals; lock recapture for five seconds; reset defenses; preserve cargo for new owner to collect; announce]
+    capture --> shop[Owned planet: BOOSTER R, WEAPON F, PLANET T; home station: BOOSTER and WEAPON]
+    shop -->|Server validates cargo and tier| purchase[Charge once; planet upgrade adds one independently operating turret, up to ten; grow and strengthen soft shield and access range; new guns after five are double; save and confirm]
     purchase --> shop
+    shop -->|R or F; valid cargo and level below ten| rocketTracks[Buy independent BOOSTER acceleration and efficiency or WEAPON firing and endurance]
+    rocketTracks --> weaponMilestones[Weapon three: twin; five: alternating twin; ten: instant player-color laser]
+    weaponMilestones --> shop
     shop -->|E detach| shared
-    hack -->|E cancel, out of range or disconnect| cancel[Reset partial hack]
+    hack -->|Cancel button, out of range or disconnect| cancel[Reset partial hack]
     cancel --> shared
     shared --> pickup[Planet pods stay inside its bubble; only its owner attracts and collects them; death drops remain public]
     pickup --> shared
-    shared --> refuel[Owned pad gradually refuels; home produces no cargo and has no relay]
+    shared --> refuel[Owned pad gradually refuels; home station refuels faster and grants one cargo per minute; rates doubled]
     refuel --> shared
     shared --> chat[Slash opens room chat; Enter sends; Escape closes]
     chat --> shared
     shared -->|Zero fuel| fuelWarning[Warning above map: coast or press Space to self-destruct]
     fuelWarning -->|Reach owned pad| refuel
-    fuelWarning -->|Fresh Space press or click| death[Death drops cargo and removes one rocket tier]
+    fuelWarning -->|Fresh Space press or click| death[Death drops cargo and removes one BOOSTER and one WEAPON level]
     shared -->|Lethal damage| death
-    shared -->|Shoot hostile turret through soft shield| turretDamage[One hit destroys only that turret; privately notify owner]
+    shared -->|Shoot hostile turret through soft shield| turretDamage[One hit destroys that turret; notify owner only when the last turret falls]
     turretDamage --> turretRecovery[Wait five seconds; gun stays destroyed until owner pays for repair]
-    turretRecovery -->|Owner in range pays two times planet level cargo| repaired[Repair one gun; validate cargo; save and confirm]
+    turretRecovery -->|All cooldowns complete and cargo sufficient| repaired[REPAIR TURRETS replaces planet upgrade; repair all for two times planet level per gun; block upgrades until repaired]
     repaired --> shared
     turretRecovery -->|No repair| shared
-    hack --> ownerAlert[Privately notify planet owner of capture attempt]
-    ownerAlert --> hack
+    shared -->|Intruder enters owned shield| defense[Nearby same-owner turrets prioritize intruder within range and line of sight]
+    defense --> shared
+    shared --> orbitCargo[Black-hole orbiting cargo: five per pod; public collection]
+    orbitCargo --> pickup
     shared --> mapPilots[Map shows all pilots; distant pilots use edge direction markers]
     mapPilots --> shared
     death --> notice[Show tier loss during death and respawn at home]
@@ -64,9 +70,9 @@ flowchart TD
     release --> onlineMenu
 ```
 
-Rocket tiers are sequential: fading acceleration/weapon improvement, twin gun,
-fuel efficiency, then faster alternating barrels and bullet speed. Death floors
-the tier at zero. Chat contents and reconnect credentials never enter analytics.
+BOOSTER and WEAPON advance independently to level ten. Both lose one level on death,
+floored at zero; the death notice identifies both losses. Chat contents and reconnect
+credentials never enter analytics.
 The server broadcasts public planet colors and map positions for all pilots, with only relevant full remote ship states. Room chat announces joins, disconnects, returns, departures, captures and deaths; messages remain transient.
 
 ---
@@ -75,7 +81,7 @@ The server broadcasts public planet colors and map positions for all pilots, wit
 
 The homepage is a local, open-world conquest game. There are no other players or
 bots in this version. Three scattered star systems share one galaxy with 24
-planets; Earth is the pilot's protected home. The previous finite journey has
+planets; the pilot starts at a protected station. The previous finite journey has
 been replaced. This chart describes the implemented local experience.
 
 ```mermaid
@@ -83,7 +89,7 @@ flowchart TD
     visit[Visit website: conquest menu and anonymous tracking notice] --> saved{Valid local galaxy saved within 30 seconds?}
     saved -->|Yes| menu[Show Continue, New Galaxy, Local Galaxy and Flight Records]
     saved -->|No or expired| fresh[Show Play, Local Galaxy and Flight Records]
-    fresh -->|Play| start[Create galaxy: protected home, full fuel, zero cargo; flash arrow toward Moon relay]
+    fresh -->|Play| start[Create galaxy: protected starter station, full fuel, zero cargo; show CAPTURE PLANET arrow]
     menu -->|Continue| resume[Clear held controls; resume local galaxy]
     menu -->|New Galaxy| confirm{Confirm replacing current galaxy?}
     confirm -->|Cancel| menu
@@ -111,25 +117,29 @@ flowchart TD
     checks -->|Unavailable E press| dockError[Show blocking reason in red below relay dialog]
     dockError --> checks
     checks -->|Leave range| flight
-    checks -->|Within 100 m, ≤20 m/s and E| attach{Owned relay?}
-    attach -->|No| hack[Dock and enter displayed digit; firing disabled]
-    hack -->|Wrong key or held repeat| hack
-    hack -->|Correct fresh key| progress{Hack complete?}
+    checks -->|Within service range and E| attach{Owned planet or home station?}
+    attach -->|No| hack[Press E repeatedly within planet shield range; cursor can move away]
+    hack -->|Held E or too-fast press| hack
+    hack -->|Fresh E press| progress{Hack complete?}
     progress -->|No| hack
-    progress -->|Yes| capture[Capture planet; reset level and stored cargo]
+    progress -->|Yes| capture[Capture planet; reset upgrades; preserve cargo for collection]
     capture --> captureEffect[Expand shield in player color; announce capture in local chat]
-    captureEffect --> upgrade[Show planet preview and T upgrade cost beside rocket preview and unavailable R option]
+    captureEffect --> upgrade[Planet offers BOOSTER R, WEAPON F and PLANET T; home offers BOOSTER and WEAPON]
     attach -->|Yes| upgrade
-    hack -->|E detach| cancel[Reset all hack progress]
+    hack -->|Cancel button or leave range| cancel[Reset all hack progress]
     cancel --> flight
-    upgrade -->|Enough cargo and T or click| purchase[Deduct cargo; upgrade only attached relay's planet]
+    upgrade -->|Enough cargo and T or click| purchase[Deduct cargo; upgrade planet up to ten only when all guns are repaired]
     purchase --> upgrade
-    upgrade -->|R| rocketPurchase[Buy next rocket tier with carried cargo]
+    upgrade -->|R| rocketPurchase[Buy BOOSTER level with carried cargo]
     rocketPurchase --> upgrade
+    upgrade -->|F| weaponPurchase[Buy WEAPON level with carried cargo]
+    weaponPurchase --> upgrade
+    upgrade -->|Destroyed turrets| repair[Replace PLANET with REPAIR TURRETS; require cooldowns and total cargo]
+    repair --> upgrade
     upgrade -->|Insufficient cargo, home or final tier| unavailable[Explain unavailable purchase]
     unavailable --> upgrade
     upgrade -->|E detach| flight
-    flight -->|Land upright on owned pad| service[Automatically collect cargo and refill tank]
+    flight -->|Land upright on owned pad| service[Refill tank faster; collect cargo by touching orbiting pods]
     service -->|Stay| refill[Refill slows near full; home refills faster]
     refill --> service
     service -->|Take off| flight
@@ -137,7 +147,7 @@ flowchart TD
     noservice --> flight
     flight -->|Zero fuel| emptyfuel[Coast under gravity; show self-destruct option]
     emptyfuel -->|Reach owned pad| service
-    emptyfuel -->|Fresh Space press or click: accept cargo loss| death[Explosion; drop carried cargo; lose one rocket tier; retain territory]
+    emptyfuel -->|Fresh Space press or click: accept cargo loss| death[Explosion; drop carried cargo; lose one BOOSTER and WEAPON level; retain territory]
     flight -->|Hostile projectile or fast impact| damage[Fuel damage; red hull flash and white leak particles]
     damage -->|Damage exceeds fuel before hit| death
     damage -->|Fuel covers damage, including equality| flight
@@ -164,15 +174,12 @@ flowchart TD
 ## Continuous rules
 
 - W burns at full thrust; S brakes the full velocity vector until stopped, with one brake plume pointing opposite movement regardless of heading. Mouse/trackpad steering follows the cursor
-  with an acceleration-limited turn. Space fires; E attaches/detaches. Number
-  keys 1–0 enter relay challenges. Double-tap W/A/S/D for rocket-relative dashes.
+  with an acceleration-limited turn. Space fires; E opens services or initiates capture, then repeated E presses advance capture. Held E does not count. R buys BOOSTER, F buys WEAPON and T buys PLANET or repairs in a shop.
 - The top-right map shows all planets, their ownership, home, stars, and target.
   There is no route progress bar or final win condition.
-- All non-home planets start neutral. Hacking starts with digits 1–3; stronger
-  defenses expand the digit pool and increase required presses. Detaching resets.
-- Cargo is one resource. Owned planets produce it; owned-pad landings automatically
-  collect it. Any owned relay can upgrade only its own planet.
-- Every planet upgrade adds one turret and grows/strengthens its soft field, up to level twenty. Guns are evenly spaced. Hostile bullets are slowed and deflected but can always penetrate; friendly shots ignore the field. Destroyed turrets become repairable after five seconds for two times the current level in cargo.
+- Planets start neutral. Capture uses 8 + 2 times planet level fresh E presses and loses 0.65 press-equivalents per second when idle. Leaving the shield range resets progress.
+- Cargo is one resource. Owned planets produce it; only the current owner can collect planet pods. Capture preserves cargo without crediting it directly. Black-hole pods and death drops are public.
+- Every planet upgrade adds one turret and grows/strengthens its soft field, up to level ten. Guns are evenly spaced. Hostile bullets are slowed and deflected but can always penetrate; friendly shots ignore the field. Destroyed turrets become repairable after five seconds for two times the current level in cargo.
 - Home cannot be captured and has a hard shield against hostile ships/shots.
 - Turret shots are blocked around the relay refuge; player shots are not.
   The simulation supports these rules, but the local galaxy contains no opponents.

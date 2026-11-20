@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { bodies, planetBodies, starterStations, dockingPoint, tuning } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, planetBodies, starterStations, dockingPoint, tuning, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
 
 // Move legacy planet homes to stations without erasing earned territory or pilot resources.
 export function migrateStationHomes(data) {
@@ -41,7 +41,7 @@ export function migrateStationHomes(data) {
 // Validate snapshots before restoration rather than silently replacing corrupt persistent territory.
 export function validateSave(data) {
     const world = data?.world;
-    if (data?.schema !== 1 || !world?.players || !data.sessions || !Number.isFinite(world.elapsed)
+    if (data?.schema !== 1 || (world?.upgradeTracksVersion !== undefined && world.upgradeTracksVersion !== 2) || !world?.players || !data.sessions || !Number.isFinite(world.elapsed)
         || world.elapsed < 0 || world.elapsed > 31536000 || !Number.isFinite(world.createdAt) || !Number.isFinite(world.updatedAt)
         || !Number.isInteger(world.eventCounter) || world.eventCounter < 0 || !world.planets
         || !Array.isArray(world.pickups) || !Array.isArray(world.projectiles)
@@ -52,7 +52,8 @@ export function validateSave(data) {
         const actor = world.players[id], p = actor.player, session = data.sessions[id];
         if (!/^p-[a-f0-9-]{36}$/.test(id) || p?.id !== id || !session || !/^[a-f0-9]{64}$/.test(session.tokenHash)
             || !['x', 'y', 'vx', 'vy', 'angle', 'fuel', 'cargo', 'aimAngle', 'deadUntil'].every(key => Number.isFinite(p[key]) && Math.abs(p[key]) < 1e8)
-            || !bodies.some(body => body.id === p.homeId) || !Number.isInteger(p.rocketTier) || p.rocketTier < 0 || p.rocketTier > 4
+            || !bodies.some(body => body.id === p.homeId) || !Number.isInteger(p.rocketTier) || p.rocketTier < 0 || p.rocketTier > (world.upgradeTracksVersion === 2 ? tuning.maxRocketLevel : 4)
+            || (world.upgradeTracksVersion === 2 && (!Number.isInteger(p.weaponTier) || p.weaponTier < 0 || p.weaponTier > tuning.maxRocketLevel))
             || !actor.stats || !['captures', 'deaths', 'cargoCollected', 'shots'].every(key => Number.isFinite(actor.stats[key]) && actor.stats[key] >= 0)
             || !/^Pilot [1-8]$/.test(p.label) || !/^#[a-f0-9]{6}$/i.test(p.color)
             || p.fuel < 0 || p.fuel > 100 || p.cargo < 0
@@ -66,13 +67,14 @@ export function validateSave(data) {
     for (const body of bodies) {
         const planet = world.planets[body.id];
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
-            || planet.level < 0 || planet.level > tuning.maxPlanetLevel || !Number.isFinite(planet.stock) || planet.stock < 0
+            || planet.level < 0 || planet.level > (world.upgradeTracksVersion === 2 ? tuning.maxPlanetLevel : 20) || !Number.isFinite(planet.stock) || planet.stock < 0
             || typeof planet.home !== 'boolean' || (planet.home && !planet.owner)) throw new Error('Invalid saved territory.');
         if (planet.recaptureAt !== undefined && (!Number.isFinite(planet.recaptureAt) || planet.recaptureAt < 0 || planet.recaptureAt > 1e8)) throw new Error('Invalid saved recapture timer.');
         if (planet.turrets !== undefined && (!Array.isArray(planet.turrets) || planet.turrets.length !== planet.level
             || !planet.turrets.every(turret => turret && ['health', 'angle', 'disabledUntil', 'nextShotAt'].every(key =>
                 Number.isFinite(turret[key]) && Math.abs(turret[key]) < 1e8)
                 && (turret.repairAt === undefined || Number.isFinite(turret.repairAt) && turret.repairAt >= 0 && turret.repairAt < 1e8)
+                && (turret.double === undefined || typeof turret.double === 'boolean')
                 && turret.health >= 0 && turret.health <= 5))) throw new Error('Invalid saved turret array.');
         if (planet.turretHealth !== undefined && (!Number.isFinite(planet.turretHealth) || planet.turretHealth < 0 || planet.turretHealth > 5)) throw new Error('Invalid saved turret health.');
         for (const key of ['turretAngle', 'turretDisabledUntil']) {
@@ -89,8 +91,11 @@ export function validateSave(data) {
             || !Number.isInteger(actor.hack.required) || actor.hack.required < 1 || actor.hack.required > 100
             || actor.hack.progress < 0 || actor.hack.progress >= actor.hack.required)) throw new Error('Invalid saved challenge.');
     }
+    if (world.nextBlackHoleCargoAt !== undefined && (!Number.isFinite(world.nextBlackHoleCargoAt) || world.nextBlackHoleCargoAt < 0 || world.nextBlackHoleCargoAt > 1e8)) throw new Error('Invalid cargo spawn timer.');
     for (const entity of [...world.pickups, ...world.projectiles]) {
         if (!['x', 'y', 'vx', 'vy', 'expiresAt'].every(key => Number.isFinite(entity[key]) && Math.abs(entity[key]) < 1e8)) throw new Error('Invalid saved entity.');
+        if (entity.blackHoleOrbit && !['orbitAngle', 'orbitRadius', 'orbitSpeed'].every(key => Number.isFinite(entity[key]) && Math.abs(entity[key]) < 1e8)) throw new Error('Invalid saved cargo orbit.');
+        if (entity.laser && entity.resolved && !['originX', 'originY'].every(key => Number.isFinite(entity[key]) && Math.abs(entity[key]) < 1e8)) throw new Error('Invalid saved beam.');
     }
     return data;
 }
@@ -106,6 +111,11 @@ export class GalaxyStore {
             const original = await readFile(this.file, 'utf8');
             const result = migrateStationHomes(JSON.parse(original));
             const data = validateSave(result.data);
+            if (data.world.upgradeTracksVersion !== 2) {
+                await writeFile(`${this.file}.pre-upgrades-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });
+            }
+            migrateUpgradeTracks(data.world);
+            validateSave(data);
             if (result.migrated) {
                 // Preserve the exact original privately before the service can checkpoint the new schema.
                 await writeFile(`${this.file}.pre-stations-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });

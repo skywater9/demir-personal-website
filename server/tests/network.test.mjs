@@ -60,9 +60,9 @@ test('two real connections share captures, purchases, chat and restart recovery'
         game.room.setInput(aid, { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, captureBody: 'moon' });
         game.room.tick(.15);
         a.socket.send(JSON.stringify({ type: 'action', sequence: ++sequence, actionId: ++actionId,
-            action: 'digit', digit: actor.hack.digit, challengeId: actor.hack.challengeId }));
+            action: 'capturePress', challengeId: actor.hack.challengeId }));
         await a.wait(message => message.type === 'result' && message.actionId === actionId);
-        if (actor.hack) assert.equal(game.room.inputs[aid].value.captureBody, 'moon', 'digit commands preserve cursor input');
+        if (actor.hack) assert.equal(game.room.inputs[aid].value.captureBody, 'moon', 'capture presses preserve cursor input');
     }
     assert.equal(game.room.world.planets.moon.owner, aid);
     const capture = await b.wait(message => message.type === 'capture');
@@ -184,7 +184,7 @@ test('handshake rejects other origins and HTTP health exposes no private state',
 });
 
 // Verify private defense alerts and idempotent repair purchases through real sockets.
-test('planet owners receive private capture and turret alerts and can pay for repairs', async t => {
+test('planet owners receive only the last-turret alert and can pay for repairs', async t => {
     const dir = resolve(testRuntimeRoot, randomUUID());
     const game = await createGameServer({ dataFile: resolve(dir, 'galaxy.json'), allowedOrigins: ['https://test.invalid'], timers: false });
     game.server.listen(0, '127.0.0.1'); await once(game.server, 'listening');
@@ -203,24 +203,48 @@ test('planet owners receive private capture and turret alerts and can pay for re
         { x: body.x, y: body.y - body.radius - 150, docked: null, landedOn: null });
     enemy.socket.send(JSON.stringify({ type: 'action', sequence: 1, actionId: 1, action: 'interact', bodyId: body.id }));
     assert.ok((await enemy.wait(message => message.type === 'result')).result.ok);
-    assert.equal((await owner.wait(message => message.type === 'alert')).kind, 'hackStarted');
+    assert.equal(owner.messages.some(message => message.type === 'alert'), false);
     assert.equal(observer.messages.some(message => message.type === 'alert'), false);
     assert.equal(enemy.messages.some(message => message.type === 'alert'), false);
     planet.level = 1; planet.turrets = [{ health: 0, angle: 0, disabledUntil: 0, nextShotAt: 0, repairAt: 5 }];
-    game.room.world.events.push({ type: 'turretDestroyed', playerId: eid, bodyId: body.id, turretIndex: 0 });
+    game.room.world.events.push({ type: 'turretDestroyed', playerId: eid, bodyId: body.id, turretIndex: 0, allTurretsDown: true });
     const actor = game.room.world.players[oid]; actor.player.cargo = 2;
     owner.socket.send(JSON.stringify({ type: 'action', sequence: 1, actionId: 1, action: 'interact', bodyId: body.id }));
     await owner.wait(message => message.type === 'result' && message.actionId === 1);
     await owner.wait(message => message.type === 'alert' && message.kind === 'turretDestroyed');
-    owner.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 2, action: 'repairTurret', turretIndex: 0 }));
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 2, action: 'repairTurrets' }));
     assert.equal((await owner.wait(message => message.type === 'result' && message.actionId === 2)).result.ok, false);
     game.room.world.elapsed = 5;
-    owner.socket.send(JSON.stringify({ type: 'action', sequence: 3, actionId: 3, action: 'repairTurret', turretIndex: 0 }));
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 3, actionId: 3, action: 'repairTurrets' }));
     assert.ok((await owner.wait(message => message.type === 'result' && message.actionId === 3)).result.ok);
-    owner.socket.send(JSON.stringify({ type: 'action', sequence: 4, actionId: 3, action: 'repairTurret', turretIndex: 0 }));
+    owner.socket.send(JSON.stringify({ type: 'action', sequence: 4, actionId: 3, action: 'repairTurrets' }));
     await owner.wait(message => message.type === 'result' && message.result.reason === 'Duplicate action ignored.');
     assert.equal(actor.player.cargo, 0); assert.equal(planet.turrets[0].health, 1);
     const saved = await new GalaxyStore(resolve(dir, 'galaxy.json')).load();
     assert.equal(saved.world.planets[body.id].turrets[0].health, 1);
     assert.equal(observer.messages.some(message => message.type === 'alert'), false);
+});
+
+// Buying one track must not grant the other; both persist and both lose a level on death.
+test('real purchases keep BOOSTER and WEAPON independent and persist their death losses', async t => {
+    const dir = resolve(testRuntimeRoot, randomUUID()), file = resolve(dir, 'galaxy.json');
+    const game = await createGameServer({ dataFile: file, allowedOrigins: ['https://test.invalid'], timers: false });
+    game.server.listen(0, '127.0.0.1'); await once(game.server, 'listening');
+    const pilot = await peer(`ws://127.0.0.1:${game.server.address().port}/game`);
+    t.after(async () => { pilot.socket.terminate(); await game.close(); await rm(dir, { recursive: true, force: true }); });
+    const actor = game.room.world.players[pilot.welcome.playerId];
+    actor.player.cargo = 100; actor.player.docked = actor.player.homeId;
+    pilot.socket.send(JSON.stringify({ type: 'action', sequence: 1, actionId: 1, action: 'rocketUpgrade' }));
+    const booster = await pilot.wait(message => message.type === 'result' && message.actionId === 1);
+    assert.equal(booster.world.player.rocketTier, 1); assert.equal(booster.world.player.weaponTier, 0);
+    pilot.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 2, action: 'weaponUpgrade' }));
+    const weapon = await pilot.wait(message => message.type === 'result' && message.actionId === 2);
+    assert.equal(weapon.world.player.rocketTier, 1); assert.equal(weapon.world.player.weaponTier, 1);
+    assert.equal(weapon.world.player.cargo, 84);
+    pilot.socket.send(JSON.stringify({ type: 'action', sequence: 3, actionId: 3, action: 'selfDestruct' }));
+    const death = await pilot.wait(message => message.type === 'event' && message.event.type === 'died');
+    assert.equal(death.event.previousTier, 1); assert.equal(death.event.previousWeaponTier, 1);
+    const saved = await new GalaxyStore(file).load();
+    assert.equal(saved.world.players[actor.player.id].player.rocketTier, 0);
+    assert.equal(saved.world.players[actor.player.id].player.weaponTier, 0);
 });

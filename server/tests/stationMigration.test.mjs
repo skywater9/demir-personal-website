@@ -51,3 +51,31 @@ test('load creates a private exact backup before returning migrated state', asyn
     assert.equal(await readFile(join(dir, backup), 'utf8'), original);
     assert.equal((await stat(join(dir, backup))).mode & 0o777, 0o600);
 });
+
+// Retain a private exact backup before lowering old caps and splitting earned rocket tiers.
+test('upgrade migration backs up the original, preserves cargo and territory and restores both tracks', async t => {
+    const dir = await mkdtemp(join(tmpdir(), 'orbital-upgrade-migration-'));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const room = new GameRoom(null, 1000), joined = room.join('', 1000);
+    const saved = room.saved(), id = joined.playerId;
+    delete saved.world.upgradeTracksVersion;
+    Object.assign(saved.world.players[id].player, { rocketTier: 4, cargo: 27 });
+    delete saved.world.players[id].player.weaponTier;
+    Object.assign(saved.world.planets.moon, { owner: id, level: 20, stock: 9,
+        turrets: Array.from({ length: 20 }, () => ({ health: 1, angle: 0, disabledUntil: 0, nextShotAt: 0 })) });
+    const original = JSON.stringify(saved), file = join(dir, 'galaxy.json');
+    await writeFile(file, original);
+    const loaded = await new GalaxyStore(file).load();
+    assert.equal(loaded.world.players[id].player.rocketTier, 4);
+    assert.equal(loaded.world.players[id].player.weaponTier, 5);
+    assert.equal(loaded.world.players[id].player.cargo, 27);
+    assert.equal(loaded.world.planets.moon.owner, id);
+    assert.equal(loaded.world.planets.moon.stock, 9);
+    assert.equal(loaded.world.planets.moon.level, 10);
+    assert.equal(loaded.world.planets.moon.turrets.length, 10);
+    assert.equal(loaded.world.planets.moon.turrets[5].double, true);
+    const backup = (await readdir(dir)).find(name => name.includes('.pre-upgrades-'));
+    assert.ok(backup); assert.equal(await readFile(join(dir, backup), 'utf8'), original);
+    assert.equal((await stat(join(dir, backup))).mode & 0o777, 0o600);
+    assert.doesNotThrow(() => validateSave(loaded));
+});

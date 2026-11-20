@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, repairTurret,
-    upgradePlanet, upgradeRocket, killPlayer, setTarget, nearestRelay, dockingPoint } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, capturePress, migrateUpgradeTracks, repairTurret, repairTurrets,
+    upgradePlanet, upgradeRocket, upgradeWeapon, killPlayer, setTarget, nearestRelay, nearestCapturablePlanet, dockingPoint } from '../public/scripts/conquestPhysics.mjs';
 
 export const reconnectMs = 30000;
 export const playerLimit = 8;
@@ -19,7 +19,7 @@ function matchesToken(token, hash) {
 export class GameRoom {
     // Restore durable state and reserve formerly connected pilots for the agreed restart grace period.
     constructor(saved = null, now = Date.now()) {
-        this.world = saved?.world || createWorld(randomUUID(), now);
+        this.world = migrateUpgradeTracks(saved?.world || createWorld(randomUUID(), now));
         this.sessions = saved?.sessions || {};
         this.inputs = {};
         this.notices = [];
@@ -41,12 +41,7 @@ export class GameRoom {
 
     // Start each home near useful neutral territory, keeping Moon as Earth's first destination when free.
     starterRelay(player) {
-        const neutral = bodies.filter(body => !body.station && !this.world.planets[body.id].owner && !this.world.planets[body.id].home);
-        if (player.homeId === 'earth' && neutral.some(body => body.id === 'moon')) return bodies.find(body => body.id === 'moon');
-        return neutral.sort((a, b) => {
-            const first = dockingPoint(a), second = dockingPoint(b);
-            return Math.hypot(first.x - player.x, first.y - player.y) - Math.hypot(second.x - player.x, second.y - player.y);
-        })[0] || nearestRelay(player, this.world);
+        return nearestCapturablePlanet(this.world, player) || nearestRelay(player, this.world);
     }
 
     // Join anonymously or recover the same pilot using an opaque, unexpired credential.
@@ -156,6 +151,12 @@ export class GameRoom {
                     const result = hackDigit(this.world, message.digit, { challengeId: message.challengeId });
                     hackDigit(this.world, null); return result;
                 }
+                case 'capturePress': {
+                    if (!Number.isSafeInteger(message.challengeId)) return { ok: false, reason: 'Invalid capture.' };
+                    return capturePress(this.world, { challengeId: message.challengeId });
+                }
+                case 'weaponUpgrade': return upgradeWeapon(this.world);
+                case 'repairTurrets': return repairTurrets(this.world);
                 case 'repairTurret': return repairTurret(this.world, message.turretIndex);
                 case 'planetUpgrade': return upgradePlanet(this.world);
                 case 'rocketUpgrade': return upgradeRocket(this.world);
@@ -191,10 +192,10 @@ export class GameRoom {
                     return { id: p.id, label: p.label, color: p.color, x: p.x, y: p.y, vx: p.vx, vy: p.vy,
                         angle: p.angle, aimAngle: p.aimAngle, deadUntil: p.deadUntil, cargo: p.cargo > 0 ? 1 : 0,
                         damageFlashUntil: p.damageFlashUntil || 0,
-                        rocketTier: p.rocketTier || 0, gunHeat: p.gunHeat || 0, gunOverheatedUntil: p.gunOverheatedUntil || 0,
+                        rocketTier: p.rocketTier || 0, weaponTier: p.weaponTier || 0, gunHeat: p.gunHeat || 0, gunOverheatedUntil: p.gunOverheatedUntil || 0,
                         thrusting: Boolean(p.thrusting), braking: Boolean(p.braking), docked: p.docked };
                 });
-        return { version: 2, id: this.world.id, createdAt: this.world.createdAt, updatedAt: this.world.updatedAt,
+        return { version: 2, upgradeTracksVersion: 2, id: this.world.id, createdAt: this.world.createdAt, updatedAt: this.world.updatedAt,
             elapsed: this.world.elapsed, player, planets: this.world.planets, projectiles: this.world.projectiles,
             pickups: this.world.pickups, events: [], eventCounter: this.world.eventCounter, ...actor,
             captures: Object.values(this.world.players).filter(other => other.hack).map(other => ({

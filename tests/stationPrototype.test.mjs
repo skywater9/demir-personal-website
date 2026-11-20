@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, bodies, planetBodies, starterStations, stepWorld, interact, dockingPoint, nextRocketUpgrade, hackDigit, tuning, dockingStatus } from '../public/scripts/conquestPhysics.mjs';
+import { createWorld, bodies, planetBodies, starterStations, stepWorld, interact, dockingPoint, nextRocketUpgrade, hackDigit, capturePress, tuning, dockingStatus } from '../public/scripts/conquestPhysics.mjs';
 import { GameRoom } from '../server/room.mjs';
 import { validateSave } from '../server/persistence.mjs';
 
@@ -35,16 +35,15 @@ test('prototype starts at a shielded station with no owned planets and pays one 
     assert.ok(nextRocketUpgrade(world).available);
 });
 
-test('E starts an eight-press 1–3 challenge from 200 m without matching the rocket heading', () => {
+test('E starts an eight-press capture from 200 m without matching the rocket heading', () => {
     const world = createWorld('capture', 0);
     assert.ok(startMoonHack(world).ok);
-    assert.ok(world.hack.digit >= 1 && world.hack.digit <= 3);
+    assert.equal(world.hack.progress, 0);
     advance(world, 0.2, { captureBody: 'moon' });
     assert.equal(world.hack.progress, 0, 'time alone must not advance hacking');
     assert.equal(world.hack.required, 8);
-    for (let index = 0; index < 8; index++) {
-        assert.ok(hackDigit(world, world.hack.digit).ok);
-        hackDigit(world, null);
+    for (let index = 0; world.hack && index < 12; index++) {
+        assert.ok(capturePress(world).ok);
         advance(world, 0.15, { captureBody: 'moon' });
     }
     assert.equal(world.planets.moon.owner, world.player.id);
@@ -52,16 +51,16 @@ test('E starts an eight-press 1–3 challenge from 200 m without matching the ro
     assert.equal(world.stats.captures, 1);
 });
 
-test('wrong or repeated digits do not advance capture; moving the cursor away preserves it', () => {
+test('number keys and held E do not advance capture; mouse movement preserves the decaying progress', () => {
     const world = createWorld('cancel', 0);
     startMoonHack(world);
     assert.equal(hackDigit(world, 9).ok, false);
     assert.equal(world.hack.progress, 0);
-    assert.ok(hackDigit(world, world.hack.digit).ok);
-    assert.equal(hackDigit(world, world.hack.digit, { repeat: true }).ok, false);
+    assert.ok(capturePress(world).ok);
+    assert.equal(capturePress(world, { repeat: true }).ok, false);
     assert.equal(world.hack.progress, 1);
     advance(world, 0.1, { captureBody: null });
-    assert.equal(world.hack.progress, 1);
+    assert.ok(world.hack.progress > 0 && world.hack.progress < 1);
     const moon = bodies.find(body => body.id === 'moon');
     world.player.x = moon.x + moon.radius + tuning.shipRadius + tuning.hackingDistance + 10;
     world.player.y = moon.y;
@@ -103,7 +102,7 @@ test('planet capture accepts high speed and arbitrary heading', () => {
     Object.assign(world.player, { vx: 700, vy: -250, angle: 2 });
     assert.equal(dockingStatus(world, 'moon').ready, true);
     assert.ok(interact(world, 'moon').ok);
-    assert.ok(hackDigit(world, world.hack.digit).ok);
+    assert.ok(capturePress(world).ok);
     const station = bodies.find(body => body.id === world.player.homeId);
     Object.assign(world.player, dockingPoint(station));
     assert.equal(dockingStatus(world, station.id).ready, true);

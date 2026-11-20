@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact } from './conquestPhysics.mjs?v=20261119-planet-levels-repair';
+import { bodies, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-upgrade-tracks-capture';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -6,7 +6,7 @@ const bodyIds = new Set(bodies.map(body => body.id));
 
 // Reject malformed snapshots before resuming physics, keeping legacy flight records separate.
 export function validWorld(world) {
-    if (!world || world.version !== 2 || typeof world.id !== 'string' || world.id.length > 100 || !world.player
+    if (!world || (world.upgradeTracksVersion !== undefined && world.upgradeTracksVersion !== 2) || world.version !== 2 || typeof world.id !== 'string' || world.id.length > 100 || !world.player
         || !Number.isFinite(world.createdAt) || !Number.isFinite(world.updatedAt)
         || !Number.isInteger(world.eventCounter) || world.eventCounter < 0
         || !Number.isFinite(world.elapsed) || world.elapsed < 0 || world.elapsed > 31536000
@@ -15,7 +15,7 @@ export function validWorld(world) {
     for (const key of ['x', 'y', 'vx', 'vy', 'angle', 'fuel', 'cargo', 'deadUntil', 'aimAngle', 'rotationVelocity']) {
         if (!Number.isFinite(player[key]) || Math.abs(player[key]) > 1e8) return false;
     }
-    if (player.rocketTier !== undefined && (!Number.isInteger(player.rocketTier) || player.rocketTier < 0 || player.rocketTier > 4)) return false;
+    if (player.rocketTier !== undefined && (!Number.isInteger(player.rocketTier) || player.rocketTier < 0 || player.rocketTier > (world.upgradeTracksVersion === 2 ? tuning.maxRocketLevel : 4))) return false;
     if (player.dashReadyAt !== undefined && !Number.isFinite(player.dashReadyAt)) return false;
     if (player.dashUntil !== undefined && (!Number.isFinite(player.dashUntil) || Math.abs(player.dashUntil) > 1e8)) return false;
     for (const key of ['dashRecoveryUntil', 'dashBaseSpeed']) {
@@ -24,10 +24,11 @@ export function validWorld(world) {
     if (player.id !== 'pilot' || !bodyIds.has(player.homeId) || player.fuel < 0 || player.fuel > 100
         || player.cargo < 0 || !(player.docked === null || bodyIds.has(player.docked))
         || !(player.landedOn === null || bodyIds.has(player.landedOn))) return false;
+    if (world.upgradeTracksVersion === 2 && (!Number.isInteger(player.weaponTier) || player.weaponTier < 0 || player.weaponTier > tuning.maxRocketLevel)) return false;
     for (const body of bodies) {
         const state = world.planets[body.id];
         if (!state || !(state.owner === null || state.owner === 'pilot')
-            || !Number.isInteger(state.level) || state.level < 0 || state.level > tuning.maxPlanetLevel
+            || !Number.isInteger(state.level) || state.level < 0 || state.level > (world.upgradeTracksVersion === 2 ? tuning.maxPlanetLevel : 20)
             || !Number.isFinite(state.stock) || state.stock < 0 || state.stock > 1e6) return false;
         if (state.nextCargoAt !== undefined && (!Number.isFinite(state.nextCargoAt) || Math.abs(state.nextCargoAt) > 1e8)) return false;
         if (state.recaptureAt !== undefined && (!Number.isFinite(state.recaptureAt) || state.recaptureAt < 0 || state.recaptureAt > 1e8)) return false;
@@ -35,6 +36,7 @@ export function validWorld(world) {
             || !state.turrets.every(turret => turret && ['health', 'angle', 'disabledUntil', 'nextShotAt'].every(key =>
                 Number.isFinite(turret[key]) && Math.abs(turret[key]) < 1e8)
                 && (turret.repairAt === undefined || Number.isFinite(turret.repairAt) && turret.repairAt >= 0 && turret.repairAt < 1e8)
+                && (turret.double === undefined || typeof turret.double === 'boolean')
                 && turret.health >= 0 && turret.health <= 5))) return false;
         if (state.turretHealth !== undefined && (!Number.isFinite(state.turretHealth) || state.turretHealth < 0 || state.turretHealth > 5)) return false;
         for (const key of ['turretAngle', 'turretDisabledUntil']) {
@@ -78,6 +80,7 @@ export class ConquestStore {
             const value = JSON.parse(raw);
             if (!value || value.version !== 2 || !Array.isArray(value.records) || value.records.length > 30) throw new Error('Invalid local galaxy record.');
             if (value.world && !validWorld(value.world)) throw new Error('Invalid galaxy snapshot.');
+            if (value.world) migrateUpgradeTracks(value.world);
             if (!Number.isFinite(value.savedAt) || !Number.isFinite(value.lastEvent)) throw new Error('Invalid save timestamp.');
             this.memory = value;
             return value;

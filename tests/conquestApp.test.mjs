@@ -543,3 +543,57 @@ test('room announcements display literal safe text in the generated pilot color'
     assert.equal(row.style.color, '#ff9fb8');
     assert.equal(logs.length, count);
 });
+
+// Exercise the new E-only capture control through the actual page's keyboard handlers.
+test('E advances capture without cancelling; held keys and number keys do not advance it', () => {
+    const { app, page, nodes } = harness(); app.newSession();
+    const body = bodies.find(body => body.id === 'moon');
+    Object.assign(app.world.player, { x: body.x, y: body.y - body.radius - 150, landedOn: null, docked: null });
+    app.captureBody = () => body.id;
+    page.fire('keydown', { code: 'KeyE' }); page.fire('keyup', { code: 'KeyE' });
+    assert.ok(app.world.hack); assert.equal(nodes.get('digitButton').textContent, 'E');
+    app.world.elapsed += .11;
+    page.fire('keydown', { code: 'KeyE' });
+    assert.equal(app.world.hack.progress, 1);
+    page.fire('keydown', { code: 'KeyE', repeat: true });
+    page.fire('keydown', { code: 'Digit1' });
+    assert.equal(app.world.hack.progress, 1);
+    page.fire('keyup', { code: 'KeyE' });
+    app.world.elapsed += .11; app.captureBody = () => null;
+    page.fire('keydown', { code: 'KeyE' });
+    assert.equal(app.world.hack.progress, 2);
+});
+
+// Keep the main shop action simple and expose both independent rocket tracks on planets.
+test('planet shop shows BOOSTER and WEAPON and replaces its upgrade action with REPAIR TURRETS', () => {
+    const { app, nodes } = harness(); app.newSession();
+    const body = bodies.find(body => body.id === 'moon');
+    Object.assign(app.world.player, { x: body.x, y: body.y - body.radius - 150, landedOn: null, docked: null, cargo: 100 });
+    app.world.planets[body.id].owner = app.world.player.id;
+    app.captureBody = () => body.id; app.interact();
+    assert.equal(nodes.get('rocketUpgradeLabel').textContent, 'BOOSTER 0/10');
+    assert.equal(nodes.get('weaponUpgradeLabel').textContent, 'WEAPON 0/10');
+    app.rocketUpgrade(); app.weaponUpgrade();
+    assert.equal(app.world.player.rocketTier, 1); assert.equal(app.world.player.weaponTier, 1);
+    app.upgrade();
+    const planet = app.world.planets[body.id];
+    Object.assign(planet.turrets[0], { health: 0, repairAt: app.world.elapsed + 5 });
+    app.updateHud({});
+    assert.equal(nodes.get('planetUpgradeLabel').textContent, 'REPAIR TURRETS');
+    assert.equal(nodes.get('upgradeButton').disabled, true);
+    app.world.elapsed += 5; app.updateHud({});
+    const cargo = app.world.player.cargo;
+    app.upgrade();
+    assert.equal(planet.turrets[0].health, 1); assert.equal(planet.level, 1);
+    assert.equal(app.world.player.cargo, cargo - 2);
+    assert.equal(nodes.get('planetUpgradeLabel').textContent, 'PLANET');
+});
+
+// Both independent track losses must remain visible during the respawn period.
+test('death notice names BOOSTER and WEAPON level loss together', () => {
+    const { app, nodes } = harness(); app.newSession();
+    Object.assign(app.world.player, { rocketTier: 6, weaponTier: 10 });
+    killPlayer(app.world, 'Test'); app.drainEvents(); app.updateHud({});
+    assert.match(nodes.get('respawnNotice').textContent, /BOOSTER 6 → 5/);
+    assert.match(nodes.get('respawnNotice').textContent, /WEAPON 10 → 9/);
+});

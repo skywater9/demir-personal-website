@@ -69,13 +69,13 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
         for (const event of room.world.events.splice(0)) {
             const actor = room.world.players[event.playerId];
             if (clients.has(event.playerId)) send(clients.get(event.playerId).socket, { type: 'event', event });
-            if (['hackStarted', 'turretDestroyed'].includes(event.type)) {
+            if (event.type === 'turretDestroyed' && event.allTurretsDown === true) {
                 const owner = room.world.planets[event.bodyId]?.owner;
                 const ownerClient = clients.get(owner);
                 if (ownerClient && owner !== event.playerId) {
                     const name = bodies.find(body => body.id === event.bodyId)?.name || 'Your planet';
                     send(ownerClient.socket, { type: 'alert', bodyId: event.bodyId, kind: event.type,
-                        text: event.type === 'hackStarted' ? `${name} is being captured!` : `${name}: turret destroyed! Repair available in 5s.` });
+                        text: `${name}: all turrets destroyed! Repairs unlock after their cooldowns.` });
                 }
             }
             if (event.type === 'died' && actor) {
@@ -192,7 +192,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 }
                 room.sessions[playerId].lastActionId = message.actionId;
                 // Number entry and capture initiation must preserve cursor targeting and moving-flight controls.
-                if (!['interact', 'digit', 'planetUpgrade', 'repairTurret'].includes(message.action)) {
+                if (!['interact', 'digit', 'capturePress', 'planetUpgrade', 'rocketUpgrade', 'weaponUpgrade', 'repairTurret', 'repairTurrets'].includes(message.action)) {
                     room.setInput(playerId, { ...emptyInput, aimAngle: room.world.players[playerId].player.aimAngle }, now());
                 }
                 const result = room.action(playerId, message);
@@ -214,7 +214,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
         enqueue(async () => {
             const count = Object.keys(room.sessions).length;
             room.tick(1 / 60, now());
-            const critical = room.world.events.some(event => ['captured', 'died', 'cargoPickedUp', 'upgraded', 'rocketUpgraded', 'turretDestroyed', 'turretRepaired'].includes(event.type));
+            const critical = room.world.events.some(event => ['captured', 'died', 'cargoPickedUp', 'upgraded', 'rocketUpgraded', 'weaponUpgraded', 'turretDestroyed', 'turretRepaired'].includes(event.type));
             if (critical || now() - lastSave >= 1000 || count !== Object.keys(room.sessions).length) await checkpoint();
             events();
             if (now() - lastBroadcast >= 50) snapshots();

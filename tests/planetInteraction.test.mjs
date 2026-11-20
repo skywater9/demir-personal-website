@@ -186,3 +186,14 @@ test('higher-value death cargo has a larger sprite and stronger glow with bounde
     assert.ok(styles[1].blur > styles[0].blur && styles[2].blur > styles[1].blur);
     assert.ok(styles[3].scale <= 2.8 * 1.18 && styles[3].blur <= 32);
 });
+
+// First-time pilots at any home should receive a visible planet-directed yellow tutorial arrow.
+test('first spawn guidance points to the nearest capturable planet with CAPTURE PLANET', () => {
+    const { renderer, calls } = scene();
+    const world = createWorld('guidance', 0);
+    const labels = [];
+    renderer.label = (...args) => labels.push(args);
+    renderer.drawGuidance(world);
+    assert.ok(labels.some(args => args[0] === 'CAPTURE PLANET'));
+    assert.ok(calls.some(call => call.name === 'fill' && call.fill === '#ffd45c'));
+});

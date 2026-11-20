@@ -1,6 +1,6 @@
 import {
-    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, planetShield, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-planet-levels-repair';
+    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
+} from './conquestPhysics.mjs?v=20261119-upgrade-tracks-capture';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -114,7 +114,7 @@ export class ConquestRenderer {
         const y = cursor.y * this.canvas.height;
         const ctx = this.context;
         ctx.save();
-        ctx.strokeStyle = '#a9e9de';
+        ctx.strokeStyle = player.color || '#a9e9de';
         ctx.lineWidth = 1;
         ctx.globalAlpha = 0.65;
         const hovered = world ? this.hoveredPlanet(world, cursor) : null;
@@ -143,7 +143,7 @@ export class ConquestRenderer {
         ctx.setLineDash([]);
         const cooldown = Math.max(0, Math.min(1, ((player.gunOverheatedUntil || 0) - elapsed) / tuning.gunOverheatDuration));
         ctx.globalAlpha = cooldown > 0 && !this.reducedMotion ? 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(this.visualTime * 14)) : 1;
-        ctx.strokeStyle = cooldown > 0 ? '#ff9379' : '#a9e9de';
+        ctx.strokeStyle = cooldown > 0 ? '#ff9379' : player.color || '#a9e9de';
         if (cooldown > 0) {
             ctx.fillStyle = '#ff8068';
             ctx.beginPath(); ctx.moveTo(x, y);
@@ -471,7 +471,8 @@ export class ConquestRenderer {
         ctx.fillStyle = color; ctx.fillRect(-7, -9, 14, 9);
         ctx.restore();
         ctx.save(); ctx.rotate(state.angle ?? position.angle);
-        ctx.fillStyle = '#e1eee8'; ctx.fillRect(0, -3, 20, 6);
+        ctx.fillStyle = '#e1eee8';
+        for (const offset of (state.double ? [-4, 4] : [0])) ctx.fillRect(0, offset - 2, 20, 4);
         ctx.fillStyle = color; ctx.fillRect(16, -4, 5, 8);
         ctx.restore(); ctx.shadowBlur = 0;
         ctx.restore();
@@ -548,6 +549,14 @@ export class ConquestRenderer {
             ctx.restore();
         }
         for (const shot of world.projectiles || []) {
+            if (shot.laser && shot.resolved) {
+                const start = this.screen(shot.originX, shot.originY), end = this.screen(shot.x, shot.y);
+                ctx.save(); ctx.strokeStyle = shot.color || world.ownerColors?.[shot.owner] || '#8cdeb0';
+                ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 14; ctx.lineWidth = 3;
+                ctx.globalAlpha = Math.max(0, Math.min(1, (shot.expiresAt - world.elapsed) / tuning.laserFlashDuration));
+                ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+                ctx.restore(); continue;
+            }
             const point = this.screen(shot.x, shot.y);
             if (!this.inView(point, 12)) continue;
             const speed = Math.hypot(shot.vx, shot.vy);
@@ -682,10 +691,10 @@ export class ConquestRenderer {
         const scale = Math.max(0.65, this.camera.zoom);
         ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(player.angle); ctx.scale(scale, scale);
         ctx.save();
-        ctx.globalAlpha *= 0.16;
+        ctx.globalAlpha *= 0.32;
         ctx.fillStyle = player.color || ownColor;
         ctx.shadowColor = player.color || ownColor;
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 14;
         ctx.beginPath(); ctx.ellipse(0, -2, 8, 15, 0, 0, fullCircle); ctx.fill();
         ctx.restore();
         ctx.fillStyle = '#627b83'; ctx.fillRect(-8, 3, 3, 7); ctx.fillRect(5, 3, 3, 7);
@@ -693,14 +702,16 @@ export class ConquestRenderer {
         ctx.fillStyle = '#e2e5d5'; ctx.fillRect(-3, -13, 6, 5); ctx.fillRect(-1, -16, 2, 3);
         ctx.fillStyle = '#83999a'; ctx.fillRect(2, -8, 3, 14);
         ctx.fillStyle = '#153546'; ctx.fillRect(-3, -7, 5, 4);
-        ctx.fillStyle = player.color || ownColor; ctx.fillRect(-5, 2, 10, 3);
+        ctx.fillStyle = player.color || ownColor; ctx.fillRect(-5, 0, 10, 5);
+        ctx.fillRect(-8, 3, 3, 7); ctx.fillRect(5, 3, 3, 7);
+        ctx.fillRect(-3, -13, 6, 2);
         ctx.fillStyle = player.cargo > 0 ? '#e8c57b' : '#4c6671'; ctx.fillRect(5, -3, 3, 5);
         ctx.fillStyle = '#303d48'; ctx.fillRect(-3, 7, 6, 3);
         ctx.restore();
         ctx.save(); ctx.translate(point.x, point.y);
         ctx.rotate(Number.isFinite(player.aimAngle) ? player.aimAngle : player.angle - Math.PI / 2);
         ctx.scale(scale, scale);
-        for (const offset of ((player.rocketTier || 0) >= 2 ? [-5, 5] : [0])) {
+        for (const offset of (weaponStats(player).double && !weaponStats(player).laser ? [-5, 5] : [0])) {
         ctx.save(); ctx.translate(0, offset);
         ctx.fillStyle = '#112331'; ctx.fillRect(-3, -3, 14, 6);
         ctx.fillStyle = '#e3dbc5'; ctx.fillRect(1, -1, 11, 2);
@@ -858,7 +869,7 @@ export class ConquestRenderer {
             if (!hovering && !hackers.length) continue;
             ctx.save(); ctx.setLineDash([]);
             if (hovering) {
-                const rangeRadius = (body.radius + tuning.shipRadius + tuning.hackingDistance) * this.camera.zoom / 2;
+                const rangeRadius = (planetShield(body, world.planets[body.id]).radius) * this.camera.zoom / 2;
                 ctx.strokeStyle = '#9ba9ae'; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
                 ctx.setLineDash([1, 4]);
                 ctx.beginPath(); ctx.arc(center.x, center.y, rangeRadius, 0, fullCircle); ctx.stroke();
@@ -905,7 +916,7 @@ export class ConquestRenderer {
         if (player.docked || player.deadUntil > world.elapsed) return;
         const body = nearestRelay(player, world);
         const status = dockingStatus(world, body.id);
-        if (status.distance > (body.station ? tuning.dockingAssistDistance : tuning.hackingDistance)) return;
+        if (status.distance > (body.station ? tuning.dockingAssistDistance : planetInteractionDistance(body, world.planets[body.id]))) return;
         const dock = dockingPoint(body);
         if (!body.station) return;
         const ghost = { ...player, x: dock.x, y: dock.y, angle: 0 };
@@ -927,20 +938,21 @@ export class ConquestRenderer {
     // Keep the selected relay or pad visible through distance labels and an edge direction arrow.
     drawGuidance(world) {
         const player = world.player;
-        const target = targetFor(world);
-        if (!target || !target.body.station) return;
+        const firstPlanet = world.stats.captures === 0 ? nearestCapturablePlanet(world) : null;
+        const target = firstPlanet ? { body: firstPlanet, x: firstPlanet.x, y: firstPlanet.y, type: 'planet' } : targetFor(world);
+        if (!target) return;
         const point = this.screen(target.x, target.y);
         const distance = Math.hypot(player.x - target.x, player.y - target.y);
         const distanceText = distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
         const relay = target.type === 'relay' || target.type === 'station';
         const moonRelay = target.body.id === 'moon';
         const explainCargo = !target.body.station && world.stats.captures === 0;
-        const largeArrow = moonRelay || explainCargo;
+        const largeArrow = Boolean(firstPlanet) || moonRelay || explainCargo;
         const text = `${target.body.name.toUpperCase()} ${target.body.station ? 'STATION' : 'PLANET'} / ${distanceText}`;
         const width = this.canvas.width;
         const height = this.canvas.height;
         const visible = point.x >= 22 && point.x <= width - 22 && point.y >= 28 && point.y <= height - 28;
-        const color = targetColor;
+        const color = firstPlanet ? '#ffd45c' : targetColor;
         const ctx = this.context;
         ctx.save();
         ctx.globalAlpha = this.reducedMotion ? 1 : .45 + .55 * Math.abs(Math.sin(this.visualTime * 4));
@@ -950,13 +962,13 @@ export class ConquestRenderer {
             const size = relay ? 14 : 18;
             ctx.strokeRect(point.x - size, point.y - size, size * 2, size * 2);
             ctx.fillStyle = color; ctx.beginPath();
-            const arrowHalfWidth = largeArrow ? 14 : 7;
+            const arrowHalfWidth = largeArrow ? 22 : 7;
             ctx.moveTo(point.x, point.y - size - 18); ctx.lineTo(point.x - arrowHalfWidth, point.y - size - 18 - arrowHalfWidth * 1.6);
             ctx.lineTo(point.x + arrowHalfWidth, point.y - size - 18 - arrowHalfWidth * 1.6); ctx.fill();
             captionX = point.x; captionY = point.y + size + 20;
             this.label(text, point.x, point.y - size - 6, color, 'center', true);
             if (!relay && distance < 300) {
-                this.label('CURSOR ON PLANET · E TO HACK', point.x, point.y + size + 12, color, 'center', true);
+                this.label('AIM AT PLANET · PRESS E', point.x, point.y + size + 12, color, 'center', true);
             }
         } else {
             const centerX = width / 2;
@@ -967,16 +979,16 @@ export class ConquestRenderer {
             const x = centerX + dx * factor;
             const y = centerY + dy * factor;
             ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx));
-            const arrowSize = largeArrow ? 20 : 10;
+            const arrowSize = largeArrow ? 28 : 10;
             ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(arrowSize, 0); ctx.lineTo(-arrowSize * .6, -arrowSize * .6); ctx.lineTo(-arrowSize * .6, arrowSize * .6); ctx.fill(); ctx.restore();
             captionX = x; captionY = y + 28;
             this.label(text, x, y - 12, color, 'center', true);
         }
         if (explainCargo) {
-            const lines = width >= 320 ? ['CURSOR ON PLANET + E · ENTER NUMBERS 1–4'] : ['CAPTURE PLANETS', 'TO GAIN CARGO'];
+            const lines = width >= 320 ? ['CAPTURE PLANET'] : ['CAPTURE PLANET'];
             for (let index = 0; index < lines.length; index++) {
                 this.label(lines[index], captionX, Math.min(height - 6 - (lines.length - 1) * 15, captionY) + index * 15,
-                    '#fff0b1', 'center', true, 12);
+                    '#ffd45c', 'center', true, 14);
             }
         }
         ctx.restore();

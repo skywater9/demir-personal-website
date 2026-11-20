@@ -1,14 +1,14 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-planet-levels-repair';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-upgrade-tracks-capture';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
-    setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet, repairTurret,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-planet-levels-repair';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-planet-levels-repair';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-planet-levels-repair';
+    setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-upgrade-tracks-capture';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-upgrade-tracks-capture';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-upgrade-tracks-capture';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
     detached: 'detached', hackStarted: 'hackStarted', hackProgress: 'hackProgress', hackCancelled: 'hackCancelled',
-    rocketUpgraded: 'upgraded', captured: 'captured', cargoCollected: 'cargoCollected', cargoDropped: 'cargoDropped', cargoPickedUp: 'cargoPickedUp',
+    rocketUpgraded: 'upgraded', weaponUpgraded: 'upgraded', captured: 'captured', cargoCollected: 'cargoCollected', cargoDropped: 'cargoDropped', cargoPickedUp: 'cargoPickedUp',
     turretRepaired: 'upgraded', refuelStarted: 'refuelStarted', refuelEnded: 'refuelEnded', upgraded: 'upgraded' };
 
 // Format simulation time as minutes and tenths without depending on a wall-clock timer.
@@ -157,17 +157,14 @@ export class ConquestApp {
         this.ui.chatInput.addEventListener('focus', () => this.clearInput());
         this.ui.interactButton.addEventListener('click', () => this.interact());
         this.ui.upgradeButton.addEventListener('click', () => this.upgrade());
-        this.ui.turretRepairs.addEventListener('click', event => {
-            const button = event.target.closest('[data-turret-index]');
-            if (button && !button.disabled) this.repairTurret(Number(button.dataset.turretIndex));
-        });
         this.ui.rocketUpgradeButton.addEventListener('click', () => this.rocketUpgrade());
+        this.ui.weaponUpgradeButton.addEventListener('click', () => this.weaponUpgrade());
         this.ui.leaveGalaxyButton.addEventListener('click', () => {
             if (this.connection) this.emit('left');
             this.connection?.leave(); this.hasSession = false; this.running = false; this.showScreen('menu'); this.updateMenu();
         });
         this.ui.selfDestructButton.addEventListener('click', () => this.requestSelfDestruct());
-        this.ui.digitButton.addEventListener('click', () => this.enterDigit(this.world.hack?.digit));
+        this.ui.digitButton.addEventListener('click', () => this.pressCapture());
         this.ui.mapCanvas.addEventListener('click', event => {
             const target = this.renderer.mapTarget?.(event.clientX, event.clientY);
             if (target) this.chooseTarget(target.bodyId);
@@ -250,25 +247,25 @@ export class ConquestApp {
         // Keep shop shortcuts local to an owned relay; held keys must never repeat purchases.
         const shopId = this.world.player.shoppingOn || this.world.player.docked;
         const ownedRelay = shopId && !this.world.hack && this.world.planets[shopId]?.owner === this.world.player.id;
-        if (ownedRelay && (event.code === 'KeyT' || event.code === 'KeyR')) {
+        if (ownedRelay && ['KeyT', 'KeyR', 'KeyF'].includes(event.code)) {
             event.preventDefault();
             if (!event.repeat) {
                 if (event.code === 'KeyT') this.upgrade();
+                else if (event.code === 'KeyF') this.weaponUpgrade();
                 else this.rocketUpgrade();
             }
             return;
         }
-        const digit = /^(?:Digit|Numpad)([0-9])$/.exec(event.code);
-        if (digit && !event.repeat) {
-            event.preventDefault();
-            this.enterDigit(digit[1]);
-            return;
-        }
         if (event.code === 'KeyE') {
             event.preventDefault();
+            const freshPress = !event.repeat && !this.keys.has('KeyE');
             this.keys.add('KeyE');
+            if (this.world.hack) {
+                if (freshPress) this.pressCapture();
+                return;
+            }
             const body = bodies.find(item => item.id === this.interactionBody());
-            if (!event.repeat && (this.world.player.docked || this.world.player.shoppingOn || this.world.hack || body)) this.interact();
+            if (freshPress && (this.world.player.docked || this.world.player.shoppingOn || this.world.hack || body)) this.interact();
             return;
         }
         if (event.code === 'Space' && !this.ui.fuelPrompt.hidden && this.world.player.fuel <= 0) {
@@ -414,7 +411,7 @@ export class ConquestApp {
         this.ui.chatMessages.replaceChildren();
         this.ui.chatForm.hidden = true;
         this.ui.chatInput.value = '';
-        this.message('Follow the flashing arrow to MOON RELAY. Press E to dock, then hack it.', 12);
+        this.message('Follow CAPTURE PLANET. Aim at the planet and press E, then keep pressing E to capture.', 12);
         this.updateHud({});
         this.checkpoint();
     }
@@ -483,33 +480,45 @@ export class ConquestApp {
         this.checkpoint();
     }
 
-    // Submit one intended digit without recording the raw keyboard input.
-    async enterDigit(digit) {
-        if (this.mode !== 'flight' || !this.world.hack || digit === undefined) return;
-        let correct = Number(digit) === this.world.hack.digit;
-        if (this.connection) {
-            const challengeId = this.world.hack.challengeId;
-            const result = await this.connection.action('digit', { digit: Number(digit), challengeId });
-            correct = result.ok;
-        } else {
-            correct = hackDigit(this.world, String(digit)).ok;
-            hackDigit(this.world, null);
-        }
-        // Flash the keyboard cue without moving it or changing capture rules.
-        const color = correct ? '#8cdeb0' : '#ff6666';
+    // Submit one fresh E press; server timing and action IDs guard repeated or duplicated input.
+    async pressCapture() {
+        if (this.mode !== 'flight' || !this.world.hack) return;
+        const challengeId = this.world.hack.challengeId;
+        const result = this.connection ? await this.connection.action('capturePress', { challengeId })
+            : capturePress(this.world, { challengeId });
+        const color = result.ok ? '#8cdeb0' : '#ff6666';
         this.ui.digitButton.animate?.([
             { backgroundColor: color, borderColor: color, color: '#071018' },
             { backgroundColor: '#22343e', borderColor: '#71878b', color: '#f6fff9' }
-        ], { duration: 220, easing: 'ease-out' });
-        this.drainEvents();
-        this.updateHud(this.activeInput || {});
-        this.checkpoint();
+        ], { duration: 120, easing: 'ease-out' });
+        this.drainEvents(); this.updateHud(this.activeInput || {}); this.checkpoint();
+    }
+
+    // Keep the legacy number-entry method inert now that capture uses E exclusively.
+    async enterDigit() { return { ok: false, reason: 'Press E to capture.' }; }
+
+    // Purchase weapon improvements independently from the booster at either owned shop type.
+    async weaponUpgrade() {
+        if (this.mode !== 'flight') return;
+        const result = this.connection ? await this.connection.action('weaponUpgrade') : upgradeWeapon(this.world);
+        if (!result.ok) this.message(result.reason);
+        this.drainEvents(); this.updateHud({}); this.checkpoint();
+    }
+
+    // Describe both losses consistently on the death notice and its temporary notification.
+    upgradeLossMessage(player = this.world.player) {
+        const losses = [];
+        if (player.lastLostTier) losses.push(`BOOSTER ${player.lastLostTier} → ${player.rocketTier}`);
+        if (player.lastLostWeaponTier) losses.push(`WEAPON ${player.lastLostWeaponTier} → ${player.weaponTier}`);
+        return losses.length ? `UPGRADE LOST: ${losses.join(' · ')}` : 'ROCKET LOST';
     }
 
     // Spend carried cargo only on the planet belonging to the currently attached owned relay.
     async upgrade() {
         if (this.mode !== 'flight') return;
-        const result = this.connection ? await this.connection.action('planetUpgrade') : upgradePlanet(this.world);
+        const repairing = turretRepairStatus(this.world).brokenCount > 0;
+        const result = this.connection ? await this.connection.action(repairing ? 'repairTurrets' : 'planetUpgrade')
+            : repairing ? repairTurrets(this.world) : upgradePlanet(this.world);
         if (result?.ok === false) {
             this.emit('upgradeRejected');
             this.message(result.reason || 'More cargo is needed for this upgrade.');
@@ -517,43 +526,6 @@ export class ConquestApp {
         this.drainEvents();
         this.updateHud({});
         this.checkpoint();
-    }
-
-    // Submit a repair through the same authoritative purchase path as planet upgrades.
-    async repairTurret(turretIndex) {
-        if (this.mode !== 'flight') return;
-        const result = this.connection ? await this.connection.action('repairTurret', { turretIndex }) : repairTurret(this.world, turretIndex);
-        if (!result.ok) this.message(result.reason);
-        this.drainEvents();
-        this.updateHud({});
-        this.checkpoint();
-    }
-
-    // Reuse repair buttons across frames so countdown updates do not interrupt clicks or focus.
-    updateTurretRepairs(body) {
-        const container = this.ui.turretRepairs;
-        const planet = this.world.planets[body.id];
-        const destroyed = body.station ? [] : (planet.turrets || []).map((turret, index) => ({ turret, index }))
-            .filter(({ turret }) => turret.health === 0);
-        const key = `${body.id}:${destroyed.map(({ index }) => index).join(',')}`;
-        if (container.dataset.repairKey !== key) {
-            container.replaceChildren();
-            for (const { index } of destroyed) {
-                const button = this.page.createElement('button');
-                button.type = 'button'; button.dataset.turretIndex = index;
-                container.append(button);
-            }
-            container.dataset.repairKey = key;
-        }
-        for (const { turret, index } of destroyed) {
-            const button = container.querySelector(`[data-turret-index="${index}"]`);
-            const seconds = Math.max(0, Math.ceil((turret.repairAt || 0) - this.world.elapsed));
-            const cost = planet.level * 2;
-            button.textContent = seconds ? `TURRET ${index + 1} · ${seconds}s` : `REPAIR ${index + 1} · ${cost} ▣`;
-            button.setAttribute('aria-label', `Repair turret ${index + 1} for ${cost} cargo${seconds ? `, ready in ${seconds} seconds` : ''}`);
-            button.disabled = seconds > 0 || this.world.player.cargo < cost;
-        }
-        container.hidden = destroyed.length === 0;
     }
 
     // Let E use the nearby home station without precise aiming, while planets still require a cursor target.
@@ -665,7 +637,8 @@ export class ConquestApp {
             if (event.type === 'upgraded') this.message(`${body?.name || 'Planet'} defenses upgraded.`, 5);
             if (event.type === 'died') {
                 this.clearInput();
-                this.message(event.previousTier > 0 ? `ROCKET UPGRADE LOST: TIER ${event.previousTier} → TIER ${event.rocketTier}` : event.reason || 'Rocket destroyed. Cargo dropped.', 5);
+                this.message(this.upgradeLossMessage({ lastLostTier: event.previousTier, rocketTier: event.rocketTier,
+                    lastLostWeaponTier: event.previousWeaponTier, weaponTier: event.weaponTier }), 5);
             }
             if (event.type === 'respawned') this.message('Respawned at home. Territory retained; tank full.', 6);
         }
@@ -751,7 +724,7 @@ export class ConquestApp {
             + tuning.rcsFuelRate * (Math.abs(input.rcsX || 0) + Math.abs(input.rcsY || 0))
             + tuning.rotationFuelRate * turning : 0;
         const maximum = tuning.mainFuelRate + tuning.rcsFuelRate * 2 + tuning.rotationFuelRate;
-        const usage = Math.round(draw * ((player.rocketTier || 0) >= 3 ? .8 : 1) / maximum * 100);
+        const usage = Math.round(draw * boosterStats(player).fuelFactor / maximum * 100);
         const damage = this.now() < this.fuelDamageUntil ? this.fuelDamageAmount : 0;
         const usageShare = player.fuel > 0 ? Math.min(100, usage * 0.25 / player.fuel * 100) : 0;
         const damageShare = player.fuel > 0 ? Math.min(100, damage / player.fuel * 100) : 0;
@@ -770,7 +743,7 @@ export class ConquestApp {
         const serviced = player.landedOn && world.planets[player.landedOn]?.owner === player.id;
         this.ui.fuelPrompt.hidden = this.mode !== 'flight' || player.fuel > 0 || Boolean(player.deadUntil) || Boolean(serviced);
         this.ui.respawnNotice.hidden = !player.deadUntil;
-        if (player.deadUntil) this.text('respawnNotice', `${player.lastLostTier ? `ROCKET UPGRADE LOST: TIER ${player.lastLostTier} → TIER ${player.rocketTier} · ` : 'ROCKET LOST · '}RESPAWN IN ${Math.max(0, player.deadUntil - world.elapsed).toFixed(1)}s`);
+        if (player.deadUntil) this.text('respawnNotice', `${this.upgradeLossMessage(player)} · RESPAWN IN ${Math.max(0, player.deadUntil - world.elapsed).toFixed(1)}s`);
         this.ui.serverChat.style.bottom = `${(this.ui.flightStatus.offsetHeight || 86) + 24}px`;
         this.updateDocking();
         if (world.elapsed > this.messageUntil) this.ui.flightMessage.hidden = true;
@@ -835,29 +808,39 @@ export class ConquestApp {
         this.text('dockCurrentSpeed', `${speed.toFixed(1)} m/s`);
         this.text('dockTargetSpeed', `${tuning.dockingSpeed.toFixed(1)} m/s`);
         this.ui.dockVelocity.classList.toggle('is-ready', speedReady);
+        const interactKey = this.ui.interactButton.querySelector('kbd');
+        if (interactKey) interactKey.hidden = Boolean(world.hack);
         this.ui.interactButton.disabled = !shopOpen && !world.hack && !interactionReady;
         this.ui.interactButton.classList.toggle('is-ready', !shopOpen && interactionReady);
-        this.text('interactLabel', world.hack ? 'to Cancel' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');
+        this.text('interactLabel', world.hack ? 'Cancel capture' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');
         if (world.hack) {
             const hack = world.hack;
             const progress = hack.progress ?? hack.count ?? 0;
             const required = hack.required ?? hack.total ?? 1;
-            this.text('digitButton', String(hack.digit));
-            const maxDigit = Math.min(6, 3 + world.planets[hack.bodyId].level);
-            this.text('hackInstruction', `Enter the displayed numbers · 1–${maxDigit}`);
-            this.ui.digitButton.setAttribute('aria-label', `Enter the displayed number, 1 through ${maxDigit}`);
+            this.text('digitButton', 'E');
+            this.text('hackInstruction', 'Press E repeatedly · progress decays when idle');
+            this.ui.digitButton.setAttribute('aria-label', 'Press E repeatedly to capture');
 
         } else if (shopOpen) {
             const upgrade = nextUpgrade(world);
             const rocket = nextRocketUpgrade(world);
             this.ui.upgradeButton.closest('.upgrade-option').hidden = Boolean(body.station);
-            this.ui.rocketUpgradeButton.closest('.upgrade-option').hidden = !body.station;
+            this.ui.rocketUpgradeButton.closest('.upgrade-option').hidden = false;
+            this.ui.weaponUpgradeButton.closest('.upgrade-option').hidden = false;
+            this.ui.upgradePanel.classList.toggle('station-shop', Boolean(body.station));
+            const weapon = nextWeaponUpgrade(world);
+            this.ui.weaponUpgradeButton.disabled = !weapon.affordable;
+            this.text('weaponUpgradeLabel', `WEAPON ${weapon.tier}/10`);
+            this.text('weaponUpgradeName', weapon.name);
+            this.text('weaponUpgradeCostValue', weapon.cost);
+            this.ui.weaponUpgradeCost.hidden = !weapon.available;
+            this.ui.weaponUpgradeButton.setAttribute('aria-label', `Weapon upgrade ${weapon.name}, ${weapon.cost} cargo`);
             this.ui.rocketUpgradeButton.disabled = !rocket.affordable;
-            this.text('rocketUpgradeLabel', `ROCKET ${rocket.tier}/4`);
+            this.text('rocketUpgradeLabel', `BOOSTER ${rocket.tier}/10`);
             this.text('rocketUpgradeName', rocket.name);
             this.text('rocketUpgradeCostValue', rocket.cost);
             this.ui.rocketUpgradeCost.hidden = !rocket.available;
-            this.ui.rocketUpgradeButton.setAttribute('aria-label', `Rocket upgrade ${rocket.name}, ${rocket.cost} cargo`);
+            this.ui.rocketUpgradeButton.setAttribute('aria-label', `Booster upgrade ${rocket.name}, ${rocket.cost} cargo`);
             this.text('upgradeDescription', !upgrade?.available ? upgrade?.reason || 'No upgrades available.' : upgrade.description);
             this.text('planetUpgradeLabel', upgrade?.available ? 'PLANET' : 'PLANET / MAX');
             this.ui.planetUpgradeCost.hidden = !upgrade?.available;
@@ -866,7 +849,17 @@ export class ConquestApp {
                 ? `Upgrade planet for ${upgrade.cost} cargo` : 'Planet fully upgraded');
             this.text('upgradeName', upgrade?.available ? upgrade.name : 'FULLY UPGRADED');
             this.ui.upgradeButton.disabled = !upgrade?.available || player.cargo < upgrade.cost;
-            this.updateTurretRepairs(body);
+            const repair = turretRepairStatus(world);
+            if (repair.brokenCount) {
+                const seconds = Math.max(0, Math.ceil(repair.readyAt - world.elapsed));
+                this.text('planetUpgradeLabel', 'REPAIR TURRETS');
+                this.ui.planetUpgradeCost.hidden = false;
+                this.text('planetUpgradeCostValue', repair.cost);
+                this.text('upgradeName', seconds ? `REPAIR READY IN ${seconds}s` : `${repair.brokenCount} TURRETS`);
+                this.text('upgradeDescription', 'Repair all turrets before upgrading.');
+                this.ui.upgradeButton.disabled = !repair.affordable;
+                this.ui.upgradeButton.setAttribute('aria-label', `Repair ${repair.brokenCount} turrets for ${repair.cost} cargo`);
+            }
         }
     }
 

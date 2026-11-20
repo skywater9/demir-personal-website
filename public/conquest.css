@@ -317,6 +317,7 @@ kbd { font:inherit; color:#bac8c7; font-size:8px; }
 @keyframes range-warning-pulse { from { opacity:.55; } to { opacity:.95; } }
 @media(prefers-reduced-motion:reduce) { .capture-range-notice { animation:none; } }
 
-/* Keep per-gun repairs compact inside the existing planet shop. */
-.turret-repairs { display: grid; gap: 4px; max-height: 160px; overflow-y: auto; }
-.turret-repairs button { padding: 6px 8px; color: #edb368; font-size: 12px; }
+/* Show independent rocket tracks beside planet defenses in the existing compact shop. */
+#upgradePanel .upgrade-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#upgradePanel.station-shop .upgrade-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.relay-card:has(#upgradePanel:not([hidden])) { width: 510px; max-width: calc(100% - 12px); max-height: calc(100% - 12px); overflow-y: auto; }

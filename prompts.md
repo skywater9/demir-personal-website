@@ -1161,3 +1161,75 @@ planet upgrades can go on until like 20
 193.
 
 also after clicking the capturing dialogue, the player can move their mouse away from the planet and continue capturing as long as the rocket is within range, if rocket goes out of range capturing sequence is reset
+
+194.
+
+Also I want to revamp rocket upgrades. Same with planets each upgrade does these things: make rocket more maneuverable and improve weapons. there are 20 upgrade levels, like ive said before maneuverability is an initial acceleration curve that makes the rocket accelerate faster at low speeds. this should increase incrementally through the 20 upgrades. Also players should be able to choose between weapon upgrade vs. rocket upgrade, rocket upgrade does what i just said, and weapon upgrade makes weapon shoot faster, last a bit longer, and at level 5 turn into double shooter, and at level 10 turn into alternating double shooter, and at level 20 turn into a laser that travels a very long range instantly. the laser is same color as the player. Each planet will have both rocket and planet shops, and the home station will have only rocket upgrade shops.
+
+195.
+
+two independent tracks each to level 10 actually, and halve the milestone upgrade levels i talked about, same with planets, should only go up to 10. Also the rocket upgrades should be called BOOSTER and WEAPON upgrades. yes for what the planets and stations should offer. death removes one from both, and notifies user on death
+
+196.
+
+also, Also I want to make the planet capturing instead of a code be so that you have to spam E. It has the same pie chart and everything, and same visuals with multiple people fighting, but you have to press E a certain amount of times. The pie chart also has a slight velocity backward so you cant be too slow at spamming or it will go back to zero
+
+197.
+
+also the planet forcie field expanding also expands the connecting radius, for accessing the shop and planet interface
+
+198.
+
+also the planet spam battle should become longer as planet is upgraded
+
+199.
+
+for capturing
+
+200.
+
+around the black hole should be orbiting cargo, and each cargo around the black hole should be like 5 cargo value
+
+201.
+
+also booster upgrades should also increase efficiency of booster, so uses less fuel
+
+202.
+
+also make turret hitboxes easier for enemies to hit
+
+203.
+
+also when an enemy captures a planet, they get all the cargo, just the upgrades are reset
+
+204.
+
+also for planet upgrades after 5, new turrets should be double shooters
+
+205.
+
+, doesnt directly transfer stored cargo, it just becomes available to collect
+
+206.
+
+make refueling faster also
+
+207.
+
+also it should not notify a player when their planet is being attacked, only when all turrets are down
+
+208.
+
+also an adjacent planets turrets can help defend a planet that is being attacked, if both are owned by the same person, then when the player crosses the shield bubble of a planet all other planets in range can also aim turrets at the attacker
+
+209.
+
+instead of adding a repair dropdown, the REPAIR TURRETS text should just replace the planet upgrade text, you cant upgrade until all turrets are repaired.
+
+210.
+
+make the player color more apparent so the glow and rocket coloring is a bit stronger, and slight coloring on the cursor and line as well
+
+211.
+
+when you firsst spawn in, place a large yellow blinking arrow to the nearest planet and say CAPTURE PLANET
