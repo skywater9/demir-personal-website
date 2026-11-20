@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadiusFor, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, planetFuelSource, blackHole
-} from './conquestPhysics.mjs?v=20261120-soft-galaxy-edge';
+} from './conquestPhysics.mjs?v=20261120-cargo-capacity';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';

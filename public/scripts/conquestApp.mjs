@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-soft-galaxy-edge';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-cargo-capacity';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, shopQuotes, upgradePlanet, repairTurrets,
-    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-soft-galaxy-edge';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-soft-galaxy-edge';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-soft-galaxy-edge';
+    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-cargo-capacity';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-cargo-capacity';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-cargo-capacity';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',

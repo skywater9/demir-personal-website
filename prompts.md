@@ -1561,3 +1561,19 @@ there shouldn't be a 30-second boost to production, production should always be 
 292.
 
 also push to website, but keep server player progress, also befor remove the hard boundary, just make it harder to go out as you go outside
+
+293.
+
+user is reporting they come back to planet and no cargo has accumulated after a bunch of time, when it is level 1
+
+294.
+
+what are pickup slots?
+
+295.
+
+the whole galaxy should be able to have like 512 cargo
+
+296.
+
+deploy these changes

@@ -47,7 +47,9 @@ export function validateSave(data) {
         || world.elapsed < 0 || world.elapsed > 31536000 || !Number.isFinite(world.createdAt) || !Number.isFinite(world.updatedAt)
         || !Number.isInteger(world.eventCounter) || world.eventCounter < 0 || !world.planets
         || !Array.isArray(world.pickups) || !Array.isArray(world.projectiles)
-        || world.pickups.length > 64 || world.projectiles.length > 256) throw new Error('Invalid galaxy snapshot. Restore a valid backup before starting.');
+        || world.pickups.length > tuning.maxPickups || world.projectiles.length > tuning.maxProjectiles) {
+        throw new Error('Invalid galaxy snapshot. Restore a valid backup before starting.');
+    }
     if (world.galaxyExpanded !== undefined && typeof world.galaxyExpanded !== 'boolean') throw new Error('Invalid saved galaxy boundary.');
     const pilotLabels = starterStations.map((_, index) => `Pilot ${index + 1}`);
     const ids = Object.keys(world.players);

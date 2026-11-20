@@ -702,3 +702,5 @@ Within interaction range, hovering over a world draws a dotted line from the cur
 All three star systems and their planets are available from the start in an 8,400 m galaxy. When ten pilots are connected at once, the boundary expands to 10,000 m. The original worlds and eight starter stations keep their coordinates. Four extra starter stations give the room capacity for twelve pilots. The boundary stays expanded until the room is empty.
 
 Multiplayer shops show the server's price quote for each purchase. A changed quote requires a fresh purchase attempt before any cargo is charged.
+
+Owned planets accumulate cargo in one orbiting bundle that persists while the planet is owned. Each world can store 60 production units across its bundle and reserve. Loose drops give way to new planet cargo if the shared pool of 512 floating pickups is full.

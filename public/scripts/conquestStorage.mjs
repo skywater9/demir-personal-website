@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, roguePlanets, extraStarterStations, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-soft-galaxy-edge';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, extraStarterStations, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-cargo-capacity';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -53,8 +53,9 @@ export function validWorld(world) {
     if (world.planets[player.homeId].owner !== player.id) return false;
     if (!world.stats || !['captures', 'deaths', 'cargoCollected', 'shots'].every(key => Number.isFinite(world.stats[key]) && world.stats[key] >= 0)) return false;
     if (!world.target || !territoryBodies.some(body => body.id === world.target.bodyId) || !['planet', 'relay'].includes(world.target.type)) return false;
-    for (const key of ['events', 'projectiles', 'pickups']) {
-        if (!Array.isArray(world[key]) || world[key].length > 1500) return false;
+    const limits = { events: tuning.maxEvents, projectiles: tuning.maxProjectiles, pickups: tuning.maxPickups };
+    for (const [key, limit] of Object.entries(limits)) {
+        if (!Array.isArray(world[key]) || world[key].length > limit) return false;
     }
     for (const entity of [...world.projectiles, ...world.pickups]) {
         if (!['x', 'y'].every(key => Number.isFinite(entity[key]) && Math.abs(entity[key]) < 1e8)) return false;

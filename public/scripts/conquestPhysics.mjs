@@ -31,7 +31,7 @@ export const tuning = Object.freeze({
     cargoRate: 0.3, maxStock: 60, cargoSpawnInterval: 3.34, cargoSurfaceOffset: 70,
     planetCargoMultiplier: 2,
     cargoAltitudeVariation: 90, cargoOrbitSpeedVariation: 0.14,
-    pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
+    pickupLifetime: 90, pickupRadius: 30, maxPickups: 512,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
     cargoBubbleSpeed: 100, cargoBubbleAcceleration: 100,
     stellarCargoAttractionRadius: 520, blackHoleCargoAttractionRadius: 850,
@@ -627,11 +627,10 @@ export function killPlayer(world, reason = 'Destroyed.', cause = {}) {
     detach(world);
     stopRefueling(world);
     flushCollection(world);
-    if (player.cargo > 0) {
+    if (player.cargo > 0 && reserveCargoPickupSlot(world)) {
         world.pickups.push({ id: `cargo-${world.eventCounter + 1}`, x: player.x, y: player.y,
             vx: player.vx * 0.25, vy: player.vy * 0.25, amount: player.cargo,
             expiresAt: world.elapsed + tuning.pickupLifetime });
-        if (world.pickups.length > tuning.maxPickups) world.pickups.shift();
         emit(world, 'cargoDropped', { amount: player.cargo });
     }
     const previousTier = player.rocketTier || 0;
@@ -900,8 +899,44 @@ function repelRockets(world, dt) {
     }
 }
 
-// Release a banked cargo pod from a random surface point into a stable local orbit.
-function launchPlanetCargo(world, body, planet) {
+// Owned orbital cargo stays with its planet, including through a takeover.
+function isOwnedPlanetCargo(world, pickup) {
+    return Boolean(pickup.orbiting && world.planets[pickup.bodyId]?.owner);
+}
+
+// Fold older one-unit pods into the first bundle without losing their value or position.
+function groupPlanetCargo(world) {
+    const bundles = new Map();
+    for (let index = 0; index < world.pickups.length; index++) {
+        const pickup = world.pickups[index];
+        if (!isOwnedPlanetCargo(world, pickup) || !Number.isFinite(pickup.amount) || pickup.amount <= 0) continue;
+        const bundle = bundles.get(pickup.bodyId);
+        if (!bundle) {
+            bundles.set(pickup.bodyId, pickup);
+            continue;
+        }
+        bundle.amount += pickup.amount;
+        bundle.expiresAt = Math.max(bundle.expiresAt, pickup.expiresAt);
+        world.pickups.splice(index, 1);
+        index--;
+    }
+    return bundles;
+}
+
+// When the shared pool fills, replace an older loose drop before touching owned planet cargo.
+function reserveCargoPickupSlot(world) {
+    if (world.pickups.length < tuning.maxPickups) return true;
+    const looseIndex = world.pickups.findIndex(pickup => !isOwnedPlanetCargo(world, pickup));
+    if (looseIndex === -1) {
+        groupPlanetCargo(world);
+        return world.pickups.length < tuning.maxPickups;
+    }
+    world.pickups.splice(looseIndex, 1);
+    return true;
+}
+
+// Release the first bundle from a random surface point into a stable local orbit.
+function launchPlanetCargo(world, body, planet, amount) {
     const seed = world.elapsed * 13.37 + body.x * 0.001 + body.y * 0.002 + planet.nextCargoAt * 7.1;
     const random = value => {
         const sample = Math.sin(value * 12.9898) * 43758.5453;
@@ -922,11 +957,8 @@ function launchPlanetCargo(world, body, planet) {
         bodyId: body.id, orbiting: true, x, y,
         vx: -Math.sin(orbitAngle) * speed * direction,
         vy: Math.cos(orbitAngle) * speed * direction,
-        amount: body.id === blackHole.id ? tuning.blackHoleCargoValue
-            : systems.some(system => system.id === body.id) ? tuning.starCargoValue : 1,
+        amount,
         expiresAt: world.elapsed + tuning.pickupLifetime });
-    planet.stock -= 1;
-    planet.nextCargoAt = world.elapsed + tuning.cargoSpawnInterval / cargoProductionMultiplier(body);
 }
 
 // Ordinary captured planets produce cargo twice as fast as stellar bodies.
@@ -934,18 +966,32 @@ function cargoProductionMultiplier(body) {
     return celestialBodies.includes(body) ? 1 : tuning.planetCargoMultiplier;
 }
 
-// Bank and release cargo at the same rates in solo and multiplayer flight.
+// Accumulate production in one collectible bundle per world without changing the production rate.
 function producePlanetCargo(world, dt) {
+    const bundles = groupPlanetCargo(world);
     for (const body of territoryBodies) {
         const planet = world.planets[body.id];
         if (!planet.owner || body.station || isHome(world, body)) continue;
+        const bundle = bundles.get(body.id);
+        const podValue = body.id === blackHole.id ? tuning.blackHoleCargoValue
+            : systems.includes(body) ? tuning.starCargoValue : 1;
+        const orbitalStock = (bundle?.amount ?? 0) / podValue;
+        const bankLimit = Math.max(0, tuning.maxStock - orbitalStock);
         const multiplier = cargoProductionMultiplier(body);
-        planet.stock = Math.min(tuning.maxStock, planet.stock + tuning.cargoRate * multiplier * dt);
-        const nextCargoDeadline = world.elapsed + tuning.cargoSpawnInterval / multiplier;
+        // Preserve banked cargo in older saves that already exceed the combined cap.
+        if (planet.stock < bankLimit) {
+            planet.stock = Math.min(bankLimit, planet.stock + tuning.cargoRate * multiplier * dt);
+        }
+        const interval = tuning.cargoSpawnInterval / multiplier;
+        const nextCargoDeadline = world.elapsed + interval;
         planet.nextCargoAt = Number.isFinite(planet.nextCargoAt)
             ? Math.min(planet.nextCargoAt, nextCargoDeadline) : nextCargoDeadline;
-        if (planet.stock >= 1 && world.elapsed + 1e-9 >= planet.nextCargoAt
-            && world.pickups.length < tuning.maxPickups) launchPlanetCargo(world, body, planet);
+        if (planet.stock < 1 || bankLimit < 1 || world.elapsed + 1e-9 < planet.nextCargoAt) continue;
+        if (bundle) bundle.amount += podValue;
+        else if (reserveCargoPickupSlot(world)) launchPlanetCargo(world, body, planet, podValue);
+        else continue;
+        planet.stock -= 1;
+        planet.nextCargoAt = nextCargoDeadline;
     }
 }
 
@@ -1285,17 +1331,24 @@ function cargoInnerRadius(body) {
     return stellar ? dysonFrameRadius(body) + tuning.stellarCargoRailClearance : body.radius + 5;
 }
 
+const cargoCollisionBodies = [...planetBodies, ...celestialBodies].map(body => ({
+    body, radius: cargoInnerRadius(body)
+}));
+
 // Sweep cargo against planets and stellar rails, including pods restored inside a boundary.
 function moveCargoWithBounce(pickup, dt) {
     let remaining = dt;
     for (let bounce = 0; bounce < 3 && remaining > 1e-8; bounce++) {
         const start = { x: pickup.x, y: pickup.y };
         const end = { x: start.x + (pickup.vx || 0) * remaining, y: start.y + (pickup.vy || 0) * remaining };
+        const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
+        const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
         let hit = null;
-        for (const body of territoryBodies) {
-            if (body.station) continue;
-            const radius = cargoInnerRadius(body);
-            const inside = Math.hypot(start.x - body.x, start.y - body.y) < radius;
+        for (const { body, radius } of cargoCollisionBodies) {
+            if (body.x + radius < left || body.x - radius > right
+                || body.y + radius < top || body.y - radius > bottom) continue;
+            const dx = start.x - body.x, dy = start.y - body.y;
+            const inside = dx * dx + dy * dy < radius * radius;
             const fraction = inside ? 0 : circleHit(start, end, body, radius);
             if (fraction !== null && (!hit || fraction < hit.fraction)) hit = { body, radius, fraction };
         }
@@ -1388,7 +1441,8 @@ function attractBubbleCargo(pickup, player, body, dt, planet) {
 // Orbit planet cargo, drift death drops, expire, and collect with swept player-relative contact.
 function movePickups(world, dt, previousPlayer) {
     world.pickups = world.pickups.filter(pickup => {
-        if (pickup.expiresAt <= world.elapsed || !Number.isFinite(pickup.amount) || pickup.amount <= 0) return false;
+        if (!Number.isFinite(pickup.amount) || pickup.amount <= 0
+            || (pickup.expiresAt <= world.elapsed && !isOwnedPlanetCargo(world, pickup))) return false;
         const body = bodyFor(pickup.bodyId);
         const planetBody = body && !body.station ? body : null;
         if (planetBody) containPlanetCargo(pickup, planetBody, world.planets[planetBody.id]);
