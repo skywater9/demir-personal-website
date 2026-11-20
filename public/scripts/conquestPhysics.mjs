@@ -135,12 +135,11 @@ export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 
 // Reserve protected, widely separated outposts so the server can assign a random free home.
 export const starterStations = Object.freeze([
-    [2450, 600], [7900, 950], [-3900, 3300], [-7000, -12000],
-    [1000, -14500], [9500, -9600], [10300, -4200], [-8900, -2300]
+    [3422, -4833], [-1520, -3227], [-440, -8310], [-6027, -11149],
+    [933, -13324], [8328, -9061], [9024, -4363], [-7680, -2710]
 ].map(([x, y], index) => Object.freeze({
     id: `station-${index + 1}`, name: `Starter station ${index + 1}`, station: true,
-    x: Math.round(blackHole.x + (x - blackHole.x) * 0.87),
-    y: Math.round(blackHole.y + (y - blackHole.y) * 0.87),
+    x, y,
     radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
 })));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);

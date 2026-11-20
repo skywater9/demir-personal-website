@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, capturePress, migrateUpgradeTracks, repairTurret, repairTurrets,
+import { blackHole, bodies, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, capturePress, migrateUpgradeTracks, repairTurret, repairTurrets,
     upgradePlanet, upgradeRocket, upgradeWeapon, killPlayer, setTarget, nearestRelay, nearestCapturablePlanet, dockingPoint } from '../public/scripts/conquestPhysics.mjs';
 
 export const reconnectMs = 30000;
@@ -61,7 +61,8 @@ export class GameRoom {
         const occupiedHomes = Object.values(this.world.players).map(actor => bodies.find(body => body.id === actor.player.homeId)).filter(Boolean);
         const availableHomes = bodies.filter(body => body.station && freeHome(body)
             && occupiedHomes.every(occupied => Math.hypot(body.x - occupied.x, body.y - occupied.y) >= tuning.stationMinimumSeparation))
-            .sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
+            .sort((a, b) => Math.hypot(a.x - blackHole.x, a.y - blackHole.y)
+                - Math.hypot(b.x - blackHole.x, b.y - blackHole.y));
         if (!availableHomes.length) throw new Error('No free home station with enough separation.');
         const home = availableHomes[0];
         const id = `p-${randomUUID()}`;

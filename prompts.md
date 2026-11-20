@@ -1441,3 +1441,11 @@ decrease planet amount by 5, make even smaller
 262.
 
 deploy changes
+
+263.
+
+my station just spawned at almost the very edge, stations should still try to spawn more in the middle areas
+
+264.
+
+deploy
