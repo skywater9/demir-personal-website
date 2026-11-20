@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { bodies, territoryBodies, celestialBodies, roguePlanets, planetBodies, starterStations, dockingPoint, tuning, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, planetBodies, starterStations, dockingPoint, tuning, removeRetiredPlanets, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
 
 // Move legacy planet homes to stations without erasing earned territory or pilot resources.
 export function migrateStationHomes(data) {
@@ -114,7 +114,9 @@ export class GalaxyStore {
     async load() {
         try {
             const original = await readFile(this.file, 'utf8');
-            const result = migrateStationHomes(JSON.parse(original));
+            const snapshot = JSON.parse(original);
+            removeRetiredPlanets(snapshot?.world);
+            const result = migrateStationHomes(snapshot);
             const data = validateSave(result.data);
             if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1 || data.world.roguePlanetsVersion !== 4) {
                 await writeFile(`${this.file}.pre-upgrades-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });

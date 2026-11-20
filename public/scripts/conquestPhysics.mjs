@@ -66,7 +66,7 @@ export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black 
     x: systems.reduce((sum, system) => sum + system.x, 0) / systems.length,
     y: systems.reduce((sum, system) => sum + system.y, 0) / systems.length - 1800,
     radius: 320, gravity: 360 });
-export const galaxyRadius = 18000;
+export const galaxyRadius = 17200;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
@@ -115,22 +115,12 @@ export const roguePlanets = Object.freeze([
     ['Flintglass', 16200, -5600, 155, 4.7, '#889cab'],
     ['Nival', 11800, -15600, 150, 4.0, '#a6c0d0'],
     ['Umber', -1800, -16200, 175, 5.9, '#a98a79'],
-    ['Asterfall', -19000, -13500, 145, 3.8, '#829bb2'],
     ['Beryl', -18500, -4000, 155, 4.3, '#a98a79'],
-    ['Cresset', -19200, 5000, 165, 4.8, '#739a91'],
-    ['Dewpoint', -16800, 10400, 175, 5.3, '#a984a2'],
-    ['Eider', -11700, 13300, 185, 5.8, '#829bb2'],
-    ['Frostmere', -6700, 15700, 145, 6.3, '#a98a79'],
     ['Glimmer', -1200, 15000, 155, 3.8, '#739a91'],
     ['Hush', 4600, 14800, 165, 4.3, '#a984a2'],
-    ['Iolite', 9900, 13500, 175, 4.8, '#829bb2'],
-    ['Jasper', 15500, 15300, 185, 5.3, '#a98a79'],
-    ['Keel', 19600, 11100, 145, 5.8, '#739a91'],
-    ['Lark', 20200, 5100, 155, 6.3, '#a984a2'],
     ['Mistral', 20400, -1000, 165, 3.8, '#829bb2'],
     ['Nacreveil', 19900, -9300, 175, 4.3, '#a98a79'],
     ['Oriole', 17000, -14000, 185, 4.8, '#739a91'],
-    ['Pumice', 16800, -19000, 145, 5.3, '#a984a2'],
     ['Quartz', 6500, -19200, 155, 5.8, '#829bb2'],
     ['Rill', 200, -20600, 165, 6.3, '#a98a79'],
     ['Silt', -6600, -19500, 175, 3.8, '#739a91'],
@@ -140,7 +130,7 @@ export const roguePlanets = Object.freeze([
     const dy = y - blackHole.y;
     const distance = Math.hypot(dx, dy);
     // Contract the outskirts while keeping the developed inner clusters in place.
-    const scale = distance > 9000 ? (9000 + (distance - 9000) * 0.45) / distance : 1;
+    const scale = distance > 9000 ? (9000 + (distance - 9000) * 0.32) / distance : 1;
     return Object.freeze({
         id: `rogue-${name.toLowerCase()}`, name, x: Math.round(blackHole.x + dx * scale),
         y: Math.round(blackHole.y + dy * scale), radius, gravity, color, land: '#687982'
@@ -159,6 +149,24 @@ export const starterStations = Object.freeze([
 })));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
 export const territoryBodies = Object.freeze([...bodies, ...celestialBodies]);
+
+const retiredPlanetIds = new Set(['rogue-jasper', 'rogue-keel', 'rogue-dewpoint', 'rogue-eider', 'rogue-lark', 'rogue-frostmere', 'rogue-cresset', 'rogue-pumice', 'rogue-iolite', 'rogue-asterfall']);
+
+// Clear retired territory and redirect saved navigation to the pilot's home.
+export function removeRetiredPlanets(world) {
+    if (!world?.planets) return;
+    for (const id of retiredPlanetIds) delete world.planets[id];
+    for (const actor of world.players ? Object.values(world.players) : [world]) {
+        if (retiredPlanetIds.has(actor.target?.bodyId)) {
+            actor.target = { bodyId: actor.player.homeId, type: 'planet' };
+        }
+        if (retiredPlanetIds.has(actor.hack?.bodyId)) actor.hack = null;
+        for (const field of ['landedOn', 'shoppingOn', 'docked']) {
+            if (retiredPlanetIds.has(actor.player?.[field])) actor.player[field] = null;
+        }
+    }
+    if (Array.isArray(world.pickups)) world.pickups = world.pickups.filter(pod => !retiredPlanetIds.has(pod.bodyId));
+}
 
 // Give stars and the black hole longer capture sequences than planets.
 export function capturePressesRequired(body, level = 0) {

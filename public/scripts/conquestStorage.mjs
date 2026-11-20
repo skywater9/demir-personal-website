@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-compact-galaxy';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-smaller-galaxy';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -84,6 +84,7 @@ export class ConquestStore {
             if (raw.length > 2000000) throw new Error('Snapshot is too large.');
             const value = JSON.parse(raw);
             if (!value || value.version !== 2 || !Array.isArray(value.records) || value.records.length > 30) throw new Error('Invalid local galaxy record.');
+            removeRetiredPlanets(value.world);
             if (value.world && !validWorld(value.world)) throw new Error('Invalid galaxy snapshot.');
             if (value.world) migrateUpgradeTracks(value.world);
             if (!Number.isFinite(value.savedAt) || !Number.isFinite(value.lastEvent)) throw new Error('Invalid save timestamp.');

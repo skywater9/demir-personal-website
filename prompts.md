@@ -1381,3 +1381,11 @@ I didn't see more planets on the current website can you refresh server
 247.
 
 deploy changes
+
+248.
+
+make the map a bit smaller, you can remove 10 planets while doing so
+
+249.
+
+deploy
