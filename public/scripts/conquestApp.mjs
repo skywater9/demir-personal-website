@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-lower-gravity';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-equal-star-gravity';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-lower-gravity';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-lower-gravity';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-lower-gravity';
+    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-equal-star-gravity';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-equal-star-gravity';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-equal-star-gravity';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',

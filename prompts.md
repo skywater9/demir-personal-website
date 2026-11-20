@@ -1505,3 +1505,11 @@ and puch
 278.
 
 push
+
+279.
+
+reduce all stars gravity they should all be the same (10)
+
+280.
+
+and push this

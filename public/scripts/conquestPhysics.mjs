@@ -70,8 +70,8 @@ function systemPosition(angle) {
 // Each system record is its central lethal star.
 export const systems = Object.freeze([
     { id: 'sol', name: 'Sol', x: 0, y: 0, radius: 540, gravity: 10, color: '#fff0a6' },
-    { id: 'vega', name: 'Vega', ...systemPosition(-2 * Math.PI / 3), radius: 630, gravity: 22, color: '#e5f5ff' },
-    { id: 'ember', name: 'Ember', ...systemPosition(2 * Math.PI / 3), radius: 480, gravity: 16, color: '#ffc58f' }
+    { id: 'vega', name: 'Vega', ...systemPosition(-2 * Math.PI / 3), radius: 630, gravity: 10, color: '#e5f5ff' },
+    { id: 'ember', name: 'Ember', ...systemPosition(2 * Math.PI / 3), radius: 480, gravity: 10, color: '#ffc58f' }
 ].map(system => Object.freeze(system)));
 
 // Keep the central hazard separate from systems so it never generates planets.

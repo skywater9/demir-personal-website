@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadius, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-lower-gravity';
+} from './conquestPhysics.mjs?v=20261119-equal-star-gravity';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
