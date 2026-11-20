@@ -55,7 +55,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
 
     // Deliver only this pilot's state and relevant remote ships, never reconnect credentials or hidden code.
     function snapshots() {
-        for (const [id, client] of clients) send(client.socket, { type: 'state', world: room.view(id) });
+        for (const [id, client] of clients) send(client.socket, { type: 'state', world: room.flightView(id) });
         lastBroadcast = now();
     }
 
@@ -164,7 +164,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                         playerId = joined.playerId;
                         clients.set(playerId, { socket }); clearTimeout(joinDeadline);
                         await checkpoint();
-                        send(socket, { type: 'welcome', ...joined, lastActionId: room.sessions[playerId].lastActionId || 0, world: room.view(playerId) });
+                        send(socket, { type: 'welcome', ...joined, lastActionId: room.sessions[playerId].lastActionId || 0, world: room.flightView(playerId) });
                         events(); snapshots();
                     } catch (error) {
                         if (error.message === 'Room full. Try again shortly.' || error.message === 'No free home planet.') {
@@ -199,7 +199,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 if (message.type !== 'action' || !Number.isSafeInteger(message.actionId) || message.actionId < 1) return;
                 if (message.actionId <= (room.sessions[playerId].lastActionId || 0)) {
                     send(socket, { type: 'result', actionId: message.actionId, action: message.action,
-                        result: { ok: false, reason: 'Duplicate action ignored.' }, world: room.view(playerId) }); return;
+                        result: { ok: false, reason: 'Duplicate action ignored.' }, world: room.flightView(playerId) }); return;
                 }
                 room.sessions[playerId].lastActionId = message.actionId;
                 // Number entry and capture initiation must preserve cursor targeting and moving-flight controls.
@@ -208,7 +208,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 }
                 const result = room.action(playerId, message);
                 await checkpoint();
-                send(socket, { type: 'result', actionId: message.actionId, action: message.action, result, world: room.view(playerId) });
+                send(socket, { type: 'result', actionId: message.actionId, action: message.action, result, world: room.flightView(playerId) });
                 events(); snapshots();
             });
         });

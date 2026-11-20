@@ -1577,3 +1577,23 @@ the whole galaxy should be able to have like 512 cargo
 296.
 
 deploy these changes
+
+297.
+
+Optimize the server and local performance, to minimize lag and load on the computer, only do this locally for now send me testing local link
+
+298.
+
+the dotted lines from the cursor to the planet is only when cursor is on the planet, but it should be when the rocket is in range for any cursor position
+
+299.
+
+right now, for small planets all cargo just groups up so it just looks like there is one cargo, instead cargo should not be able to group up like that, also increase the total cargo amount to 2048, push to online
+
+300.
+
+continue
+
+301.
+
+try connecting again

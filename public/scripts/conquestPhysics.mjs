@@ -31,7 +31,7 @@ export const tuning = Object.freeze({
     cargoRate: 0.3, maxStock: 60, cargoSpawnInterval: 3.34, cargoSurfaceOffset: 70,
     planetCargoMultiplier: 2,
     cargoAltitudeVariation: 90, cargoOrbitSpeedVariation: 0.14,
-    pickupLifetime: 90, pickupRadius: 30, maxPickups: 512,
+    pickupLifetime: 90, pickupRadius: 30, maxPickups: 2048,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
     cargoBubbleSpeed: 100, cargoBubbleAcceleration: 100,
     stellarCargoAttractionRadius: 520, blackHoleCargoAttractionRadius: 850,
@@ -904,38 +904,34 @@ function isOwnedPlanetCargo(world, pickup) {
     return Boolean(pickup.orbiting && world.planets[pickup.bodyId]?.owner);
 }
 
-// Fold older one-unit pods into the first bundle without losing their value or position.
-function groupPlanetCargo(world) {
-    const bundles = new Map();
-    for (let index = 0; index < world.pickups.length; index++) {
-        const pickup = world.pickups[index];
+// Keep old bundle value in reserve so it can be released as separate pods.
+function indexPlanetCargo(world) {
+    const cargoByBody = new Map();
+    for (const pickup of world.pickups) {
         if (!isOwnedPlanetCargo(world, pickup) || !Number.isFinite(pickup.amount) || pickup.amount <= 0) continue;
-        const bundle = bundles.get(pickup.bodyId);
-        if (!bundle) {
-            bundles.set(pickup.bodyId, pickup);
-            continue;
+        const body = bodyFor(pickup.bodyId);
+        const planet = world.planets[pickup.bodyId];
+        if (!celestialBodies.includes(body) && pickup.amount > 1) {
+            planet.stock += pickup.amount - 1;
+            pickup.amount = 1;
         }
-        bundle.amount += pickup.amount;
-        bundle.expiresAt = Math.max(bundle.expiresAt, pickup.expiresAt);
-        world.pickups.splice(index, 1);
-        index--;
+        const cargo = cargoByBody.get(pickup.bodyId);
+        if (cargo) cargo.amount += pickup.amount;
+        else cargoByBody.set(pickup.bodyId, { amount: pickup.amount, first: pickup });
     }
-    return bundles;
+    return cargoByBody;
 }
 
 // When the shared pool fills, replace an older loose drop before touching owned planet cargo.
 function reserveCargoPickupSlot(world) {
     if (world.pickups.length < tuning.maxPickups) return true;
     const looseIndex = world.pickups.findIndex(pickup => !isOwnedPlanetCargo(world, pickup));
-    if (looseIndex === -1) {
-        groupPlanetCargo(world);
-        return world.pickups.length < tuning.maxPickups;
-    }
+    if (looseIndex === -1) return false;
     world.pickups.splice(looseIndex, 1);
     return true;
 }
 
-// Release the first bundle from a random surface point into a stable local orbit.
+// Release a separate pod from a random surface point into a stable local orbit.
 function launchPlanetCargo(world, body, planet, amount) {
     const seed = world.elapsed * 13.37 + body.x * 0.001 + body.y * 0.002 + planet.nextCargoAt * 7.1;
     const random = value => {
@@ -966,16 +962,17 @@ function cargoProductionMultiplier(body) {
     return celestialBodies.includes(body) ? 1 : tuning.planetCargoMultiplier;
 }
 
-// Accumulate production in one collectible bundle per world without changing the production rate.
+// Release separate planet pods and keep one slot available for each unrepresented world.
 function producePlanetCargo(world, dt) {
-    const bundles = groupPlanetCargo(world);
+    const cargoByBody = indexPlanetCargo(world);
+    let reserved = territoryBodies.filter(body => !body.station && !cargoByBody.has(body.id)).length;
     for (const body of territoryBodies) {
         const planet = world.planets[body.id];
         if (!planet.owner || body.station || isHome(world, body)) continue;
-        const bundle = bundles.get(body.id);
+        const cargo = cargoByBody.get(body.id);
         const podValue = body.id === blackHole.id ? tuning.blackHoleCargoValue
             : systems.includes(body) ? tuning.starCargoValue : 1;
-        const orbitalStock = (bundle?.amount ?? 0) / podValue;
+        const orbitalStock = (cargo?.amount ?? 0) / podValue;
         const bankLimit = Math.max(0, tuning.maxStock - orbitalStock);
         const multiplier = cargoProductionMultiplier(body);
         // Preserve banked cargo in older saves that already exceed the combined cap.
@@ -987,9 +984,14 @@ function producePlanetCargo(world, dt) {
         planet.nextCargoAt = Number.isFinite(planet.nextCargoAt)
             ? Math.min(planet.nextCargoAt, nextCargoDeadline) : nextCargoDeadline;
         if (planet.stock < 1 || bankLimit < 1 || world.elapsed + 1e-9 < planet.nextCargoAt) continue;
-        if (bundle) bundle.amount += podValue;
-        else if (reserveCargoPickupSlot(world)) launchPlanetCargo(world, body, planet, podValue);
-        else continue;
+        if (cargo && celestialBodies.includes(body)) {
+            cargo.first.amount += podValue;
+        } else {
+            if (cargo && world.pickups.length >= tuning.maxPickups - reserved) continue;
+            if (!reserveCargoPickupSlot(world)) continue;
+            launchPlanetCargo(world, body, planet, podValue);
+            if (!cargo) reserved--;
+        }
         planet.stock -= 1;
         planet.nextCargoAt = nextCargoDeadline;
     }

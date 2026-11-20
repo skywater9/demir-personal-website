@@ -703,4 +703,4 @@ All three star systems and their planets are available from the start in an 8,40
 
 Multiplayer shops show the server's price quote for each purchase. A changed quote requires a fresh purchase attempt before any cargo is charged.
 
-Owned planets accumulate cargo in one orbiting bundle that persists while the planet is owned. Each world can store 60 production units across its bundle and reserve. Loose drops give way to new planet cargo if the shared pool of 512 floating pickups is full.
+Owned planets release individual orbiting cargo pods that persist while the planet is owned. Existing planet bundles are moved into reserve and reissued as separate pods. Each world can store 60 production units across its pods and reserve. The galaxy supports up to 2,048 floating cargo pickups.

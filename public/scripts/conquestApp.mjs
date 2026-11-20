@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-cargo-capacity';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-separate-cargo';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, shopQuotes, upgradePlanet, repairTurrets,
-    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-cargo-capacity';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-cargo-capacity';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-cargo-capacity';
+    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-separate-cargo';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-separate-cargo';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-separate-cargo';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',

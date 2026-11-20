@@ -25,6 +25,8 @@ export class GameRoom {
         this.sessions = saved?.sessions || {};
         const upgradingLayout = this.world.galaxyExpanded === undefined;
         this.world.galaxyExpanded ??= false;
+        const upgradingCargo = Boolean(saved) && !this.world.separatePlanetCargo;
+        this.world.separatePlanetCargo = true;
         this.inputs = {};
         this.notices = [];
         if (!saved) {
@@ -35,7 +37,9 @@ export class GameRoom {
         this.world.events = [];
         for (const session of Object.values(this.sessions)) {
             // Give existing pilots extra time to return across the one-time station roster upgrade.
-            if (upgradingLayout && (session.connected || session.expiresAt > now)) {
+            if (upgradingCargo && (session.connected || session.expiresAt > now)) {
+                session.expiresAt = Math.max(session.expiresAt || 0, now + 24 * 60 * 60 * 1000);
+            } else if (upgradingLayout && (session.connected || session.expiresAt > now)) {
                 session.expiresAt = Math.max(session.expiresAt || 0, now + layoutUpgradeReconnectMs);
             } else if (session.connected) {
                 session.expiresAt = now + reconnectMs;
@@ -206,6 +210,18 @@ export class GameRoom {
             actor.player.braking = Boolean(inputs[id]?.rcsY);
         }
         stepGalaxy(this.world, inputs, dt);
+    }
+
+    // Bound the flight feed in crowded galaxies without dropping authoritative cargo.
+    flightView(id) {
+        const view = this.view(id, { forFlight: true });
+        if (!view || this.world.pickups.length <= 512) return view;
+        const { x, y } = view.player;
+        const distanceSquared = pickup => (pickup.x - x) ** 2 + (pickup.y - y) ** 2;
+        view.pickups = view.pickups.map(pickup => ({ pickup, distance: distanceSquared(pickup) }))
+            .sort((a, b) => a.distance - b.distance).slice(0, 512)
+            .map(({ pickup: { id, bodyId, x, y, amount } }) => ({ id, bodyId, x, y, amount }));
+        return view;
     }
 
     // Reveal nearby ships and recently firing ships, keeping distant private pilot state off the wire.
