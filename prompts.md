@@ -1493,3 +1493,15 @@ when you first load into the game on the top of the screen, say CAPTURE PLANETS 
 275.
 
 and then publish
+
+276.
+
+reduce black hole and sun gravity
+
+277.
+
+and puch
+
+278.
+
+push

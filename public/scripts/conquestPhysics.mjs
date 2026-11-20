@@ -69,7 +69,7 @@ function systemPosition(angle) {
 
 // Each system record is its central lethal star.
 export const systems = Object.freeze([
-    { id: 'sol', name: 'Sol', x: 0, y: 0, radius: 540, gravity: 18, color: '#fff0a6' },
+    { id: 'sol', name: 'Sol', x: 0, y: 0, radius: 540, gravity: 10, color: '#fff0a6' },
     { id: 'vega', name: 'Vega', ...systemPosition(-2 * Math.PI / 3), radius: 630, gravity: 22, color: '#e5f5ff' },
     { id: 'ember', name: 'Ember', ...systemPosition(2 * Math.PI / 3), radius: 480, gravity: 16, color: '#ffc58f' }
 ].map(system => Object.freeze(system)));
@@ -77,7 +77,7 @@ export const systems = Object.freeze([
 // Keep the central hazard separate from systems so it never generates planets.
 export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black hole',
     ...galaxyCenter,
-    radius: 320, gravity: 360 });
+    radius: 320, gravity: 180 });
 export const galaxyRadius = 8400;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
