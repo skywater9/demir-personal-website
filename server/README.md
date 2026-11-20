@@ -94,7 +94,8 @@ it: it contains hashed reconnect reservations and game state.
 A controlled restart preserves online-player reservations. After restart they
 have 30 seconds to reconnect. Already disconnected players keep their existing
 expiry deadlines. Expiry releases all of that pilot's territory; deliberate Leave
-releases it immediately. The world does not advance during a service outage. The one-time migration from the eight-station layout preserves existing reservations and grants at least five minutes to reconnect.
+releases it immediately. The world does not advance during a service outage. The one-time migration from the eight-station layout preserves existing reservations and grants at least five minutes to reconnect. The flight performance rollout gives existing
+reservations a one-time 24-hour reconnect window.
 
 Reconnect tokens are random, stored in the player's session storage, and hashed
 on disk. They never appear in URLs, analytics, chat, or application logs. Messages
@@ -109,6 +110,10 @@ selection is synchronous; shared entities are integrated only once per tick.
 
 Inputs expire after 300 ms without updates. Snapshots are sent at up to 20 Hz;
 clients smooth visible ship poses without applying authoritative resource changes.
+Each flight update carries up to 192 nearby cargo pods within 3,200 meters.
+The server keeps simulating and saving all pods. Partial capture presses receive
+a small receipt and update in the next flight snapshot. Completed captures and
+cargo purchases are saved before confirmation.
 Full distant ship state is withheld unless recently firing. The map receives a separate public list of generated pilot labels, colors, positions, headings and connection status; it contains no fuel, cargo, upgrade or reconnect data. Planet ownership colors remain public. One pilot can occupy a relay receiver at a time.
 
 Messages have size/rate limits, slow-client buffering is bounded, origins are
@@ -142,3 +147,5 @@ endpoint, verify Caddy forwarding, and check server restart/reconnect under `svc
 Keep the code in the public repository as required by the assignment; keep runtime
 state and secrets out of it. Commit/push authorization follows the user's active
 repository instructions.
+
+Flight updates carry nearby cargo within 8,000 m of the pilot. Saves and the simulation keep all pickups at full precision. Routine actions use the periodic checkpoint, while purchases, completed captures, cargo collection, and combat outcomes still checkpoint before confirmation.

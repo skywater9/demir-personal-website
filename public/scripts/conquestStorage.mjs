@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, roguePlanets, extraStarterStations, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-territory-gameplay';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, extraStarterStations, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-flight-performance';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;

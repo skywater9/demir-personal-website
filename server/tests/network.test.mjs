@@ -248,3 +248,48 @@ test('real purchases keep BOOSTER and WEAPON independent and persist their death
     assert.equal(saved.world.players[actor.player.id].player.rocketTier, 0);
     assert.equal(saved.world.players[actor.player.id].player.weaponTier, 0);
 });
+
+// Use the scheduled flight feed for partial captures and still commit the final capture before its receipt.
+test('capture presses receive small receipts until the completed capture is durable', async t => {
+    const dir = resolve(testRuntimeRoot, randomUUID());
+    const file = resolve(dir, 'galaxy.json');
+    const game = await createGameServer({ dataFile: file, allowedOrigins: ['https://test.invalid'] });
+    let pilot;
+    t.after(async () => {
+        pilot?.socket.terminate();
+        await game.close();
+        await rm(dir, { recursive: true, force: true });
+    });
+    game.server.listen(0, '127.0.0.1');
+    await once(game.server, 'listening');
+    pilot = await peer(`ws://127.0.0.1:${game.server.address().port}/game`);
+    const id = pilot.welcome.playerId;
+    const actor = game.room.world.players[id];
+    const { dockingPoint, planetBodies } = await import('../../public/scripts/conquestPhysics.mjs');
+    const moon = planetBodies.find(body => body.id === 'moon');
+    Object.assign(actor.player, dockingPoint(moon), { landedOn: null, vx: 0, vy: 0 });
+    const input = { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, captureBody: moon.id };
+    pilot.socket.send(JSON.stringify({ type: 'input', sequence: 1, input }));
+    pilot.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 1, action: 'interact', bodyId: moon.id }));
+    const start = await pilot.wait(message => message.type === 'result' && message.actionId === 1);
+    assert.equal(start.result.ok, true);
+    const challengeId = actor.hack.challengeId;
+    // Permit the next press regardless of elapsed time between local network messages.
+    actor.hack.lastAcceptedAt = -1;
+    pilot.socket.send(JSON.stringify({ type: 'action', sequence: 3, actionId: 2, action: 'capturePress', challengeId }));
+    const partial = await pilot.wait(message => message.type === 'result' && message.actionId === 2);
+    assert.equal(partial.result.ok, true);
+    assert.equal(partial.world, undefined);
+    await pilot.wait(message => message.type === 'state' && message.world.hack?.progress > 0);
+
+    actor.hack.progress = actor.hack.required - 0.5;
+    actor.hack.lastAcceptedAt = -1;
+    pilot.socket.send(JSON.stringify({ type: 'input', sequence: 4, input }));
+    pilot.socket.send(JSON.stringify({ type: 'action', sequence: 5, actionId: 3, action: 'capturePress', challengeId }));
+    const completed = await pilot.wait(message => message.type === 'result' && message.actionId === 3);
+    assert.equal(completed.result.ok, true);
+    assert.equal(completed.world.planets[moon.id].owner, id);
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(saved.world.planets[moon.id].owner, id);
+    assert.equal(saved.sessions[id].lastActionId, 3);
+});

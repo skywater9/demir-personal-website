@@ -156,6 +156,13 @@ export const starterStations = Object.freeze([
 export const extraStarterStations = Object.freeze(starterStations.slice(8));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
 export const territoryBodies = Object.freeze([...bodies, ...celestialBodies]);
+const bodiesById = new Map(territoryBodies.map(body => [body.id, body]));
+const gravitySources = territoryBodies.filter(body => body.gravity > 0).map(body => {
+    const surface = body.radius + tuning.shipRadius;
+    const influence = body.id === blackHole.id ? tuning.blackHoleInfluenceAltitude : tuning.influenceAltitude;
+    const reach = surface + influence;
+    return { body, surface, reach, reachSquared: reach * reach };
+});
 
 // Leave all worlds in place and move only the outer boundary in a busy room.
 export function galaxyRadiusFor(world) {
@@ -202,7 +209,7 @@ function control(value) {
 
 // Resolve public body IDs without accepting arbitrary collision geometry from callers.
 function bodyFor(bodyId) {
-    return territoryBodies.find(body => body.id === bodyId);
+    return bodiesById.get(bodyId);
 }
 
 // Timestamp bounded outcome events with a counter that survives draining the event array.
@@ -258,14 +265,14 @@ export function nearestBody(player) {
 export function gravityAt(x, y) {
     let ax = 0;
     let ay = 0;
-    for (const body of territoryBodies) {
+    for (const { body, surface, reach, reachSquared } of gravitySources) {
         const dx = body.x - x;
         const dy = body.y - y;
-        const distance = Math.max(0.001, Math.hypot(dx, dy));
-        const surface = body.radius + tuning.shipRadius;
+        const distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared >= reachSquared) continue;
+        const distance = Math.max(0.001, Math.sqrt(distanceSquared));
         const radialDistance = Math.max(surface, distance);
-        const influence = body.id === blackHole.id ? tuning.blackHoleInfluenceAltitude : tuning.influenceAltitude;
-        const fade = Math.max(0, Math.min(1, (influence - radialDistance + surface) / 300));
+        const fade = Math.max(0, Math.min(1, (reach - radialDistance) / 300));
         const acceleration = body.gravity * (surface / radialDistance) ** 2 * fade;
         ax += dx / distance * acceleration;
         ay += dy / distance * acceleration;
@@ -1334,9 +1341,22 @@ function cargoInnerRadius(body) {
     return stellar ? dysonFrameRadius(body) + tuning.stellarCargoRailClearance : body.radius + 5;
 }
 
-const cargoCollisionBodies = [...planetBodies, ...celestialBodies].map(body => ({
-    body, radius: cargoInnerRadius(body)
-}));
+const cargoCollisionCellSize = 512;
+const cargoCollisionBodies = [...planetBodies, ...celestialBodies].map(body => {
+    const radius = cargoInnerRadius(body);
+    return { body, radius, left: body.x - radius, right: body.x + radius, top: body.y - radius, bottom: body.y + radius };
+});
+const cargoCollisionCells = new Map();
+for (const collider of cargoCollisionBodies) {
+    for (let x = Math.floor(collider.left / cargoCollisionCellSize); x <= Math.floor(collider.right / cargoCollisionCellSize); x++) {
+        for (let y = Math.floor(collider.top / cargoCollisionCellSize); y <= Math.floor(collider.bottom / cargoCollisionCellSize); y++) {
+            const key = `${x}:${y}`;
+            if (!cargoCollisionCells.has(key)) cargoCollisionCells.set(key, []);
+            cargoCollisionCells.get(key).push(collider);
+        }
+    }
+}
+const emptyCargoColliders = Object.freeze([]);
 
 // Sweep cargo against planets and stellar rails, including pods restored inside a boundary.
 function moveCargoWithBounce(pickup, dt) {
@@ -1347,9 +1367,14 @@ function moveCargoWithBounce(pickup, dt) {
         const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
         const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
         let hit = null;
-        for (const { body, radius } of cargoCollisionBodies) {
-            if (body.x + radius < left || body.x - radius > right
-                || body.y + radius < top || body.y - radius > bottom) continue;
+        const cellX = Math.floor(left / cargoCollisionCellSize);
+        const cellY = Math.floor(top / cargoCollisionCellSize);
+        // Most pods stay within one grid cell each tick. Sweep every body when crossing cells.
+        const candidates = cellX === Math.floor(right / cargoCollisionCellSize) && cellY === Math.floor(bottom / cargoCollisionCellSize)
+            ? cargoCollisionCells.get(`${cellX}:${cellY}`) || emptyCargoColliders : cargoCollisionBodies;
+        for (const collider of candidates) {
+            if (collider.right < left || collider.left > right || collider.bottom < top || collider.top > bottom) continue;
+            const { body, radius } = collider;
             const dx = start.x - body.x, dy = start.y - body.y;
             const inside = dx * dx + dy * dy < radius * radius;
             const fraction = inside ? 0 : circleHit(start, end, body, radius);
@@ -1426,29 +1451,41 @@ function attractBubbleCargo(pickup, player, body, dt, planet) {
 
 // Orbit planet cargo, drift death drops, expire, and collect with swept player-relative contact.
 function movePickups(world, dt, previousPlayer) {
+    const pilots = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
+    const alive = pilots.filter(player => !player.deadUntil);
+    const eligibleById = new Map(alive.map(player => [player.id, [player]]));
+    const collectionRadius = tuning.pickupRadius + tuning.shipRadius;
+    const origin = { x: 0, y: 0 };
     world.pickups = world.pickups.filter(pickup => {
         if (!Number.isFinite(pickup.amount) || pickup.amount <= 0
             || (pickup.expiresAt <= world.elapsed && !isOwnedPlanetCargo(world, pickup))) return false;
         const body = bodyFor(pickup.bodyId);
         const planetBody = body && !body.station ? body : null;
-        if (planetBody) containPlanetCargo(pickup, planetBody, world.planets[planetBody.id]);
+        const planet = planetBody && world.planets[planetBody.id];
+        if (planetBody) containPlanetCargo(pickup, planetBody, planet);
         const pickupStart = { x: pickup.x, y: pickup.y };
-        const pilots = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
-        const alive = pilots.filter(player => !player.deadUntil && canCollectCargo(world, pickup, player));
-        const bubble = planetBody && world.planets[body.id]?.owner ? body : null;
-        const insideBubble = player => bubble && Math.hypot(player.x - bubble.x, player.y - bubble.y)
-            <= planetShield(bubble, world.planets[bubble.id]).radius;
+        const candidates = pickup.bodyId == null || body?.station ? alive : eligibleById.get(planet?.owner) || [];
+        const bubbleRadius = planet?.owner ? planetShield(planetBody, planet).radius : 0;
         const stellarBody = Number.isFinite(pickup.orbitRadius) ? blackHole
             : celestialBodies.includes(planetBody) ? planetBody : null;
         const attractionRadius = stellarBody === blackHole ? tuning.blackHoleCargoAttractionRadius
             : stellarBody ? tuning.stellarCargoAttractionRadius : tuning.cargoAttractionRadius;
-        const eligible = alive.filter(player => insideBubble(player)
-            || Math.hypot(player.x - pickup.x, player.y - pickup.y) < attractionRadius);
-        const nearest = eligible.reduce((best, player) => !best || Math.hypot(player.x - pickup.x, player.y - pickup.y)
-            < Math.hypot(best.x - pickup.x, best.y - pickup.y) ? player : best, null);
+        const attractionSquared = attractionRadius * attractionRadius;
+        let nearest = null;
+        let nearestDistanceSquared = Infinity;
+        let nearestInBubble = false;
+        for (const player of candidates) {
+            const dx = player.x - pickup.x, dy = player.y - pickup.y;
+            const distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared >= nearestDistanceSquared) continue;
+            const insideBubble = bubbleRadius > 0 && Math.hypot(player.x - planetBody.x, player.y - planetBody.y) <= bubbleRadius;
+            if (!insideBubble && distanceSquared >= attractionSquared) continue;
+            nearest = player;
+            nearestDistanceSquared = distanceSquared;
+            nearestInBubble = insideBubble;
+        }
         if (pickup.blackHoleOrbit) {
-            const approaching = alive.some(player => Math.hypot(player.x - pickup.x, player.y - pickup.y) < attractionRadius);
-            if (approaching) pickup.blackHoleOrbit = false;
+            if (nearestDistanceSquared < attractionSquared) pickup.blackHoleOrbit = false;
             else {
                 pickup.orbitAngle += pickup.orbitSpeed * dt;
                 const x = blackHole.x + Math.cos(pickup.orbitAngle) * pickup.orbitRadius;
@@ -1462,33 +1499,38 @@ function movePickups(world, dt, previousPlayer) {
             pickup.vy = (pickup.vy || 0) + gravity.ay * dt;
         }
         // Only the owner attracts planet pods; dropped cargo keeps its public nearby-pickup magnet.
-        const dx = nearest ? nearest.x - pickup.x : 0;
-        const dy = nearest ? nearest.y - pickup.y : 0;
-        const distance = Math.hypot(dx, dy);
+        const distance = Math.sqrt(nearestDistanceSquared);
         if (nearest && stellarBody && !pickup.blackHoleOrbit) {
             attractBubbleCargo(pickup, nearest, stellarBody, dt, world.planets[stellarBody.id]);
-        } else if (nearest && insideBubble(nearest)) {
-            attractBubbleCargo(pickup, nearest, bubble, dt, world.planets[bubble.id]);
+        } else if (nearestInBubble) {
+            attractBubbleCargo(pickup, nearest, planetBody, dt, planet);
         } else if (nearest && distance > 0 && distance < tuning.cargoAttractionRadius) {
             const acceleration = tuning.cargoAttractionAcceleration * (1 - distance / tuning.cargoAttractionRadius);
-            pickup.vx = (pickup.vx || 0) + dx / distance * acceleration * dt;
-            pickup.vy = (pickup.vy || 0) + dy / distance * acceleration * dt;
+            pickup.vx = (pickup.vx || 0) + (nearest.x - pickup.x) / distance * acceleration * dt;
+            pickup.vy = (pickup.vy || 0) + (nearest.y - pickup.y) / distance * acceleration * dt;
         }
         moveCargoWithBounce(pickup, dt);
-        if (planetBody) containPlanetCargo(pickup, planetBody, world.planets[planetBody.id]);
-        const contacts = alive.map(player => {
+        if (planetBody) containPlanetCargo(pickup, planetBody, planet);
+        let collector = null;
+        let firstContact = Infinity;
+        for (const player of candidates) {
             const previous = world.previousPlayers?.[player.id] || previousPlayer;
-            const fraction = circleHit({ x: pickupStart.x - previous.x, y: pickupStart.y - previous.y },
-                { x: pickup.x - player.x, y: pickup.y - player.y }, { x: 0, y: 0 }, tuning.pickupRadius + tuning.shipRadius);
-            return { player, fraction };
-        }).filter(contact => contact.fraction !== null).sort((a, b) => a.fraction - b.fraction);
-        if (contacts.length) {
+            const startX = pickupStart.x - previous.x, startY = pickupStart.y - previous.y;
+            const endX = pickup.x - player.x, endY = pickup.y - player.y;
+            if (Math.min(startX, endX) > collectionRadius || Math.max(startX, endX) < -collectionRadius
+                || Math.min(startY, endY) > collectionRadius || Math.max(startY, endY) < -collectionRadius) continue;
+            const fraction = circleHit({ x: startX, y: startY }, { x: endX, y: endY }, origin, collectionRadius);
+            if (fraction === null || fraction >= firstContact) continue;
+            firstContact = fraction;
+            collector = player;
+        }
+        if (collector) {
             const collect = () => {
                 world.player.cargo += pickup.amount;
                 world.stats.cargoCollected += pickup.amount;
                 emit(world, 'cargoPickedUp', { amount: pickup.amount });
             };
-            if (world.players) withPlayer(world, contacts[0].player.id, collect);
+            if (world.players) withPlayer(world, collector.id, collect);
             else collect();
             return false;
         }

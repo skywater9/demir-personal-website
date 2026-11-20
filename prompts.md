@@ -1634,3 +1634,11 @@ add a most planets captured leaderboard, and bounty selection, where you click o
 310.
 
 leaderboard should be most planets currently held
+
+311.
+
+why is the server so laggy currently
+
+312.
+
+optimize performance and push it

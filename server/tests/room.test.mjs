@@ -314,3 +314,23 @@ test('leaderboard ranks current holdings and bounties persist, pay, and refund',
     assert.equal(room.leaderboard().some(row => row.id === b.playerId), false);
     assert.doesNotThrow(() => validateSave(room.saved()));
 });
+
+// Keep the nearby visual budget separate from the full server-side cargo pool.
+test('flight snapshots send only the nearest cargo and preserve the full saved pool', () => {
+    const room = new GameRoom(null, 1000);
+    const { playerId } = room.join('', 1000);
+    const { x, y } = room.world.players[playerId].player;
+    const cargo = Array.from({ length: 230 }, (_, index) => ({
+        id: `near-${index}`, x: x + index + 14.24, y, vx: -20, vy: 0, amount: 1, expiresAt: 120
+    })).reverse();
+    cargo.push({ id: 'distant', x: x + 5000, y, vx: 0, vy: 0, amount: 10, expiresAt: 120 });
+    room.world.pickups = cargo;
+    const visible = room.flightView(playerId).pickups;
+    assert.equal(visible.length, 192);
+    assert.equal(visible[0].id, 'near-0');
+    assert.equal(visible.at(-1).id, 'near-191');
+    assert.equal(visible[0].x, Math.round((x + 14.24) * 10) / 10);
+    assert.equal(visible[0].vx, undefined);
+    assert.equal(room.view(playerId).pickups.length, 231);
+    assert.equal(room.saved().world.pickups.at(-1).id, 'distant');
+});

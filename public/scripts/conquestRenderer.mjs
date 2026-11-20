@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadiusFor, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, planetFuelSource, blackHole
-} from './conquestPhysics.mjs?v=20261120-territory-gameplay';
+} from './conquestPhysics.mjs?v=20261120-flight-performance';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -9,6 +9,9 @@ const hostileColor = '#ff6268';
 const targetColor = '#ffce72';
 const speedZoomFloor = 0.28;
 const speedZoomScale = 420;
+const mapFrameInterval = 1 / 20;
+const maxPlanetSprites = 24;
+const bodiesById = new Map(territoryBodies.map(body => [body.id, body]));
 const ownerColors = ['#ee8ca3', '#8dbbff', '#c8a0f3', '#edaa7d', '#8cdce0', '#d5d88e', '#e687d2'];
 
 // Render the open galaxy in the original rocket game's procedural pixel-art style.
@@ -33,6 +36,8 @@ export class ConquestRenderer {
         this.exhaustCarry = new Map();
         this.particleSerial = 0;
         this.ownerPalette = new Map();
+        this.planetSprites = new Map();
+        this.lastMapDrawAt = -Infinity;
         this.lastWorld = null;
         this.lastElapsed = 0;
         this.wasDead = false;
@@ -126,15 +131,15 @@ export class ConquestRenderer {
                 const directionX = dx / length, directionY = dy / length;
                 const phase = this.reducedMotion ? 0 : this.visualTime * 44 % 8;
                 ctx.setLineDash([]);
+                ctx.beginPath();
                 for (let distance = 9 + phase; distance < surface; distance += 8) {
                     const tipX = point.x + directionX * distance;
                     const tipY = point.y + directionY * distance;
-                    ctx.beginPath();
                     ctx.moveTo(tipX - directionX * 2.5 - directionY * 1.5, tipY - directionY * 2.5 + directionX * 1.5);
                     ctx.lineTo(tipX, tipY);
                     ctx.lineTo(tipX - directionX * 2.5 + directionY * 1.5, tipY - directionY * 2.5 - directionX * 1.5);
-                    ctx.stroke();
                 }
+                ctx.stroke();
             }
         } else {
             ctx.setLineDash([2, 4]);
@@ -202,7 +207,7 @@ export class ConquestRenderer {
         if (!(bounds.width > 0 && bounds.height > 0) || !Number.isFinite(clientX) || !Number.isFinite(clientY)
             || clientX < bounds.left || clientY < bounds.top
             || clientX > bounds.left + bounds.width || clientY > bounds.top + bounds.height) return null;
-        const layout = this.mapLayout(this.lastMapWorld);
+        const layout = this.lastMapLayout || this.mapLayout(this.lastMapWorld);
         let nearest = null;
         let nearestDistance = 10;
         for (const body of territoryBodies) {
@@ -389,20 +394,8 @@ export class ConquestRenderer {
         }
     }
 
-    // Preserve the textured planet and upright pad sprite while labeling the local economy.
-    drawBody(body, world) {
-        if (body.station) return;
-        const ctx = this.context;
-        const center = this.screen(body.x, body.y);
-        const scale = this.camera.zoom / 2;
-        const radius = Math.max(1, Math.round(body.radius * scale));
-        if (!this.inView(center, radius, 75)) return;
-        const state = world.planets[body.id] || { owner: null, level: 0, stock: 0 };
-        const color = this.ownerColor(state.owner, world.player);
-        if (body.gas) {
-            ctx.save(); ctx.globalAlpha = 0.12; ctx.fillStyle = body.color;
-            ctx.beginPath(); ctx.arc(center.x, center.y, radius + 55 * scale, 0, fullCircle); ctx.fill(); ctx.restore();
-        }
+    // Paint the static surface once at a particular pixel size.
+    paintPlanetSurface(ctx, body, center, radius) {
         ctx.save();
         ctx.beginPath(); ctx.arc(center.x, center.y, radius, 0, fullCircle); ctx.clip();
         ctx.fillStyle = body.color;
@@ -417,6 +410,43 @@ export class ConquestRenderer {
         ctx.fillStyle = '#030b2344';
         ctx.beginPath(); ctx.arc(center.x + radius * 1.1, center.y + radius * 0.3, radius * 1.4, 0, fullCircle); ctx.fill();
         ctx.restore();
+    }
+
+    // Reuse clipped surface sprites and bound the cache during continuous camera zoom.
+    drawPlanetSurface(body, center, radius) {
+        const key = `${body.id}:${radius}`;
+        let sprite = this.planetSprites.get(key);
+        if (sprite) this.planetSprites.delete(key);
+        else {
+            sprite = this.canvas.ownerDocument?.createElement('canvas');
+            if (sprite) sprite.width = sprite.height = radius * 2 + 2;
+            const context = sprite?.getContext('2d');
+            if (!context) {
+                this.paintPlanetSurface(this.context, body, center, radius);
+                return;
+            }
+            this.paintPlanetSurface(context, body, { x: radius + 1, y: radius + 1 }, radius);
+        }
+        this.planetSprites.set(key, sprite);
+        if (this.planetSprites.size > maxPlanetSprites) this.planetSprites.delete(this.planetSprites.keys().next().value);
+        this.context.drawImage(sprite, center.x - radius - 1, center.y - radius - 1);
+    }
+
+    // Draw ownership, turrets, and the pad over the cached surface.
+    drawBody(body, world) {
+        if (body.station) return;
+        const ctx = this.context;
+        const center = this.screen(body.x, body.y);
+        const scale = this.camera.zoom / 2;
+        const radius = Math.max(1, Math.round(body.radius * scale));
+        if (!this.inView(center, radius, 75)) return;
+        const state = world.planets[body.id] || { owner: null, level: 0, stock: 0 };
+        const color = this.ownerColor(state.owner, world.player);
+        if (body.gas) {
+            ctx.save(); ctx.globalAlpha = 0.12; ctx.fillStyle = body.color;
+            ctx.beginPath(); ctx.arc(center.x, center.y, radius + 55 * scale, 0, fullCircle); ctx.fill(); ctx.restore();
+        }
+        this.drawPlanetSurface(body, center, radius);
         ctx.save();
         const outline = state.owner && state.owner !== world.player.id ? hostileColor : state.owner ? color : body.color;
         ctx.strokeStyle = outline;
@@ -613,8 +643,8 @@ export class ConquestRenderer {
             const density = Math.log2(Math.max(1, Number(pickup.amount) || 1));
             const bundleScale = Math.min(2.8, 1 + density * .18);
             ctx.save();
-            const body = territoryBodies.find(body => body.id === pickup.bodyId && !body.station);
-            if (body) {
+            const body = bodiesById.get(pickup.bodyId);
+            if (body && !body.station) {
                 const center = this.screen(body.x, body.y);
                 ctx.beginPath(); ctx.arc(center.x, center.y, (planetShield(body, world?.planets[body.id]).radius) * this.camera.zoom / 2, 0, fullCircle); ctx.clip();
             }
@@ -1103,6 +1133,10 @@ export class ConquestRenderer {
         const ctx = this.mapContext;
         this.lastMapWorld = world;
         const layout = this.mapLayout(world);
+        this.lastMapLayout = layout;
+        this.lastMapDrawAt = this.visualTime;
+        this.lastDrawnMapExpanded = this.mapExpanded;
+        this.lastDrawnGalaxyRadius = galaxyRadiusFor(world);
         const { width, height } = layout;
         ctx.fillStyle = '#0c1620'; ctx.fillRect(0, 0, width, height);
         const galaxyCenter = this.mapPoint(blackHole.x, blackHole.y, layout);
@@ -1270,9 +1304,10 @@ export class ConquestRenderer {
     draw(world, input = {}, menu = false, dt = 1 / 60) {
         const elapsed = Number.isFinite(dt) ? Math.max(0, Math.min(0.05, dt)) : 1 / 60;
         this.visualTime += elapsed;
-        if (world.ownerColors) {
+        if (world.ownerColors !== this.lastOwnerColors) {
             this.ownerPalette.clear();
-            for (const [id, color] of Object.entries(world.ownerColors)) this.ownerPalette.set(id, color);
+            for (const [id, color] of Object.entries(world.ownerColors || {})) this.ownerPalette.set(id, color);
+            this.lastOwnerColors = world.ownerColors;
         }
         this.reducedMotion = this.motionQuery?.matches || false;
         this.resize();
@@ -1333,7 +1368,11 @@ export class ConquestRenderer {
 
         if (!menu && !dead && !respawned) this.drawAimGuide(player, input.aimCursor, world.elapsed, world);
         if (!menu && !dead) this.drawDockingGuide(world, input.aimCursor);
-        this.drawMap(world);
+        if (newWorld || this.visualTime - this.lastMapDrawAt + 1e-9 >= mapFrameInterval
+            || this.lastMapLayout?.width !== this.mapCanvas.width || this.lastMapLayout?.height !== this.mapCanvas.height
+            || this.lastDrawnMapExpanded !== this.mapExpanded || this.lastDrawnGalaxyRadius !== galaxyRadiusFor(world)) {
+            this.drawMap(world);
+        }
         this.wasDead = dead;
         this.lastWorld = world;
         this.lastElapsed = world.elapsed;

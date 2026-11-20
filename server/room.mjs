@@ -7,6 +7,8 @@ export const playerLimit = starterStations.length;
 export const maxBounty = 1000000;
 const expansionPlayerCount = 10;
 const layoutUpgradeReconnectMs = 5 * 60 * 1000;
+const flightPickupRangeSquared = 3200 ** 2;
+const maxFlightPickups = 192;
 const colors = ['#8cdeb0', '#ff9fb8', '#9fbdff', '#edbc83', '#c7a2ff', '#92e7e5', '#f0de87', '#e7a0e9', '#f58375', '#b6df85', '#a7aefa', '#efc35f'];
 
 // Hash reconnect secrets before putting them on disk; raw tokens remain client-side only.
@@ -28,7 +30,9 @@ export class GameRoom {
         this.world.galaxyExpanded ??= false;
         const upgradingCargo = Boolean(saved) && (!this.world.separatePlanetCargo || !this.world.separateStellarCargo);
         const upgradingBounties = Boolean(saved) && !this.world.bounties;
+        const upgradingFlightFeed = Boolean(saved) && this.world.compactFlightFeed !== true;
         this.world.bounties ??= [];
+        this.world.compactFlightFeed = true;
         this.world.separatePlanetCargo = true;
         this.world.separateStellarCargo = true;
         this.inputs = {};
@@ -41,7 +45,7 @@ export class GameRoom {
         this.world.events = [];
         for (const session of Object.values(this.sessions)) {
             // Give existing pilots extra time to return after a live save upgrade.
-            if ((upgradingCargo || upgradingBounties) && (session.connected || session.expiresAt > now)) {
+            if ((upgradingCargo || upgradingBounties || upgradingFlightFeed) && (session.connected || session.expiresAt > now)) {
                 session.expiresAt = Math.max(session.expiresAt || 0, now + 24 * 60 * 60 * 1000);
             } else if (upgradingLayout && (session.connected || session.expiresAt > now)) {
                 session.expiresAt = Math.max(session.expiresAt || 0, now + layoutUpgradeReconnectMs);
@@ -275,20 +279,31 @@ export class GameRoom {
         }
     }
 
-    // Bound the flight feed in crowded galaxies without dropping authoritative cargo.
+    // Bound the visual feed without limiting which pods the server simulates or saves.
     flightView(id) {
-        const view = this.view(id, { forFlight: true });
-        if (!view || this.world.pickups.length <= 512) return view;
-        const { x, y } = view.player;
-        const distanceSquared = pickup => (pickup.x - x) ** 2 + (pickup.y - y) ** 2;
-        view.pickups = view.pickups.map(pickup => ({ pickup, distance: distanceSquared(pickup) }))
-            .sort((a, b) => a.distance - b.distance).slice(0, 512)
-            .map(({ pickup: { id, bodyId, x, y, amount } }) => ({ id, bodyId, x, y, amount }));
-        return view;
+        return this.view(id, { forFlight: true });
+    }
+
+    // Cull distant pods and retain the nearest ones even when the local area is crowded.
+    flightPickups(player) {
+        const nearby = [];
+        for (const pickup of this.world.pickups) {
+            const dx = pickup.x - player.x;
+            const dy = pickup.y - player.y;
+            const distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared <= flightPickupRangeSquared) nearby.push({ pickup, distanceSquared });
+        }
+        if (nearby.length > maxFlightPickups) {
+            nearby.sort((a, b) => a.distanceSquared - b.distanceSquared);
+            nearby.length = maxFlightPickups;
+        }
+        return nearby.map(({ pickup: { id, bodyId, x, y, amount } }) => ({
+            id, bodyId, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, amount
+        }));
     }
 
     // Reveal nearby ships and recently firing ships, keeping distant private pilot state off the wire.
-    view(id) {
+    view(id, { forFlight = false } = {}) {
         const actor = this.world.players[id];
         if (!actor) return null;
         const player = actor.player;
@@ -302,10 +317,11 @@ export class GameRoom {
                         rocketTier: p.rocketTier || 0, weaponTier: p.weaponTier || 0, gunHeat: p.gunHeat || 0, gunOverheatedUntil: p.gunOverheatedUntil || 0,
                         thrusting: Boolean(p.thrusting), braking: Boolean(p.braking), docked: p.docked };
                 });
+        const pickups = forFlight ? this.flightPickups(player) : this.world.pickups;
         return { version: 2, upgradeTracksVersion: 2, id: this.world.id, createdAt: this.world.createdAt, updatedAt: this.world.updatedAt,
             elapsed: this.world.elapsed, galaxyExpanded: this.world.galaxyExpanded, player, planets: this.world.planets, projectiles: this.world.projectiles,
-            pickups: this.world.pickups, events: [], eventCounter: this.world.eventCounter, ...actor,
-            shopQuotes: withPlayer(this.world, id, () => shopQuotes(this.world)),
+            pickups, events: [], eventCounter: this.world.eventCounter, ...actor,
+            shopQuotes: player.shoppingOn || player.docked ? withPlayer(this.world, id, () => shopQuotes(this.world)) : null,
             captures: Object.values(this.world.players).filter(other => other.hack).map(other => ({
                 bodyId: other.hack.bodyId, playerId: other.player.id,
                 progress: other.hack.progress, required: other.hack.required

@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-bounties';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-flight-performance';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, shopQuotes, upgradePlanet, repairTurrets,
-    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-bounties';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-bounties';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-bounties';
+    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-flight-performance';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-flight-performance';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-flight-performance';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
