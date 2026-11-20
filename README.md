@@ -685,4 +685,6 @@ Thirty neutral rogue planets sit outside the three star systems. They use the sa
 
 New pilots get the available starter station nearest the map center, subject to the existing 5,000-unit separation rule. Outer stations fill as inner sites become occupied.
 
-The expanded map centers its 17,200 m galaxy outline on the black hole. Outer planets are packed closer inside that outline.
+The expanded map centers its 16,000 m galaxy outline on the black hole. Outer planets are packed closer inside that outline.
+
+Sol, Vega, and Ember are spaced 120 degrees apart around the black hole.

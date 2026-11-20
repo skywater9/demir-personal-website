@@ -1389,3 +1389,15 @@ make the map a bit smaller, you can remove 10 planets while doing so
 249.
 
 deploy
+
+250.
+
+make map even smaller, move some planets above the black hole because right now there arent many on there
+
+251.
+
+also make the 3 star systems more symmetrically spread around the black hole, so forming a more even triangle
+
+252.
+
+push changes to website
