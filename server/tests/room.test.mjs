@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameRoom } from '../room.mjs';
-import { bodies, dockingPoint, tuning, withPlayer, killPlayer, upgradeRocket } from '../../public/scripts/conquestPhysics.mjs';
+import { validateSave } from '../persistence.mjs';
+import { blackHole, bodies, dockingPoint, tuning, withPlayer, killPlayer, upgradeRocket } from '../../public/scripts/conquestPhysics.mjs';
 
 // Place an actor in empty space so movement checks do not depend on nearby planets.
 function space(actor, x = 50000) { Object.assign(actor.player, { x, y: 50000, vx: 0, vy: 0, landedOn: null, docked: null }); }
@@ -256,4 +257,60 @@ test('authoritative braking cancels sideways drift at arbitrary heading', () => 
     assert.equal(actor.player.braking, true);
     for (let frame = 0; frame < 20; frame++) room.tick(.1, 1000);
     assert.equal(actor.player.vx, 0); assert.equal(actor.player.vy, 0);
+});
+
+// Exercise current ownership and the full escrow lifecycle with a real projectile.
+test('leaderboard ranks current holdings and bounties persist, pay, and refund', () => {
+    const room = new GameRoom(null, 1000);
+    const a = room.join('', 1000), b = room.join('', 1000), c = room.join('', 1000);
+    const legacy = structuredClone(room.saved());
+    delete legacy.world.bounties;
+    const migrated = new GameRoom(validateSave(legacy), 2000);
+    migrated.expire(33000);
+    assert.equal(Object.keys(migrated.sessions).length, 3);
+    const pa = room.world.players[a.playerId];
+    const pb = room.world.players[b.playerId];
+    const pc = room.world.players[c.playerId];
+    const moon = room.world.planets.moon;
+    moon.owner = a.playerId;
+    room.world.planets[blackHole.id].owner = c.playerId;
+    assert.equal(room.leaderboard()[0].id, a.playerId);
+    assert.equal(room.leaderboard().find(row => row.id === c.playerId).held, 0);
+    moon.owner = b.playerId;
+    assert.deepEqual(room.leaderboard().map(row => row.held), [1, 0, 0]);
+    assert.equal(room.leaderboard()[0].id, b.playerId);
+    pa.player.cargo = 15;
+    pc.player.cargo = 11;
+    const post = (issuer, target, amount) => room.action(issuer.playerId, { action: 'placeBounty', targetId: target.playerId, amount });
+    assert.equal(post(a, a, 1).ok, false);
+    assert.equal(post(a, b, 1.5).ok, false);
+    assert.equal(post(a, b, 16).ok, false);
+    assert.equal(post(a, b, 5).ok, true);
+    assert.equal(post(a, b, 2).ok, true);
+    assert.equal(post(c, b, 3).ok, true);
+    assert.equal(pa.player.cargo, 8);
+    assert.equal(room.leaderboard()[0].bounty, 10);
+    const saved = validateSave(structuredClone(room.saved()));
+    const restored = new GameRoom(saved, 2000);
+    assert.equal(restored.leaderboard()[0].bounty, 10);
+    assert.equal(restored.world.planets.moon.owner, b.playerId);
+    assert.equal(restored.join(b.token, 2500).resumed, true);
+
+    room.action(b.playerId, { action: 'selfDestruct' });
+    assert.equal(room.leaderboard()[0].bounty, 10);
+    pb.player.deadUntil = 0;
+    pb.player.fuel = 4;
+    space(pa, 48000); space(pb); space(pc, 49000);
+    room.world.projectiles.push({ id: 'bounty-hit', owner: c.playerId, source: 'player',
+        x: 49900, y: 50000, vx: 20000, vy: 0, radius: 3, expiresAt: 5 });
+    room.tick(tuning.fixedStep, 1000);
+    assert.equal(pc.player.cargo, 18);
+    assert.equal(room.world.events.find(event => event.bountyPaid)?.bountyPaid, 10);
+    assert.equal(room.leaderboard()[0].bounty, 0);
+
+    assert.equal(post(a, b, 4).ok, true);
+    room.leave(b.playerId);
+    assert.equal(pa.player.cargo, 8);
+    assert.equal(room.leaderboard().some(row => row.id === b.playerId), false);
+    assert.doesNotThrow(() => validateSave(room.saved()));
 });

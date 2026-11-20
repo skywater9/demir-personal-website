@@ -1,9 +1,10 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { blackHole, bodies, territoryBodies, starterStations, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, capturePress, migrateUpgradeTracks, repairTurret, repairTurrets,
+import { blackHole, bodies, planetBodies, territoryBodies, starterStations, createWorld, tuning, withPlayer, stepGalaxy, interact, hackDigit, capturePress, migrateUpgradeTracks, repairTurret, repairTurrets,
     upgradePlanet, upgradeRocket, upgradeWeapon, shopQuotes, killPlayer, setTarget, nearestRelay, nearestCapturablePlanet, dockingPoint } from '../public/scripts/conquestPhysics.mjs';
 
 export const reconnectMs = 30000;
 export const playerLimit = starterStations.length;
+export const maxBounty = 1000000;
 const expansionPlayerCount = 10;
 const layoutUpgradeReconnectMs = 5 * 60 * 1000;
 const colors = ['#8cdeb0', '#ff9fb8', '#9fbdff', '#edbc83', '#c7a2ff', '#92e7e5', '#f0de87', '#e7a0e9', '#f58375', '#b6df85', '#a7aefa', '#efc35f'];
@@ -26,6 +27,8 @@ export class GameRoom {
         const upgradingLayout = this.world.galaxyExpanded === undefined;
         this.world.galaxyExpanded ??= false;
         const upgradingCargo = Boolean(saved) && (!this.world.separatePlanetCargo || !this.world.separateStellarCargo);
+        const upgradingBounties = Boolean(saved) && !this.world.bounties;
+        this.world.bounties ??= [];
         this.world.separatePlanetCargo = true;
         this.world.separateStellarCargo = true;
         this.inputs = {};
@@ -37,8 +40,8 @@ export class GameRoom {
         }
         this.world.events = [];
         for (const session of Object.values(this.sessions)) {
-            // Give existing pilots extra time to return across the one-time station roster upgrade.
-            if (upgradingCargo && (session.connected || session.expiresAt > now)) {
+            // Give existing pilots extra time to return after a live save upgrade.
+            if ((upgradingCargo || upgradingBounties) && (session.connected || session.expiresAt > now)) {
                 session.expiresAt = Math.max(session.expiresAt || 0, now + 24 * 60 * 60 * 1000);
             } else if (upgradingLayout && (session.connected || session.expiresAt > now)) {
                 session.expiresAt = Math.max(session.expiresAt || 0, now + layoutUpgradeReconnectMs);
@@ -129,6 +132,14 @@ export class GameRoom {
             Object.assign(planet, { owner: null, home: false, level: 0, stock: 0, nextShotAt: 0 });
             for (const key of ['turrets', 'turretHealth', 'turretDisabledUntil', 'turretAngle']) delete planet[key];
         }
+        // Return escrow to pilots who are still in the room when their target leaves.
+        this.world.bounties = this.world.bounties.filter(bounty => {
+            if (bounty.issuerId === id) return false;
+            if (bounty.targetId !== id) return true;
+            const issuer = this.world.players[bounty.issuerId]?.player;
+            if (issuer) issuer.cargo += bounty.amount;
+            return false;
+        });
         this.world.projectiles = this.world.projectiles.filter(shot => shot.owner !== id);
         delete this.world.players[id]; delete this.sessions[id]; delete this.inputs[id];
         if (!Object.keys(this.sessions).length) this.world.galaxyExpanded = false;
@@ -188,6 +199,7 @@ export class GameRoom {
                     if (!Number.isSafeInteger(message.challengeId)) return { ok: false, reason: 'Invalid capture.' };
                     return capturePress(this.world, { challengeId: message.challengeId });
                 }
+                case 'placeBounty': return this.placeBounty(id, message.targetId, message.amount);
                 case 'weaponUpgrade': return upgradeWeapon(this.world);
                 case 'repairTurrets': return repairTurrets(this.world);
                 case 'repairTurret': return repairTurret(this.world, message.turretIndex);
@@ -200,6 +212,39 @@ export class GameRoom {
         });
     }
 
+    // Move spendable cargo into escrow only after checking the target and the requested amount.
+    placeBounty(issuerId, targetId, amount) {
+        const issuer = this.world.players[issuerId].player;
+        if (issuer.deadUntil) return { ok: false, reason: 'Wait until you respawn.' };
+        if (typeof targetId !== 'string' || targetId === issuerId || !Object.hasOwn(this.sessions, targetId)) {
+            return { ok: false, reason: 'Choose a pilot in the room.' };
+        }
+        if (!Number.isSafeInteger(amount) || amount < 1) return { ok: false, reason: 'Enter a whole cargo amount.' };
+        if (amount > issuer.cargo) return { ok: false, reason: 'Insufficient cargo.' };
+        const contributions = this.world.bounties.filter(bounty => bounty.targetId === targetId);
+        const total = contributions.reduce((sum, bounty) => sum + bounty.amount, 0);
+        if (total + amount > maxBounty) return { ok: false, reason: 'This pilot’s bounty has reached its limit.' };
+        const existing = contributions.find(bounty => bounty.issuerId === issuerId);
+        if (existing) existing.amount += amount;
+        else this.world.bounties.push({ issuerId, targetId, amount });
+        issuer.cargo -= amount;
+        return { ok: true };
+    }
+
+    // Rank current owners using ordinary planets, including planets outside the star systems.
+    leaderboard() {
+        const counts = new Map();
+        const bounties = new Map();
+        for (const body of planetBodies) {
+            const territory = this.world.planets[body.id];
+            if (territory?.owner && !territory.home) counts.set(territory.owner, (counts.get(territory.owner) || 0) + 1);
+        }
+        for (const bounty of this.world.bounties) bounties.set(bounty.targetId, (bounties.get(bounty.targetId) || 0) + bounty.amount);
+        return Object.values(this.world.players).map(({ player: { id, label, color } }) => ({
+            id, label, color, held: counts.get(id) || 0, bounty: bounties.get(id) || 0
+        })).sort((a, b) => b.held - a.held || a.label.localeCompare(b.label, 'en', { numeric: true }));
+    }
+
     // Advance the shared simulation once, clearing stale controls and expired reconnect reservations.
     tick(dt, now = Date.now()) {
         this.expire(now);
@@ -210,7 +255,24 @@ export class GameRoom {
             actor.player.thrusting = Boolean(inputs[id]?.burn);
             actor.player.braking = Boolean(inputs[id]?.rcsY);
         }
+        const lastEvent = this.world.eventCounter;
         stepGalaxy(this.world, inputs, dt);
+        if (!this.world.bounties.length) return;
+        for (const event of this.world.events) {
+            if (event.seq <= lastEvent || event.type !== 'died' || event.source !== 'player' || event.attackerId === event.playerId) continue;
+            const attacker = this.world.players[event.attackerId]?.player;
+            if (!attacker) continue;
+            let total = 0;
+            this.world.bounties = this.world.bounties.filter(bounty => {
+                if (bounty.targetId !== event.playerId) return true;
+                total += bounty.amount;
+                return false;
+            });
+            if (total) {
+                attacker.cargo += total;
+                event.bountyPaid = total;
+            }
+        }
     }
 
     // Bound the flight feed in crowded galaxies without dropping authoritative cargo.
@@ -252,7 +314,7 @@ export class GameRoom {
             mapPlayers: Object.values(this.world.players).map(actor => ({ id: actor.player.id, label: actor.player.label,
                 color: actor.player.color, x: actor.player.x, y: actor.player.y, angle: actor.player.angle,
                 deadUntil: actor.player.deadUntil, connected: Boolean(this.sessions[actor.player.id]?.connected) })),
-            others, online: Object.values(this.sessions).filter(session => session.connected).length };
+            leaderboard: this.leaderboard(), others, online: Object.values(this.sessions).filter(session => session.connected).length };
     }
 
     // Export only durable gameplay and hashed reservations; chat and controls are intentionally omitted.

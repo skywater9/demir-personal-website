@@ -7,9 +7,9 @@
     <meta name="theme-color" content="#101921">
     <meta name="description" content="Orbital Freight: explore three star systems, hack relays, collect cargo, and build a planetary empire. A local pixel-art conquest game.">
     <title>Orbital Freight — Conquest</title>
-    <link rel="stylesheet" href="conquest.css?v=20261120-territory-gameplay">
+    <link rel="stylesheet" href="conquest.css?v=20261120-bounties">
     <script type="module" src="scripts/visitLog.mjs?v=20261118-fuel-damage"></script>
-    <script type="module" src="scripts/conquestApp.mjs?v=20261120-territory-gameplay"></script>
+    <script type="module" src="scripts/conquestApp.mjs?v=20261120-bounties"></script>
     <script type="module" src="scripts/siteAnalytics.js?v=20261118-fuel-damage"></script>
 </head>
 <body>
@@ -18,6 +18,18 @@
         <canvas id="flightCanvas" tabindex="0" aria-label="Rocket flight view. W thrusts forward, S brakes in all directions, mouse aims, Space fires, and E interacts.">Canvas support is required to play.</canvas>
         <p id="flightBanner" class="flight-banner" role="status" hidden></p>
         <div id="controlsHint" class="controls-hint" role="note" hidden><span class="controls-hint-line" data-control-hint="KeyW"><kbd>W</kbd> = FORWARD</span><span class="controls-hint-line" data-control-hint="KeyS"><kbd>S</kbd> = BRAKE</span><span class="controls-hint-line" data-control-hint="Space"><kbd>SPACE</kbd> = SHOOT</span></div>
+        <details id="territoryBoard" class="territory-board" hidden>
+            <summary id="territorySummary" aria-keyshortcuts="L" title="Open leaderboard (L)">LEADERBOARD</summary>
+            <div class="territory-columns" aria-hidden="true"><span>PILOT</span><span>PLANETS HELD</span><span>BOUNTY</span></div>
+            <ol id="territoryRows" class="territory-rows" aria-label="Pilots ranked by planets currently held"></ol>
+            <form id="bountyForm" class="bounty-form" hidden>
+                <p id="bountyTarget"></p>
+                <label>Cargo <input id="bountyAmount" type="number" min="1" step="1" required autocomplete="off"></label>
+                <button id="bountySubmit" type="submit">POST</button>
+                <button id="bountyCancel" type="button">CANCEL</button>
+            </form>
+            <p id="bountyStatus" class="bounty-status" role="status" hidden></p>
+        </details>
         <aside id="galaxyMap" class="galaxy-map" aria-label="Galaxy map">
             <div class="map-heading"><span id="mapModeLabel">MILKY WAY / LOCAL</span><button id="menuButton" type="button" data-analytics-id="gameMenu">MENU <kbd>ESC</kbd></button></div>
             <canvas id="mapCanvas" width="300" height="300" tabindex="0" aria-label="Player-centered galaxy map. Click a planet to select its relay or landing pad."></canvas>

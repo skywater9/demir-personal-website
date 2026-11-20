@@ -1625,3 +1625,12 @@ make each planet and rocket upgrade cost increasingly more, also the cursor shou
 308.
 
 push update
+
+
+309.
+
+add a most planets captured leaderboard, and bounty selection, where you click on someones name, and can select a cargo amount to put a bounty. Update server and make sure no live progress is lost
+
+310.
+
+leaderboard should be most planets currently held

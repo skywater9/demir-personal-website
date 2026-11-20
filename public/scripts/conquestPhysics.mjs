@@ -658,7 +658,7 @@ function respawn(world) {
     const home = bodyFor(world.player.homeId);
     Object.assign(world.player, {
         ...dockingPoint(home), vx: 0, vy: 0,
-        angle: 0, rotationVelocity: 0, fuel: tuning.maxFuel, cargo: 0,
+        angle: 0, rotationVelocity: 0, fuel: tuning.maxFuel,
         landedOn: home.id, docked: null, deadUntil: 0, aimAngle: 0, gunHeat: 0, gunOverheatedUntil: 0
     });
     emit(world, 'respawned', { bodyId: home.id });

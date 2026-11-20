@@ -325,3 +325,21 @@ kbd { font:inherit; color:#bac8c7; font-size:8px; }
 .flight-banner { position:absolute; z-index:8; top:14px; left:50%; transform:translateX(-50%); width:max-content; max-width:82%; margin:0; padding:8px 14px; border:1px solid currentColor; background:#101921ed; color:#ffda89; text-align:center; white-space:pre-line; pointer-events:none; font-size:clamp(12px,2vw,19px); font-weight:bold; line-height:1.35; }
 .flight-banner.is-alert { color:#ff947b; }
 .flight-banner[hidden], #gameShell:not([data-screen="flight"]) .flight-banner { display:none; }
+
+.territory-board { position:absolute; z-index:6; top:12px; left:12px; width:min(270px, calc(100% - 24px)); max-height:calc(100% - 24px); overflow:auto; color:#dbe5dd; }
+.territory-board[open] { border:1px solid var(--line); background:#10212af5; padding:8px; width:min(298px, calc(100% - 24px)); }
+.territory-board summary { width:max-content; cursor:pointer; background:#10212a; border:1px solid var(--line); padding:6px 8px; font-size:10px; }
+.territory-board[open] summary { border:0; padding:0 0 8px; }
+.territory-columns,.territory-row { display:grid; grid-template-columns:minmax(0, 1fr) max-content 58px; align-items:center; gap:8px; text-align:right; font-variant-numeric:tabular-nums; }
+.territory-columns { color:var(--muted); font-size:9px; padding:0 3px 4px; }
+.territory-columns span:first-child,.territory-pilot { text-align:left; }
+.territory-rows { margin:0; padding:0; list-style:none; }
+.territory-row { padding:3px; border-top:1px solid var(--line); }
+.territory-pilot { font:inherit; padding:3px; }
+.territory-count { min-width:66px; }
+.territory-bounty { color:var(--amber); }
+.bounty-form { display:flex; gap:5px; flex-wrap:wrap; align-items:center; padding-top:7px; border-top:1px solid var(--line); }
+.bounty-form p { flex-basis:100%; margin:0; }
+.bounty-form input { width:66px; padding:4px; }
+.bounty-form button { padding:4px; }
+.bounty-status { margin:6px 0 0; overflow-wrap:anywhere; }

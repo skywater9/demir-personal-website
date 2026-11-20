@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-territory-gameplay';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-bounties';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, shopQuotes, upgradePlanet, repairTurrets,
-    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-territory-gameplay';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-territory-gameplay';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-territory-gameplay';
+    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-bounties';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-bounties';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-bounties';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -155,6 +155,13 @@ export class ConquestApp {
             this.ui.flightCanvas.focus();
         });
         this.ui.chatInput.addEventListener('focus', () => this.clearInput());
+        this.ui.territoryBoard.addEventListener('focusin', () => this.clearInput());
+        this.ui.territoryBoard.addEventListener('toggle', () => this.renderLeaderboard());
+        this.ui.bountyForm.addEventListener('submit', event => {
+            event.preventDefault();
+            return this.postBounty();
+        });
+        this.ui.bountyCancel.addEventListener('click', () => this.closeBounty());
         this.ui.interactButton.addEventListener('click', () => this.interact());
         this.ui.upgradeButton.addEventListener('click', () => this.upgrade());
         this.ui.rocketUpgradeButton.addEventListener('click', () => this.rocketUpgrade());
@@ -218,6 +225,23 @@ export class ConquestApp {
 
     // Map intentional gameplay keys while keeping browser shortcuts and form inputs usable.
     keyDown(event) {
+        if (this.mode === 'flight' && event.code === 'KeyL' && !event.repeat && !event.ctrlKey && !event.altKey
+            && !event.metaKey && !this.ui.territoryBoard.hidden && !['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target?.tagName)) {
+            event.preventDefault();
+            this.ui.territoryBoard.open = true;
+            this.ui.territorySummary.focus();
+            return;
+        }
+        // Let leaderboard controls use normal browser keyboard interaction.
+        if (event.target?.closest?.('#territoryBoard') === this.ui.territoryBoard) {
+            if (event.code === 'Escape') {
+                event.preventDefault();
+                if (!this.ui.bountyForm.hidden) this.closeBounty();
+                else this.ui.territoryBoard.open = false;
+                this.ui.flightCanvas.focus();
+            }
+            return;
+        }
         // Chat text stays local and never becomes a flight control or an analytics payload.
         if (event.target === this.ui.chatInput) {
             if (event.code === 'Escape') {
@@ -341,6 +365,8 @@ export class ConquestApp {
         this.ui.gameShell.dataset.screen = mode;
         this.clearInput();
         this.ui.menuOverlay.hidden = mode === 'flight';
+        if (mode !== 'flight') this.ui.territoryBoard.open = false;
+        this.renderLeaderboard();
         const panels = { menu: 'mainMenu', servers: 'galaxyPanel', history: 'recordsPanel', confirm: 'confirmPanel' };
         for (const [name, id] of Object.entries(panels)) this.ui[id].hidden = name !== mode;
         this.ui.menuButton.inert = mode !== 'flight';
@@ -903,6 +929,105 @@ export class ConquestApp {
         }
     }
 
+    // Render only when the board changes, keeping updates outside the flight render loop.
+    renderLeaderboard() {
+        const { territoryBoard, territoryRows, bountyForm, bountyAmount, bountySubmit } = this.ui;
+        const rows = this.world.leaderboard;
+        territoryBoard.hidden = this.mode !== 'flight' || !this.connection || !Array.isArray(rows);
+        if (territoryBoard.hidden || !territoryBoard.open) {
+            if (!bountyForm.hidden) this.closeBounty();
+            return;
+        }
+        const focusedPilot = this.page.activeElement?.dataset?.bountyPilot;
+        const currentPilot = this.world.player.id;
+        const rowKey = JSON.stringify([currentPilot, rows]);
+        if (this.leaderboardRowKey !== rowKey) {
+            this.leaderboardRowKey = rowKey;
+            const nodes = rows.map(row => {
+                const item = this.page.createElement('li');
+                item.className = 'territory-row';
+                const name = this.page.createElement(row.id === currentPilot ? 'span' : 'button');
+                name.className = 'territory-pilot';
+                name.style.color = row.color;
+                name.textContent = row.id === currentPilot ? `${row.label} (you)` : row.label;
+                if (row.id !== currentPilot) {
+                    name.type = 'button';
+                    name.dataset.bountyPilot = row.id;
+                    name.setAttribute('aria-label', `Set a bounty on ${row.label}`);
+                    name.addEventListener('click', () => this.selectBounty(row));
+                }
+                const held = this.page.createElement('span');
+                held.className = 'territory-count';
+                held.textContent = row.held;
+                const bounty = this.page.createElement('span');
+                bounty.className = 'territory-bounty';
+                bounty.textContent = row.bounty || '–';
+                item.append(name, held, bounty);
+                return item;
+            });
+            territoryRows.replaceChildren(...nodes);
+            if (focusedPilot) nodes[rows.findIndex(row => row.id === focusedPilot)]?.firstElementChild?.focus();
+        }
+        if (!bountyForm.hidden) {
+            const row = rows.find(row => row.id === this.bountyPilotId);
+            if (!row) {
+                this.closeBounty();
+                this.setBountyStatus('Pilot left the room.');
+                return;
+            }
+            const cargo = Math.floor(this.world.player.cargo);
+            this.text('bountyTarget', `Bounty on ${row.label} · ${cargo} cargo available`);
+            if (bountyAmount.max !== String(cargo)) bountyAmount.max = String(cargo);
+            bountySubmit.disabled = this.bountyPending || cargo < 1;
+        }
+    }
+
+    // Select a rival and let the pilot choose how much cargo to spend.
+    selectBounty(row) {
+        if (this.bountyPending) return;
+        this.bountyPilotId = row.id;
+        this.ui.bountyAmount.value = '';
+        this.ui.bountyForm.hidden = false;
+        this.setBountyStatus('');
+        this.renderLeaderboard();
+        this.ui.bountyAmount.focus();
+    }
+
+    // Clear the selected rival and return focus to flight when closing a purchase.
+    closeBounty() {
+        const wasOpen = !this.ui.bountyForm.hidden;
+        this.bountyPilotId = null;
+        this.ui.bountyForm.hidden = true;
+        this.setBountyStatus('');
+        if (wasOpen && this.mode === 'flight') this.ui.flightCanvas.focus();
+    }
+
+    // Show the server’s purchase outcome beside the form.
+    setBountyStatus(message) {
+        this.text('bountyStatus', message);
+        this.ui.bountyStatus.hidden = !message;
+    }
+
+    // Submit one purchase at a time and display the authoritative receipt.
+    async postBounty() {
+        if (!this.bountyPilotId || this.bountyPending) return;
+        const targetId = this.bountyPilotId;
+        const amount = Number(this.ui.bountyAmount.value);
+        if (!Number.isSafeInteger(amount) || amount < 1) {
+            this.setBountyStatus('Enter a whole cargo amount.');
+            return;
+        }
+        this.bountyPending = true;
+        this.renderLeaderboard();
+        const result = await this.connection.action('placeBounty', { targetId, amount });
+        this.bountyPending = false;
+        if (targetId === this.bountyPilotId) {
+            if (result.ok) this.closeBounty();
+            this.setBountyStatus(result.ok ? `Bounty posted: ${amount} cargo.` : result.reason);
+        }
+        this.renderLeaderboard();
+    }
+
     // Join the configured shared room without changing any remote server setup.
     async joinMultiplayer() {
         this.clearInput();
@@ -916,7 +1041,8 @@ export class ConquestApp {
     // Keep the renderer's world identity stable while replacing authoritative snapshot fields.
     receiveWorld(world, details = {}) {
         if (!world?.player || !world.planets) return;
-        Object.assign(this.world, world, { galaxyExpanded: world.galaxyExpanded === true, shopQuotes: world.shopQuotes ?? null });
+        Object.assign(this.world, world, { galaxyExpanded: world.galaxyExpanded === true, shopQuotes: world.shopQuotes ?? null,
+            leaderboard: world.leaderboard ?? null });
         this.hasSession = true;
         if (details.joined) {
             this.dockErrorUntil = 0; this.ui.chatForm.hidden = true; this.ui.chatInput.value = '';
@@ -927,6 +1053,7 @@ export class ConquestApp {
             this.message(details.resumed ? 'Reconnected to your galaxy.' : 'Follow the flashing relay marker. Capture planets to gain cargo.', 8);
             this.ui.chatMessages.replaceChildren();
         }
+        this.renderLeaderboard();
         this.updateHud(this.activeInput || {});
     }
 

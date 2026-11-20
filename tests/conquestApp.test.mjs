@@ -614,3 +614,39 @@ test('death notice names BOOSTER and WEAPON level loss together', () => {
     assert.match(nodes.get('respawnNotice').textContent, /BOOSTER 6 → 5/);
     assert.match(nodes.get('respawnNotice').textContent, /WEAPON 10 → 9/);
 });
+
+// Check that choosing a rival in the live board sends only the requested escrow amount.
+test('leaderboard row opens the bounty form and posts an amount to the server', async () => {
+    let callbacks;
+    const commands = [];
+    const fake = { token: '', async action(action, details) {
+        commands.push({ action, details }); return { ok: true };
+    } };
+    const { app, nodes } = harness(memoryStorage(), 100000, { serverUrl: 'wss://service.example/game',
+        connectionFactory: options => { callbacks = options; return fake; } });
+    const world = createWorld();
+    world.player.cargo = 12;
+    // Intro banners use browser timers, which do not need to run for this test.
+    app.browserWindow.clearTimeout = () => {};
+    app.browserWindow.setTimeout = () => 1;
+    world.leaderboard = [
+        { id: 'rival', label: 'Pilot 2', color: '#ff9fb8', held: 3, bounty: 4 },
+        { id: world.player.id, label: 'Pilot 1', color: '#8cdeb0', held: 0, bounty: 0 }
+    ];
+    callbacks.onWorld(world, { joined: true });
+    assert.equal(nodes.get('territoryBoard').hidden, false);
+    nodes.get('territoryBoard').open = true;
+    nodes.get('territoryBoard').fire('toggle');
+    const [rival, own] = nodes.get('territoryRows').children;
+    assert.equal(rival.children[1].textContent, 3);
+    assert.equal(own.children[0].tagName, 'SPAN');
+    rival.children[0].fire('click');
+    assert.equal(nodes.get('bountyForm').hidden, false);
+    assert.equal(nodes.get('bountyAmount').max, '12');
+    nodes.get('bountyAmount').value = '5';
+    await app.postBounty();
+    assert.deepEqual(commands, [{ action: 'placeBounty', details: { targetId: 'rival', amount: 5 } }]);
+    assert.equal(app.world.player.cargo, 12);
+    assert.equal(nodes.get('bountyForm').hidden, true);
+    assert.match(nodes.get('bountyStatus').textContent, /5 cargo/);
+});

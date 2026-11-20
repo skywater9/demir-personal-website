@@ -88,7 +88,8 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 const attacker = room.world.players[event.attackerId]?.player;
                 const text = attacker ? `${attacker.label}${event.source === 'turret' ? "'s turret" : ''} destroyed ${victim.label}.`
                     : event.reason?.startsWith('Self-destruct') ? `${victim.label} self-destructed.` : `${victim.label} was destroyed.`;
-                announce(text, attacker?.color || victim.color);
+                const payout = event.bountyPaid ? ` Bounty collected: ${event.bountyPaid} cargo.` : '';
+                announce(text + payout, attacker?.color || victim.color);
                 for (const [id, client] of clients) {
                     const viewer = room.world.players[id]?.player;
                     if (id !== victim.id && viewer && Math.hypot(viewer.x - victim.x, viewer.y - victim.y) <= 2400) {
@@ -203,7 +204,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 }
                 room.sessions[playerId].lastActionId = message.actionId;
                 // Number entry and capture initiation must preserve cursor targeting and moving-flight controls.
-                if (!['interact', 'digit', 'capturePress', 'planetUpgrade', 'rocketUpgrade', 'weaponUpgrade', 'repairTurret', 'repairTurrets'].includes(message.action)) {
+                if (!['interact', 'digit', 'capturePress', 'planetUpgrade', 'rocketUpgrade', 'weaponUpgrade', 'repairTurret', 'repairTurrets', 'placeBounty'].includes(message.action)) {
                     room.setInput(playerId, { ...emptyInput, aimAngle: room.world.players[playerId].player.aimAngle }, now());
                 }
                 const result = room.action(playerId, message);

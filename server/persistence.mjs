@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { bodies, territoryBodies, celestialBodies, roguePlanets, planetBodies, starterStations, extraStarterStations, dockingPoint, tuning, removeRetiredPlanets, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
 
+import { maxBounty } from './room.mjs';
+
 // Move legacy planet homes to stations without erasing earned territory or pilot resources.
 export function migrateStationHomes(data) {
     if (data?.schema !== 1 || !data.world?.planets || !data.world.players) return { data, migrated: false };
@@ -89,6 +91,22 @@ export function validateSave(data) {
         if (planet.turretHealth !== undefined && (!Number.isFinite(planet.turretHealth) || planet.turretHealth < 0 || planet.turretHealth > 5)) throw new Error('Invalid saved turret health.');
         for (const key of ['turretAngle', 'turretDisabledUntil']) {
             if (planet[key] !== undefined && (!Number.isFinite(planet[key]) || Math.abs(planet[key]) > 1e8)) throw new Error('Invalid saved turret state.');
+        }
+    }
+    if (world.bounties !== undefined) {
+        if (!Array.isArray(world.bounties) || world.bounties.length > ids.length * (ids.length - 1)) throw new Error('Invalid saved bounties.');
+        const totals = new Map();
+        const pairs = new Set();
+        for (const bounty of world.bounties) {
+            if (!bounty || !ids.includes(bounty.issuerId) || !ids.includes(bounty.targetId)
+                || bounty.issuerId === bounty.targetId || !Number.isSafeInteger(bounty.amount) || bounty.amount < 1) {
+                throw new Error('Invalid saved bounty.');
+            }
+            const pair = `${bounty.issuerId}:${bounty.targetId}`;
+            const total = (totals.get(bounty.targetId) || 0) + bounty.amount;
+            if (pairs.has(pair) || total > maxBounty) throw new Error('Invalid saved bounty total.');
+            pairs.add(pair);
+            totals.set(bounty.targetId, total);
         }
     }
     const homes = new Set();

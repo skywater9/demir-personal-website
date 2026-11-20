@@ -4,6 +4,15 @@ One authoritative galaxy, up to twelve anonymous pilots, Node 22+, and the `ws`
 WebSocket library. The existing browser frontend and the server share
 `public/scripts/conquestPhysics.mjs`.
 
+## Leaderboard and bounties
+
+Open **Leaderboard** in flight to see how many planets each pilot currently
+holds. Stars, the black hole, and home stations are excluded. Select another
+pilot and enter whole cargo to post or increase a bounty. A direct weapon kill
+pays the bounty to the attacker. Bounties survive reconnects and server restarts.
+If the target leaves the room, contributing pilots who are still in the room
+receive a refund.
+
 ## Class-box requirements
 
 Complete the assignment's manual folder step yourself first. Keep this repository
