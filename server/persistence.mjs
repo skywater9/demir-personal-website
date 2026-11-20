@@ -68,7 +68,7 @@ export function validateSave(data) {
     }
     for (const body of territoryBodies) {
         const planet = world.planets[body.id];
-        if (!planet && roguePlanets.includes(body) && (world.roguePlanetsVersion ?? 0) < 4) continue;
+        if (!planet && roguePlanets.includes(body) && (world.roguePlanetsVersion ?? 0) < 5) continue;
         if (!planet && celestialBodies.some(candidate => candidate.id === body.id) && world.celestialTargetsVersion !== 1) continue;
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
             || planet.level < 0 || planet.level > (world.upgradeTracksVersion === 2 ? tuning.maxPlanetLevel : 20) || !Number.isFinite(planet.stock) || planet.stock < 0
@@ -118,7 +118,7 @@ export class GalaxyStore {
             removeRetiredPlanets(snapshot?.world);
             const result = migrateStationHomes(snapshot);
             const data = validateSave(result.data);
-            if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1 || data.world.roguePlanetsVersion !== 4) {
+            if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1 || data.world.roguePlanetsVersion !== 5) {
                 await writeFile(`${this.file}.pre-upgrades-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });
             }
             migrateUpgradeTracks(data.world);

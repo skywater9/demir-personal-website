@@ -38,7 +38,7 @@ export const tuning = Object.freeze({
     hackPressInterval: 0.1, hackBasePresses: 8, hackExtraPresses: 2, captureDecayRate: .65,
     maxPlanetLevel: 10, maxRocketLevel: 10, turretRepairCooldown: 5,
     upgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
-    stationMinimumSeparation: 5000,
+    stationMinimumSeparation: 4400,
     starCaptureAltitude: 500, blackHoleCaptureAltitude: 1050,
     starCaptureMultiplier: 2, blackHoleCaptureMultiplier: 3,
     homeShieldAltitude: 150, smallShieldAltitude: 190, outerFieldAltitude: 1000,
@@ -77,7 +77,7 @@ export const systems = Object.freeze([
 export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black hole',
     ...galaxyCenter,
     radius: 320, gravity: 360 });
-export const galaxyRadius = 14500;
+export const galaxyRadius = 8800;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
@@ -106,32 +106,25 @@ const systemPlanets = systems.flatMap((system, systemIndex) =>
 
 // Place neutral worlds in open space, clear of system clusters and starter stations.
 export const roguePlanets = Object.freeze([
+    ['Meridian', 2800, -3800, 165, 5.6, '#85a7ac'],
+    ['Lantern', -2700, -3900, 150, 4.5, '#b69a7e'],
+    ['Faros', 550, -10100, 175, 6.1, '#a898bb'],
     ['Drift', -5700, -800, 150, 4.2, '#8faeb3'],
     ['Haven', 4300, 3600, 185, 6.7, '#86ab86'],
     ['Rime', 6500, -12300, 145, 3.4, '#a7c6df'],
     ['Dusk', -10700, -4600, 170, 5.8, '#a78bba'],
-    ['Sable', -1600, 5900, 155, 4.8, '#bf9a78'],
-    ['Cairn', 11400, -2200, 160, 5.2, '#9caab5'],
-    ['Brume', -10500, 900, 155, 4.6, '#8e9ba9'],
-    ['Tarn', 5600, 7900, 175, 6.1, '#739a91'],
     ['Shale', -4000, -11300, 165, 5.3, '#a39287'],
     ['Pale', 7700, -12900, 140, 3.2, '#b7c8da'],
-    ['Mica', 10200, 4900, 150, 4.3, '#bc9c84'],
-    ['Serein', -9400, 4700, 185, 6.8, '#829bb2'],
-    ['Fallow', -12300, -13000, 150, 4.1, '#b5a182'],
     ['Kestrel', -500, -11900, 145, 4.0, '#859dac'],
-    ['Nival', 11800, -15600, 150, 4.0, '#a6c0d0'],
     ['Umber', -1800, -16200, 175, 5.9, '#a98a79'],
     ['Glimmer', -4900, -17000, 155, 3.8, '#739a91'],
-    ['Hush', 4800, -17000, 165, 4.3, '#a984a2'],
-    ['Quartz', 6500, -19200, 155, 5.8, '#829bb2'],
-    ['Rill', 200, -20600, 165, 6.3, '#a98a79']
+    ['Hush', 4800, -17000, 165, 4.3, '#a984a2']
 ].map(([name, x, y, radius, gravity, color]) => {
     const dx = x - blackHole.x;
     const dy = y - blackHole.y;
     const distance = Math.hypot(dx, dy);
     // Contract the outskirts while keeping the developed inner clusters in place.
-    const scale = distance > 9000 ? (9000 + (distance - 9000) * 0.18) / distance : 1;
+    const scale = distance > 8000 ? (8000 + (distance - 8000) * 0.08) / distance : 1;
     return Object.freeze({
         id: `rogue-${name.toLowerCase()}`, name, x: Math.round(blackHole.x + dx * scale),
         y: Math.round(blackHole.y + dy * scale), radius, gravity, color, land: '#687982'
@@ -142,16 +135,18 @@ export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 
 // Reserve protected, widely separated outposts so the server can assign a random free home.
 export const starterStations = Object.freeze([
-    [2450, 600], [8000, 1500], [-4000, 3500], [-7000, -12000],
-    [1000, -14500], [12500, -9000], [12800, -200], [-12800, -200]
+    [2450, 600], [7900, 950], [-3900, 3300], [-7000, -12000],
+    [1000, -14500], [9500, -9600], [10300, -4200], [-8900, -2300]
 ].map(([x, y], index) => Object.freeze({
     id: `station-${index + 1}`, name: `Starter station ${index + 1}`, station: true,
-    x, y, radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
+    x: Math.round(blackHole.x + (x - blackHole.x) * 0.87),
+    y: Math.round(blackHole.y + (y - blackHole.y) * 0.87),
+    radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
 })));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
 export const territoryBodies = Object.freeze([...bodies, ...celestialBodies]);
 
-const retiredPlanetIds = new Set(['rogue-mistral', 'rogue-vesper', 'rogue-nacreveil', 'rogue-beryl', 'rogue-oriole', 'rogue-thistle', 'rogue-aureole', 'rogue-silt', 'rogue-flintglass', 'rogue-morrow', 'rogue-jasper', 'rogue-keel', 'rogue-dewpoint', 'rogue-eider', 'rogue-lark', 'rogue-frostmere', 'rogue-cresset', 'rogue-pumice', 'rogue-iolite', 'rogue-asterfall']);
+const retiredPlanetIds = new Set(['rogue-mica', 'rogue-serein', 'rogue-brume', 'rogue-sable', 'rogue-cairn', 'rogue-fallow', 'rogue-tarn', 'rogue-nival', 'rogue-rill', 'rogue-quartz', 'rogue-mistral', 'rogue-vesper', 'rogue-nacreveil', 'rogue-beryl', 'rogue-oriole', 'rogue-thistle', 'rogue-aureole', 'rogue-silt', 'rogue-flintglass', 'rogue-morrow', 'rogue-jasper', 'rogue-keel', 'rogue-dewpoint', 'rogue-eider', 'rogue-lark', 'rogue-frostmere', 'rogue-cresset', 'rogue-pumice', 'rogue-iolite', 'rogue-asterfall']);
 
 // Clear retired territory and redirect saved navigation to the pilot's home.
 export function removeRetiredPlanets(world) {
@@ -206,7 +201,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 4, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 5, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -457,7 +452,7 @@ export function migrateUpgradeTracks(world) {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
     world.celestialTargetsVersion = 1;
-    world.roguePlanetsVersion = 4;
+    world.roguePlanetsVersion = 5;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {
@@ -840,6 +835,22 @@ function resolveMovement(world, start, end) {
     player.x += nx * 0.01;
     player.y += ny * 0.01;
     bounce(player, nx, ny);
+}
+
+// Brake outward motion at the galaxy edge while preserving inward and sideways steering.
+function brakeAtGalaxyEdge(player) {
+    const dx = player.x - blackHole.x;
+    const dy = player.y - blackHole.y;
+    const distance = Math.hypot(dx, dy);
+    const limit = galaxyRadius - tuning.shipRadius;
+    if (distance <= limit) return;
+    const nx = dx / distance;
+    const ny = dy / distance;
+    player.x = blackHole.x + nx * limit;
+    player.y = blackHole.y + ny * limit;
+    const outwardSpeed = Math.max(0, player.vx * nx + player.vy * ny);
+    player.vx -= nx * outwardSpeed;
+    player.vy -= ny * outwardSpeed;
 }
 
 // Apply soft hostile fields without clamping rocket positions or changing friendly motion.
@@ -1482,6 +1493,7 @@ function movePlayer(world, input, dt) {
     const start = { x: player.x, y: player.y };
     const end = { x: player.x + player.vx * dt, y: player.y + player.vy * dt };
     resolveMovement(world, start, end);
+    brakeAtGalaxyEdge(player);
 }
 
 // Advance bounded fixed substeps so service, swept combat, and respawning continue without active controls.

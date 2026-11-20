@@ -1405,3 +1405,39 @@ push changes to website
 253.
 
 make map even smaller and remove 10 planets before piushing
+
+254.
+
+reduce mape size even more
+
+255.
+
+where can I see the changes locally
+
+256.
+
+there are very few planets actually between the solar systems, add some there too. And also still make map smaller
+
+257.
+
+apply rapid deceleration when a player goes on map boundary
+
+258.
+
+make map even smaller
+
+259.
+
+make map a bit smaller still, remove 3 planets
+
+260.
+
+make map smaller still, remove 2 planets
+
+261.
+
+decrease planet amount by 5, make even smaller
+
+262.
+
+deploy changes

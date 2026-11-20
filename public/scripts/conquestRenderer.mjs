@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadius, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-compact-triangle';
+} from './conquestPhysics.mjs?v=20261119-8800-galaxy';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';

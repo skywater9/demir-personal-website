@@ -681,10 +681,12 @@ the room but not persisted or uploaded to analytics.
 
 The Firebase game frontend is aligned with the deployed starter-station/planet-service version. Hover prompts show their action without a persistent OUT OF RANGE caption; interaction distance checks still apply.
 
-Twenty neutral rogue planets sit outside the three star systems. They use the same capture, cargo, and upgrade rules as other planets. Cargo steers toward eligible pilots within 520 m at stars and 850 m at the black hole. Pods stay at least 65 m outside stellar turret rails.
+Thirteen neutral rogue planets sit outside the three star systems. They use the same capture, cargo, and upgrade rules as other planets. Cargo steers toward eligible pilots within 520 m at stars and 850 m at the black hole. Pods stay at least 65 m outside stellar turret rails.
 
-New pilots get the available starter station nearest the map center, subject to the existing 5,000-unit separation rule. Outer stations fill as inner sites become occupied.
+New pilots get the available starter station nearest the map center, subject to the 4,400-unit separation rule. Outer stations fill as inner sites become occupied.
 
-The expanded map centers its 14,500 m galaxy outline on the black hole. Outer planets are packed closer inside that outline.
+The expanded map centers its 8,800 m galaxy outline on the black hole. Outer planets are packed closer inside that outline.
 
 Sol, Vega, and Ember are spaced 120 degrees apart around the black hole.
+
+The galaxy edge stops outward motion. Pilots can turn and fly back inward.
