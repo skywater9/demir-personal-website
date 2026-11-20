@@ -1,6 +1,6 @@
 # Shared galaxy server
 
-One authoritative galaxy, up to eight anonymous pilots, Node 22+, and the `ws`
+One authoritative galaxy, up to twelve anonymous pilots, Node 22+, and the `ws`
 WebSocket library. The existing browser frontend and the server share
 `public/scripts/conquestPhysics.mjs`.
 
@@ -85,7 +85,7 @@ it: it contains hashed reconnect reservations and game state.
 A controlled restart preserves online-player reservations. After restart they
 have 30 seconds to reconnect. Already disconnected players keep their existing
 expiry deadlines. Expiry releases all of that pilot's territory; deliberate Leave
-releases it immediately. The world does not advance during a service outage.
+releases it immediately. The world does not advance during a service outage. The one-time migration from the eight-station layout preserves existing reservations and grants at least five minutes to reconnect.
 
 Reconnect tokens are random, stored in the player's session storage, and hashed
 on disk. They never appear in URLs, analytics, chat, or application logs. Messages

@@ -1,6 +1,6 @@
 import {
-    bodies, territoryBodies, celestialBodies, systems, galaxyRadius, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261120-capture-upgrade-hint';
+    bodies, territoryBodies, celestialBodies, systems, galaxyRadiusFor, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, planetFuelSource, blackHole
+} from './conquestPhysics.mjs?v=20261120-soft-galaxy-edge';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -19,6 +19,7 @@ export class ConquestRenderer {
         this.context = canvas.getContext('2d', { alpha: false });
         this.mapCanvas = mapCanvas;
         this.mapContext = mapCanvas.getContext('2d', { alpha: false });
+        this.starBodies = systems;
         this.camera = { x: 0, y: -420, zoom: 0.8 };
         this.cameraReady = false;
         this.visualTime = 0;
@@ -39,7 +40,6 @@ export class ConquestRenderer {
         this.deathTime = 0;
         this.motionQuery = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
         this.reducedMotion = this.motionQuery?.matches || false;
-        this.starBodies = systems.flatMap(system => system.stars || [system]);
         this.backgroundStars = Array.from({ length: 200 }, (_, index) => ({
             x: this.random(index * 3 + 1), y: this.random(index * 3 + 2),
             bright: this.random(index * 3 + 3) > 0.9
@@ -136,6 +136,14 @@ export class ConquestRenderer {
                     ctx.stroke();
                 }
             }
+            const planet = world.planets[hovered.id];
+            if (dockingStatus(world, hovered.id).distance <= planetInteractionDistance(hovered, planet)) {
+                const center = this.screen(hovered.x, hovered.y);
+                ctx.strokeStyle = '#f1f6f3';
+                ctx.globalAlpha = 0.9;
+                ctx.setLineDash([1, 3]);
+                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(center.x, center.y); ctx.stroke();
+            }
         } else {
             ctx.setLineDash([2, 4]);
             ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(x, y); ctx.stroke();
@@ -170,7 +178,7 @@ export class ConquestRenderer {
         const width = this.mapCanvas.width;
         const height = this.mapCanvas.height;
         if (this.mapExpanded) {
-            const scale = Math.min(width, height) * 0.45 / galaxyRadius;
+            const scale = Math.min(width, height) * 0.45 / galaxyRadiusFor(world);
             return { width, height, scale, centerX: blackHole.x, centerY: blackHole.y };
         }
         const center = this.mapCoordinates(world.player.x, world.player.y);
@@ -450,6 +458,21 @@ export class ConquestRenderer {
         ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
         ctx.restore();
         this.label('FUEL', (topLeft.x + bottomRight.x) / 2, topLeft.y - 8, '#ffe283', 'center', false, 16);
+    }
+
+    // Connect the fuel pad to the ship whenever it is inside an owned fuel zone.
+    drawFuelGuide(world, ship) {
+        const body = planetFuelSource(world);
+        if (!body) return;
+        const pad = this.screen(body.x, body.y - body.radius);
+        const rocket = this.screen(ship.x, ship.y);
+        const ctx = this.context;
+        ctx.save();
+        ctx.strokeStyle = '#ffe283';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([1, 3]);
+        ctx.beginPath(); ctx.moveTo(pad.x, pad.y); ctx.lineTo(rocket.x, rocket.y); ctx.stroke();
+        ctx.restore();
     }
 
     // Keep the black-hole halo circular, with glowing pixels orbiting on matching round paths.
@@ -1055,7 +1078,7 @@ export class ConquestRenderer {
         ctx.restore();
     }
 
-    // Draw all three scattered systems with ownership, target, home, and the pilot's bearing.
+    // Draw the three systems with ownership, target, home, and the pilot's bearing.
     drawMap(world) {
         const ctx = this.mapContext;
         this.lastMapWorld = world;
@@ -1066,15 +1089,17 @@ export class ConquestRenderer {
         ctx.strokeStyle = '#36515e';
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 3]);
-        ctx.beginPath(); ctx.arc(galaxyCenter.x, galaxyCenter.y, galaxyRadius * layout.scale, 0, fullCircle); ctx.stroke();
+        ctx.beginPath(); ctx.arc(galaxyCenter.x, galaxyCenter.y, galaxyRadiusFor(world) * layout.scale, 0, fullCircle); ctx.stroke();
         ctx.setLineDash([]);
         ctx.font = '8px monospace'; ctx.textAlign = 'center'; ctx.lineWidth = 1;
-        for (const system of systems) {
+        for (const system of this.starBodies) {
             const point = this.mapPoint(system.x, system.y, layout);
             const members = bodies.filter(body => !body.station && body.systemId === system.id);
-            const radius = Math.max(1, ...members.map(body => Math.hypot(body.x - system.x, body.y - system.y))) * layout.scale;
-            ctx.strokeStyle = '#263e4c'; ctx.setLineDash([2, 3]);
-            ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, fullCircle); ctx.stroke(); ctx.setLineDash([]);
+            const radius = Math.max(system.radius, ...members.map(body => Math.hypot(body.x - system.x, body.y - system.y))) * layout.scale;
+            if (members.length) {
+                ctx.strokeStyle = '#263e4c'; ctx.setLineDash([2, 3]);
+                ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, fullCircle); ctx.stroke(); ctx.setLineDash([]);
+            }
             ctx.fillStyle = '#aabec7';
             ctx.fillText(system.name.toUpperCase(), Math.max(20, Math.min(width - 20, point.x)), Math.max(9, Math.min(height - 4, point.y - radius - 5)));
         }
@@ -1278,8 +1303,11 @@ export class ConquestRenderer {
         }
         const liveIds = new Set([player.id, ...(world.others || []).map(other => other.id)]);
         for (const id of this.networkPoses.keys()) if (!liveIds.has(id)) this.networkPoses.delete(id);
-        if (!dead) this.drawRocket(this.dockingVisualPlayer(world.others ? this.networkPose(player, elapsed) : player), world.elapsed);
-        else if (this.deathPosition) this.drawExplosion();
+        if (!dead) {
+            const ship = this.dockingVisualPlayer(world.others ? this.networkPose(player, elapsed) : player);
+            if (!menu) this.drawFuelGuide(world, ship);
+            this.drawRocket(ship, world.elapsed);
+        } else if (this.deathPosition) this.drawExplosion();
         if (!menu && !dead) this.drawGuidance(world);
         this.drawCaptureEffects(world);
 

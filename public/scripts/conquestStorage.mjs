@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-capture-upgrade-hint';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, extraStarterStations, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-soft-galaxy-edge';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -12,6 +12,7 @@ export function validWorld(world) {
         || !Number.isFinite(world.elapsed) || world.elapsed < 0 || world.elapsed > 31536000
         || !world.planets || Object.keys(world.planets).some(id => !territoryBodies.some(body => body.id === id))
         || world.celestialTargetsVersion !== undefined && world.celestialTargetsVersion !== 1) return false;
+    if (world.galaxyExpanded !== undefined && typeof world.galaxyExpanded !== 'boolean') return false;
     if (![undefined, 1, 2, 3, 4, 5, 6].includes(world.roguePlanetsVersion)) return false;
     const player = world.player;
     for (const key of ['x', 'y', 'vx', 'vy', 'angle', 'fuel', 'cargo', 'deadUntil', 'aimAngle', 'rotationVelocity']) {
@@ -29,6 +30,7 @@ export function validWorld(world) {
     if (world.upgradeTracksVersion === 2 && (!Number.isInteger(player.weaponTier) || player.weaponTier < 0 || player.weaponTier > tuning.maxRocketLevel)) return false;
     for (const body of territoryBodies) {
         const state = world.planets[body.id];
+        if (!state && extraStarterStations.includes(body)) continue;
         if (!state && roguePlanets.includes(body) && (world.roguePlanetsVersion ?? 0) < 6) continue;
         if (!state && celestialBodies.some(candidate => candidate.id === body.id) && world.celestialTargetsVersion !== 1) continue;
         if (!state || !(state.owner === null || state.owner === 'pilot')

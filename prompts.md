@@ -1521,3 +1521,43 @@ after you capture a planet, make it so there is a text called E to upgrade, also
 282.
 
 dont erase current server progress
+
+283.
+
+once youe get in range of a planet, there should be a dotted line from cursor to planet to indicate hover over, also increase cargo production for new planets, also make it so that you dont take damage for bumping on captured planets, also create a yellow dotted line to the rocket from the planet when you are in the fuel zone
+
+284.
+
+Also start the map even smaller, and slightly expand when players join. So keep layout the same, but start with just 2 solar systems, then add a third one once 5 people join
+
+285.
+
+show the local link
+
+286.
+
+for some reson, playtesters reported costs on home relay or planets for upgrades, dont match actual cargo used. so says 10 cargo but only takes 5 from cost
+
+287.
+
+i cant see the local link, cant connect
+
+288.
+
+add back the third star on the small system
+
+289.
+
+undo the map resize, just make it larger after 10+ players
+
+290.
+
+also black hole and planets have inconsistent cargo production, why is that
+
+291.
+
+there shouldn't be a 30-second boost to production, production should always be that high level
+
+292.
+
+also push to website, but keep server player progress, also befor remove the hard boundary, just make it harder to go out as you go outside

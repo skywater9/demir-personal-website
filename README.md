@@ -689,10 +689,16 @@ The expanded map centers its 8,400 m galaxy outline on the black hole. Outer pla
 
 Sol, Vega, and Ember are spaced 120 degrees apart around the black hole.
 
-The galaxy edge stops outward motion. Pilots can turn and fly back inward.
+The dotted galaxy edge marks where outward drag starts. Resistance rises farther outside the map. Pilots can still fly across the edge and return freely.
 
 Planet fuel zones are 192 m wide and reach 170 m above the pad. The drawn zone and refueling use the same bounds.
 
 The first flight entry shows a five-second intro at the top. That banner also shows private alerts when the last turret is destroyed or another pilot captures your territory.
 
 After a successful capture, the confirmation tells pilots to aim at the captured world and press E to upgrade. The first capture arrow is larger both on screen and at the edge of the flight view.
+
+Within interaction range, hovering over a world draws a dotted line from the cursor to its center. An owned fuel zone draws a yellow dotted line from its pad to the ship whenever the ship is inside. Captured planets use the doubled production rate for as long as they are owned, and surface impacts on owned planets bounce without fuel damage.
+
+All three star systems and their planets are available from the start in an 8,400 m galaxy. When ten pilots are connected at once, the boundary expands to 10,000 m. The original worlds and eight starter stations keep their coordinates. Four extra starter stations give the room capacity for twelve pilots. The boundary stays expanded until the room is empty.
+
+Multiplayer shops show the server's price quote for each purchase. A changed quote requires a fresh purchase attempt before any cargo is charged.

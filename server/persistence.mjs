@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { bodies, territoryBodies, celestialBodies, roguePlanets, planetBodies, starterStations, dockingPoint, tuning, removeRetiredPlanets, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, planetBodies, starterStations, extraStarterStations, dockingPoint, tuning, removeRetiredPlanets, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
 
 // Move legacy planet homes to stations without erasing earned territory or pilot resources.
 export function migrateStationHomes(data) {
@@ -48,8 +48,10 @@ export function validateSave(data) {
         || !Number.isInteger(world.eventCounter) || world.eventCounter < 0 || !world.planets
         || !Array.isArray(world.pickups) || !Array.isArray(world.projectiles)
         || world.pickups.length > 64 || world.projectiles.length > 256) throw new Error('Invalid galaxy snapshot. Restore a valid backup before starting.');
+    if (world.galaxyExpanded !== undefined && typeof world.galaxyExpanded !== 'boolean') throw new Error('Invalid saved galaxy boundary.');
+    const pilotLabels = starterStations.map((_, index) => `Pilot ${index + 1}`);
     const ids = Object.keys(world.players);
-    if (ids.length > 8 || Object.keys(data.sessions).length !== ids.length) throw new Error('Invalid pilot reservations.');
+    if (ids.length > starterStations.length || Object.keys(data.sessions).length !== ids.length) throw new Error('Invalid pilot reservations.');
     for (const id of ids) {
         const actor = world.players[id], p = actor.player, session = data.sessions[id];
         if (!/^p-[a-f0-9-]{36}$/.test(id) || p?.id !== id || !session || !/^[a-f0-9]{64}$/.test(session.tokenHash)
@@ -57,7 +59,7 @@ export function validateSave(data) {
             || !bodies.some(body => body.id === p.homeId) || !Number.isInteger(p.rocketTier) || p.rocketTier < 0 || p.rocketTier > (world.upgradeTracksVersion === 2 ? tuning.maxRocketLevel : 4)
             || (world.upgradeTracksVersion === 2 && (!Number.isInteger(p.weaponTier) || p.weaponTier < 0 || p.weaponTier > tuning.maxRocketLevel))
             || !actor.stats || !['captures', 'deaths', 'cargoCollected', 'shots'].every(key => Number.isFinite(actor.stats[key]) && actor.stats[key] >= 0)
-            || !/^Pilot [1-8]$/.test(p.label) || !/^#[a-f0-9]{6}$/i.test(p.color)
+            || !pilotLabels.includes(p.label) || !/^#[a-f0-9]{6}$/i.test(p.color)
             || p.fuel < 0 || p.fuel > 100 || p.cargo < 0
             || !['rotationVelocity', 'gunHeat', 'gunOverheatedUntil', 'joinedAt'].every(key => Number.isFinite(p[key]))
             || p.gunHeat < 0 || p.gunHeat > 1 || !actor.target || !territoryBodies.some(body => body.id === actor.target.bodyId)
@@ -68,6 +70,7 @@ export function validateSave(data) {
     }
     for (const body of territoryBodies) {
         const planet = world.planets[body.id];
+        if (!planet && extraStarterStations.includes(body)) continue;
         if (!planet && roguePlanets.includes(body) && (world.roguePlanetsVersion ?? 0) < 6) continue;
         if (!planet && celestialBodies.some(candidate => candidate.id === body.id) && world.celestialTargetsVersion !== 1) continue;
         if (!planet || (planet.owner !== null && !ids.includes(planet.owner)) || !Number.isInteger(planet.level)
@@ -118,7 +121,8 @@ export class GalaxyStore {
             removeRetiredPlanets(snapshot?.world);
             const result = migrateStationHomes(snapshot);
             const data = validateSave(result.data);
-            if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1 || data.world.roguePlanetsVersion !== 6) {
+            if (data.world.upgradeTracksVersion !== 2 || data.world.celestialTargetsVersion !== 1 || data.world.roguePlanetsVersion !== 6
+                || extraStarterStations.some(station => !data.world.planets[station.id])) {
                 await writeFile(`${this.file}.pre-upgrades-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });
             }
             migrateUpgradeTracks(data.world);

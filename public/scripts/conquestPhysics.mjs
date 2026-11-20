@@ -21,6 +21,7 @@ const paidUpgradeCosts = Object.freeze([2, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
 export const tuning = Object.freeze({
     ...motionTuning,
     mainAcceleration: 240, brakeAcceleration: 300, brakeResponse: 8,
+    edgeDragDistance: 240,
     hackingDistance: planetCaptureRange, dockingSpeed: 20, dockingAngle: 35 * Math.PI / 180,
     gunHeatPerShot: 0.18, gunCoolingRate: 0.25, gunOverheatDuration: 2.5, shotRecoil: 1.25,
     shotFuelDamage: 5, playerShotFuelDamage: 8, playerHitboxBonus: 5, impactFuelDamageRate: 0.5,
@@ -28,6 +29,7 @@ export const tuning = Object.freeze({
     aimRotationAcceleration: 150, maxAimRotationRate: 8,
     aimRotationResponse: 100, aimRotationDamping: 20,
     cargoRate: 0.3, maxStock: 60, cargoSpawnInterval: 3.34, cargoSurfaceOffset: 70,
+    planetCargoMultiplier: 2,
     cargoAltitudeVariation: 90, cargoOrbitSpeedVariation: 0.14,
     pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
@@ -79,6 +81,7 @@ export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black 
     ...galaxyCenter,
     radius: 320, gravity: 180 });
 export const galaxyRadius = 8400;
+const expandedGalaxyRadius = 10000;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
@@ -142,14 +145,22 @@ export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 // Reserve protected, widely separated outposts so the server can assign a random free home.
 export const starterStations = Object.freeze([
     [3422, -4833], [-1520, -3227], [-440, -8310], [-5506, -10694],
-    [897, -12695], [7701, -8910], [8341, -4450], [-7027, -2930]
+    [897, -12695], [7701, -8910], [8341, -4450], [-7027, -2930],
+    [-4000, -2000], [2000, -9250], [5000, 250], [-4250, 500]
 ].map(([x, y], index) => Object.freeze({
     id: `station-${index + 1}`, name: `Starter station ${index + 1}`, station: true,
     x, y,
     radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
 })));
+// Older saves contain the original eight stations.
+export const extraStarterStations = Object.freeze(starterStations.slice(8));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
 export const territoryBodies = Object.freeze([...bodies, ...celestialBodies]);
+
+// Leave all worlds in place and move only the outer boundary in a busy room.
+export function galaxyRadiusFor(world) {
+    return world?.galaxyExpanded === true ? expandedGalaxyRadius : galaxyRadius;
+}
 
 const retiredPlanetIds = new Set(['rogue-mica', 'rogue-serein', 'rogue-brume', 'rogue-sable', 'rogue-cairn', 'rogue-fallow', 'rogue-tarn', 'rogue-nival', 'rogue-rill', 'rogue-quartz', 'rogue-mistral', 'rogue-vesper', 'rogue-nacreveil', 'rogue-beryl', 'rogue-oriole', 'rogue-thistle', 'rogue-aureole', 'rogue-silt', 'rogue-flintglass', 'rogue-morrow', 'rogue-jasper', 'rogue-keel', 'rogue-dewpoint', 'rogue-eider', 'rogue-lark', 'rogue-frostmere', 'rogue-cresset', 'rogue-pumice', 'rogue-iolite', 'rogue-asterfall']);
 
@@ -206,7 +217,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 6, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 6, galaxyExpanded: false, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -247,7 +258,7 @@ export function nearestBody(player) {
 export function gravityAt(x, y) {
     let ax = 0;
     let ay = 0;
-    for (const body of [...bodies, ...systems, blackHole]) {
+    for (const body of territoryBodies) {
         const dx = body.x - x;
         const dy = body.y - y;
         const distance = Math.max(0.001, Math.hypot(dx, dy));
@@ -385,9 +396,10 @@ export function capturePress(world, { repeat = false, challengeId } = {}) {
     hack.lastAcceptedAt = world.elapsed;
     if (hack.progress >= hack.required) {
         const previousOwner = world.planets[hack.bodyId].owner;
-        Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 1,
+        const planet = world.planets[hack.bodyId];
+        Object.assign(planet, { owner: world.player.id, level: 1,
             capturedAt: world.elapsed, recaptureAt: world.elapsed + tuning.recaptureCooldown,
-            nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
+            nextCargoAt: world.elapsed + tuning.cargoSpawnInterval / cargoProductionMultiplier(bodyFor(hack.bodyId)) });
         world.planets[hack.bodyId].turrets = [];
         prepareTurrets(world.planets[hack.bodyId]);
         world.stats.captures += 1;
@@ -454,11 +466,12 @@ export function planetInteractionDistance(body, planet) {
 // Preserve earned levels where possible while moving old combined upgrades into separate tracks.
 export function migrateUpgradeTracks(world) {
     world.planets ||= {};
-    for (const body of [...celestialBodies, ...roguePlanets]) world.planets[body.id] ||= {
+    for (const body of [...celestialBodies, ...roguePlanets, ...extraStarterStations]) world.planets[body.id] ||= {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
     world.celestialTargetsVersion = 1;
     world.roguePlanetsVersion = 6;
+    delete world.galaxyStage;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {
@@ -730,7 +743,7 @@ function firstContact(world, start, end) {
     const consider = contact => {
         if (contact && (!first || contact.fraction < first.fraction)) first = contact;
     };
-    for (const star of [...systems, blackHole]) {
+    for (const star of celestialBodies) {
         const fraction = circleHit(start, end, star, star.radius + tuning.shipRadius);
         if (fraction !== null) consider({ fraction, type: 'star', body: star });
     }
@@ -811,7 +824,8 @@ function resolveMovement(world, start, end) {
         return;
     }
     const speed = Math.hypot(player.vx, player.vy);
-    if ((hit.type === 'surface' && speed > tuning.surfaceCrashSpeed)
+    const capturedSurface = hit.type === 'surface' && !hit.body.station && world.planets[hit.body.id]?.owner;
+    if ((hit.type === 'surface' && !capturedSurface && speed > tuning.surfaceCrashSpeed)
         || (hit.type === 'station' && speed >= tuning.stationCrashSpeed)) {
         const threshold = hit.type === 'surface' ? tuning.surfaceCrashSpeed : tuning.stationCrashSpeed;
         const damage = Math.max(1, Math.ceil((speed - threshold) * tuning.impactFuelDamageRate));
@@ -843,20 +857,20 @@ function resolveMovement(world, start, end) {
     bounce(player, nx, ny);
 }
 
-// Brake outward motion at the galaxy edge while preserving inward and sideways steering.
-function brakeAtGalaxyEdge(player) {
+// Increase outward drag with distance beyond the map while allowing flight back in.
+function applyGalaxyEdgeDrag(world, dt) {
+    const player = world.player;
     const dx = player.x - blackHole.x;
     const dy = player.y - blackHole.y;
     const distance = Math.hypot(dx, dy);
-    const limit = galaxyRadius - tuning.shipRadius;
-    if (distance <= limit) return;
+    const depth = distance - galaxyRadiusFor(world);
+    if (depth <= 0) return;
     const nx = dx / distance;
     const ny = dy / distance;
-    player.x = blackHole.x + nx * limit;
-    player.y = blackHole.y + ny * limit;
     const outwardSpeed = Math.max(0, player.vx * nx + player.vy * ny);
-    player.vx -= nx * outwardSpeed;
-    player.vy -= ny * outwardSpeed;
+    const speedLost = outwardSpeed * -Math.expm1(-depth * dt / tuning.edgeDragDistance);
+    player.vx -= nx * speedLost;
+    player.vy -= ny * speedLost;
 }
 
 // Apply soft hostile fields without clamping rocket positions or changing friendly motion.
@@ -912,18 +926,45 @@ function launchPlanetCargo(world, body, planet) {
             : systems.some(system => system.id === body.id) ? tuning.starCargoValue : 1,
         expiresAt: world.elapsed + tuning.pickupLifetime });
     planet.stock -= 1;
-    planet.nextCargoAt = world.elapsed + tuning.cargoSpawnInterval;
+    planet.nextCargoAt = world.elapsed + tuning.cargoSpawnInterval / cargoProductionMultiplier(body);
 }
 
-// Refill only on an upright owned pad; cargo must be collected from the nearby floating pods.
+// Ordinary captured planets produce cargo twice as fast as stellar bodies.
+function cargoProductionMultiplier(body) {
+    return celestialBodies.includes(body) ? 1 : tuning.planetCargoMultiplier;
+}
+
+// Bank and release cargo at the same rates in solo and multiplayer flight.
+function producePlanetCargo(world, dt) {
+    for (const body of territoryBodies) {
+        const planet = world.planets[body.id];
+        if (!planet.owner || body.station || isHome(world, body)) continue;
+        const multiplier = cargoProductionMultiplier(body);
+        planet.stock = Math.min(tuning.maxStock, planet.stock + tuning.cargoRate * multiplier * dt);
+        const nextCargoDeadline = world.elapsed + tuning.cargoSpawnInterval / multiplier;
+        planet.nextCargoAt = Number.isFinite(planet.nextCargoAt)
+            ? Math.min(planet.nextCargoAt, nextCargoDeadline) : nextCargoDeadline;
+        if (planet.stock >= 1 && world.elapsed + 1e-9 >= planet.nextCargoAt
+            && world.pickups.length < tuning.maxPickups) launchPlanetCargo(world, body, planet);
+    }
+}
+
+// Share the owned fuel zone check between refueling and the flight guide.
+export function planetFuelSource(world) {
+    const player = world.player;
+    if (player.deadUntil) return null;
+    return planetBodies.find(body => {
+        if (world.planets[body.id]?.owner !== player.id) return false;
+        const zone = fuelZone(body);
+        return player.x >= zone.left && player.x <= zone.right && player.y >= zone.top && player.y <= zone.bottom;
+    }) || null;
+}
+
+// Refill at home or in an owned planet's fuel zone.
 function servicePad(world, dt) {
     const player = world.player;
     const station = bodyFor(player.docked || player.landedOn);
-    const body = station?.station ? station : bodies.find(candidate => {
-        if (candidate.station || world.planets[candidate.id]?.owner !== player.id) return false;
-        const zone = fuelZone(candidate);
-        return player.x >= zone.left && player.x <= zone.right && player.y >= zone.top && player.y <= zone.bottom;
-    });
+    const body = station?.station ? station : planetFuelSource(world);
     const planet = body && world.planets[body.id];
     if (!body || planet.owner !== player.id || player.deadUntil) {
         stopRefueling(world);
@@ -1496,10 +1537,10 @@ function movePlayer(world, input, dt) {
     player.vy += (gravity.ay - Math.cos(player.angle) * thrust * power + rcsAy) * dt;
     if (rcsY > 0) brakeVelocity(player, dt, power * rcsY);
     repelRockets(world, dt);
+    applyGalaxyEdgeDrag(world, dt);
     const start = { x: player.x, y: player.y };
     const end = { x: player.x + player.vx * dt, y: player.y + player.vy * dt };
     resolveMovement(world, start, end);
-    brakeAtGalaxyEdge(player);
 }
 
 // Advance bounded fixed substeps so service, swept combat, and respawning continue without active controls.
@@ -1529,15 +1570,7 @@ export function stepWorld(world, input = {}, dt = tuning.fixedStep) {
         coolPlayerGun(world.player, step, world.elapsed);
         produceStationCargo(world, step);
         produceBlackHoleCargo(world);
-        for (const [bodyId, planet] of Object.entries(world.planets)) {
-            if (planet.owner && !isHome(world, bodyFor(bodyId))) {
-                planet.stock = Math.min(tuning.maxStock, planet.stock + tuning.cargoRate * step);
-                if (!Number.isFinite(planet.nextCargoAt)) planet.nextCargoAt = world.elapsed + tuning.cargoSpawnInterval;
-                const body = bodyFor(bodyId);
-                if (planet.stock >= 1 && world.elapsed + 1e-9 >= planet.nextCargoAt
-                    && world.pickups.length < tuning.maxPickups && body) launchPlanetCargo(world, body, planet);
-            }
-        }
+        producePlanetCargo(world, step);
         const player = world.player;
         const previousPlayer = { x: player.x, y: player.y };
         if (player.deadUntil && world.elapsed + 1e-9 >= player.deadUntil) {
@@ -1596,6 +1629,17 @@ export function nextRocketUpgrade(world) { return nextTrackUpgrade(world, 'rocke
 // Describe the independent weapon purchase using server-owned eligibility and prices.
 export function nextWeaponUpgrade(world) { return nextTrackUpgrade(world, 'weaponTier'); }
 
+// Quote the current shop from the same rules that charge for purchases.
+export function shopQuotes(world) {
+    if (!world.player.shoppingOn && !world.player.docked) return null;
+    return {
+        planetUpgrade: nextUpgrade(world),
+        rocketUpgrade: nextRocketUpgrade(world),
+        weaponUpgrade: nextWeaponUpgrade(world),
+        repairTurrets: turretRepairStatus(world)
+    };
+}
+
 // Charge one authoritative purchase without changing the other rocket upgrade track.
 function upgradeTrack(world, track) {
     const upgrade = nextTrackUpgrade(world, track);
@@ -1625,15 +1669,7 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
         world.previousPlayers = {};
         produceStationCargo(world, step);
         produceBlackHoleCargo(world);
-        for (const [bodyId, planet] of Object.entries(world.planets)) {
-            if (planet.home || bodyFor(bodyId)?.station) continue;
-            if (!planet.owner) continue;
-            planet.stock = Math.min(tuning.maxStock, planet.stock + tuning.cargoRate * step);
-            planet.nextCargoAt ??= world.elapsed + tuning.cargoSpawnInterval;
-            if (planet.stock >= 1 && world.elapsed + 1e-9 >= planet.nextCargoAt && world.pickups.length < tuning.maxPickups) {
-                launchPlanetCargo(world, bodyFor(bodyId), planet);
-            }
-        }
+        producePlanetCargo(world, step);
         for (const id of ids) withPlayer(world, id, () => {
             const player = world.player;
             const input = inputs[id] || {};
