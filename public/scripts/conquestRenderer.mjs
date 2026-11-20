@@ -1,10 +1,11 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-planet-services';
+} from './conquestPhysics.mjs?v=20261119-predictive-defense';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
 const ownColor = '#8cdeb0';
+const hostileColor = '#ff6268';
 const targetColor = '#ffce72';
 const speedZoomFloor = 0.28;
 const speedZoomScale = 420;
@@ -118,10 +119,9 @@ export class ConquestRenderer {
         ctx.globalAlpha = 0.65;
         const hovered = world ? this.hoveredPlanet(world, cursor) : null;
         if (hovered) {
-            const center = this.screen(hovered.x, hovered.y);
-            const dx = center.x - point.x, dy = center.y - point.y;
+            const dx = x - point.x, dy = y - point.y;
             const length = Math.hypot(dx, dy);
-            const surface = Math.max(0, length - hovered.radius * this.camera.zoom / 2 - 4);
+            const surface = Math.max(0, length - 6);
             if (length > 0) {
                 const directionX = dx / length, directionY = dy / length;
                 const phase = this.reducedMotion ? 0 : this.visualTime * 44 % 8;
@@ -287,12 +287,12 @@ export class ConquestRenderer {
     }
 
     // Expand the newly owned shield in the conqueror's color without changing simulation state.
-    beginCapture(bodyId, color) {
-        this.captureEffects.push({ bodyId, color, startedAt: this.visualTime });
+    beginCapture(bodyId, color, owner = null) {
+        this.captureEffects.push({ bodyId, color, owner, startedAt: this.visualTime });
     }
 
     // Fade capture rings after a short expansion, respecting reduced-motion preferences.
-    drawCaptureEffects() {
+    drawCaptureEffects(world = this.lastWorld) {
         this.captureEffects = this.captureEffects.filter(effect => this.visualTime - effect.startedAt < 1);
         if (this.reducedMotion) return;
         const ctx = this.context;
@@ -300,12 +300,13 @@ export class ConquestRenderer {
             const body = bodies.find(body => body.id === effect.bodyId);
             if (!body) continue;
             const progress = Math.max(0, this.visualTime - effect.startedAt);
+            const color = effect.owner && world ? this.captureColor(effect.owner, world) : effect.color;
             const center = this.screen(body.x, body.y);
             const radius = (body.radius + tuning.smallShieldAltitude) * this.camera.zoom / 2;
             ctx.save();
-            ctx.fillStyle = '#8cdeb0'; ctx.globalAlpha = (1 - progress) * 0.32;
+            ctx.fillStyle = color; ctx.globalAlpha = (1 - progress) * 0.32;
             ctx.beginPath(); ctx.arc(center.x, center.y, body.radius * this.camera.zoom / 2, 0, fullCircle); ctx.fill();
-            ctx.strokeStyle = effect.color; ctx.fillStyle = effect.color;
+            ctx.strokeStyle = color; ctx.fillStyle = color;
             ctx.lineWidth = 3; ctx.globalAlpha = (1 - progress) * .6;
             ctx.beginPath(); ctx.arc(center.x, center.y, radius * (1 - (1 - progress) ** 3), 0, fullCircle); ctx.stroke();
             ctx.globalAlpha = (1 - progress) * .12; ctx.fill(); ctx.restore();
@@ -379,9 +380,10 @@ export class ConquestRenderer {
         ctx.beginPath(); ctx.arc(center.x + radius * 1.1, center.y + radius * 0.3, radius * 1.4, 0, fullCircle); ctx.fill();
         ctx.restore();
         ctx.save();
-        ctx.strokeStyle = state.owner ? color : body.color;
+        const outline = state.owner && state.owner !== world.player.id ? hostileColor : state.owner ? color : body.color;
+        ctx.strokeStyle = outline;
         ctx.lineWidth = state.owner ? 1.5 : 1;
-        if (state.owner) { ctx.shadowColor = color; ctx.shadowBlur = 5; }
+        if (state.owner) { ctx.shadowColor = outline; ctx.shadowBlur = 7; }
         ctx.beginPath(); ctx.arc(center.x, center.y, radius + 1, 0, fullCircle); ctx.stroke();
         ctx.restore();
         if (!state.owner) return;
@@ -426,31 +428,40 @@ export class ConquestRenderer {
         this.label('FUEL ZONE', (topLeft.x + bottomRight.x) / 2, topLeft.y - 5, '#ffe283', 'center');
     }
 
-    // Render the central hazard as a dark core surrounded by a slowly moving accretion ring.
+    // Layer a warm accretion disk and bent light ring around a dark event horizon.
     drawBlackHole() {
         const point = this.screen(blackHole.x, blackHole.y);
         const radius = blackHole.radius * this.camera.zoom / 2;
-        if (!this.inView(point, radius * 2)) return;
+        if (!this.inView(point, radius * 3)) return;
         const ctx = this.context;
-        ctx.save();
-        ctx.strokeStyle = '#bb96ee'; ctx.lineWidth = 3;
-        ctx.shadowColor = '#9770df'; ctx.shadowBlur = 16;
-        ctx.globalAlpha = 0.7;
-        ctx.beginPath(); ctx.ellipse(point.x, point.y, radius * 1.8, radius * 0.65, -0.3, 0, fullCircle); ctx.stroke();
-        ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.fillStyle = '#010208';
-        ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, fullCircle); ctx.fill();
-        ctx.strokeStyle = '#d7b7fa'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(point.x, point.y, radius + 2, 0, fullCircle); ctx.stroke();
+        ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(-0.12);
+        ctx.shadowColor = '#ff9a39'; ctx.shadowBlur = Math.min(35, radius * 0.7);
+        for (let layer = 4; layer >= 0; layer--) {
+            ctx.strokeStyle = layer < 2 ? '#fff0c0' : '#ffac50';
+            ctx.globalAlpha = 0.2 + (4 - layer) * .12;
+            ctx.lineWidth = Math.max(1, radius * (.025 + layer * .012));
+            ctx.beginPath(); ctx.ellipse(0, 0, radius * (2.1 + layer * .11), radius * (.23 + layer * .045), 0, 0, fullCircle); ctx.stroke();
+        }
+        ctx.globalAlpha = .75; ctx.strokeStyle = '#ffd286'; ctx.lineWidth = Math.max(2, radius * .065);
+        ctx.beginPath(); ctx.ellipse(0, 0, radius * 1.1, radius * 1.24, 0, Math.PI, fullCircle); ctx.stroke();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.fillStyle = '#010103';
+        ctx.beginPath(); ctx.arc(0, 0, radius, 0, fullCircle); ctx.fill();
+        ctx.strokeStyle = '#ffe7b4'; ctx.lineWidth = Math.max(1, radius * .025);
+        ctx.beginPath(); ctx.arc(0, 0, radius * 1.025, 0, fullCircle); ctx.stroke();
+        ctx.shadowColor = '#ffb34f'; ctx.shadowBlur = 16;
+        ctx.globalAlpha = .85; ctx.lineWidth = Math.max(2, radius * .06); ctx.strokeStyle = '#fff0c9';
+        ctx.beginPath(); ctx.ellipse(0, radius * .12, radius * 2.15, radius * .22, 0, 0, Math.PI); ctx.stroke();
+        ctx.globalAlpha = .5; ctx.lineWidth = Math.max(1, radius * .03); ctx.strokeStyle = '#ffa341';
+        ctx.beginPath(); ctx.ellipse(0, radius * .14, radius * 2.35, radius * .32, 0, 0, Math.PI); ctx.stroke();
         if (!this.reducedMotion) {
-            ctx.fillStyle = '#e8d5ff';
-            for (let i = 0; i < 8; i++) {
-                const angle = this.visualTime * 0.5 + i * fullCircle / 8;
-                ctx.fillRect(point.x + Math.cos(angle) * radius * 1.65 - 1,
-                    point.y + Math.sin(angle) * radius * 0.58 - 1, 2, 2);
+            ctx.fillStyle = '#fff0c9'; ctx.globalAlpha = .7;
+            for (let index = 0; index < 18; index++) {
+                const angle = this.visualTime * .35 + index * fullCircle / 18;
+                ctx.fillRect(Math.cos(angle) * radius * 2.15 - 1, Math.sin(angle) * radius * .34, 2, 1);
             }
         }
         ctx.restore();
-        this.label('BLACK HOLE', point.x, point.y - radius * 1.2 - 10, '#cfb2ec', 'center');
+        this.label('BLACK HOLE', point.x, point.y - radius * 1.35 - 10, '#ffd292', 'center');
     }
 
     // Use the shared barrel angle and a bright silhouette so defenders see the same turret as attackers.
@@ -462,25 +473,19 @@ export class ConquestRenderer {
         const state = planet.turrets?.[index] || (index === 0 ? { health: planet.turretHealth,
             angle: planet.turretAngle, disabledUntil: planet.turretDisabledUntil } : {});
         const point = this.screen(position.x, position.y);
-        const disabled = state.disabledUntil > world.elapsed;
-        const health = Math.max(0, Math.min(1, (state.health ?? tuning.turretHealth) / tuning.turretHealth));
+        if (state.health === 0) return;
         const scale = Math.max(0.8, this.camera.zoom);
         ctx.save(); ctx.translate(point.x, point.y); ctx.scale(scale, scale);
         ctx.save(); ctx.rotate(position.angle + Math.PI / 2);
-        ctx.shadowColor = disabled ? '#dfab68' : color; ctx.shadowBlur = disabled ? 0 : 5;
+        ctx.shadowColor = color; ctx.shadowBlur = 5;
         ctx.fillStyle = '#132833'; ctx.fillRect(-12, -3, 24, 12);
-        ctx.strokeStyle = disabled ? '#927e70' : '#e1eee8'; ctx.lineWidth = 1; ctx.strokeRect(-12, -3, 24, 12);
-        ctx.fillStyle = disabled ? '#776b60' : color; ctx.fillRect(-7, -9, 14, 9);
+        ctx.strokeStyle = '#e1eee8'; ctx.lineWidth = 1; ctx.strokeRect(-12, -3, 24, 12);
+        ctx.fillStyle = color; ctx.fillRect(-7, -9, 14, 9);
         ctx.restore();
         ctx.save(); ctx.rotate(state.angle ?? position.angle);
-        ctx.fillStyle = disabled ? '#927e70' : '#e1eee8'; ctx.fillRect(0, -3, 20, 6);
-        ctx.fillStyle = disabled ? '#dfab68' : color; ctx.fillRect(16, -4, 5, 8);
+        ctx.fillStyle = '#e1eee8'; ctx.fillRect(0, -3, 20, 6);
+        ctx.fillStyle = color; ctx.fillRect(16, -4, 5, 8);
         ctx.restore(); ctx.shadowBlur = 0;
-        if (health < 1 || disabled) {
-            ctx.fillStyle = '#101a22'; ctx.fillRect(-17, -24, 34, 6);
-            ctx.fillStyle = disabled ? '#edb368' : '#ed7971'; ctx.fillRect(-16, -23, 32 * health, 4);
-            ctx.strokeStyle = '#b6c7c5'; ctx.strokeRect(-17, -24, 34, 6);
-        }
         ctx.restore();
     }
 
@@ -826,15 +831,22 @@ export class ConquestRenderer {
         return this.reducedMotion ? target : current;
     }
 
-    // Display one coherent hover and capture treatment, with red warnings for the planet owner.
+    // Keep capture feedback relative to the viewer so enemy progress never appears friendly.
+    captureColor(owner, world) {
+        return owner === world.player.id ? world.player.color || ownColor : hostileColor;
+    }
+
+    // Give each active hacker one stable sector instead of stacking overlapping whole-planet pies.
     drawPlanetInteraction(world, cursor) {
         const hovered = this.hoveredPlanet(world, cursor);
-        const captures = [...(world.captures || [])];
-        if (world.hack) captures.push({ ...world.hack, playerId: world.player.id });
-        // Finish the last quarter-turn before the completed capture fades into its ownership glow.
+        const byPilot = new Map();
+        for (const capture of [...(world.captures || []), ...(world.hack ? [{ ...world.hack, playerId: world.player.id }] : [])]) {
+            byPilot.set(`${capture.bodyId}:${capture.playerId}`, capture);
+        }
+        const captures = [...byPilot.values()];
         for (const effect of this.captureEffects || []) {
             if (this.visualTime - effect.startedAt < 0.22 && !captures.some(item => item.bodyId === effect.bodyId)) {
-                captures.push({ bodyId: effect.bodyId, playerId: world.planets[effect.bodyId]?.owner,
+                captures.push({ bodyId: effect.bodyId, playerId: effect.owner || world.planets[effect.bodyId]?.owner,
                     progress: 1, required: 1 });
             }
         }
@@ -845,11 +857,10 @@ export class ConquestRenderer {
             const center = this.screen(body.x, body.y);
             const radius = body.radius * this.camera.zoom / 2;
             if (!this.inView(center, radius + 12)) continue;
-            const capture = captures.find(item => item.bodyId === body.id);
+            const hackers = captures.filter(item => item.bodyId === body.id).sort((a, b) => String(a.playerId).localeCompare(String(b.playerId)));
             const hovering = hovered?.id === body.id;
-            if (!hovering && !capture) continue;
-            ctx.save();
-            ctx.setLineDash([]);
+            if (!hovering && !hackers.length) continue;
+            ctx.save(); ctx.setLineDash([]);
             if (hovering) {
                 const rangeRadius = (body.radius + tuning.shipRadius + tuning.hackingDistance) * this.camera.zoom / 2;
                 ctx.strokeStyle = '#9ba9ae'; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
@@ -857,28 +868,34 @@ export class ConquestRenderer {
                 ctx.beginPath(); ctx.arc(center.x, center.y, rangeRadius, 0, fullCircle); ctx.stroke();
                 ctx.setLineDash([]);
             }
-            if (hovering && !capture) {
+            if (hovering && !hackers.length) {
                 const ready = dockingStatus(world, body.id).ready;
                 ctx.strokeStyle = '#f1f6f3';
                 ctx.globalAlpha = ready && !this.reducedMotion ? 0.5 + 0.4 * (0.5 + 0.5 * Math.sin(this.visualTime * 8)) : 0.65;
                 ctx.lineWidth = ready ? 2.5 : 2;
                 ctx.beginPath(); ctx.arc(center.x, center.y, radius + 7, 0, fullCircle); ctx.stroke();
             }
-            if (capture) {
-                const defender = world.planets[body.id]?.owner === world.player.id && capture.playerId !== world.player.id;
-                const color = defender ? '#ff6268' : '#8cdeb0';
-                const progress = this.captureProgress(body.id, capture.playerId, Math.min(1, capture.progress / capture.required));
+            for (let index = 0; index < hackers.length; index++) {
+                const capture = hackers[index];
+                const color = this.captureColor(capture.playerId, world);
+                const progress = this.captureProgress(body.id, capture.playerId, Math.min(1, capture.progress / Math.max(1, capture.required)));
                 activeKeys.add(`${body.id}:${capture.playerId}`);
-                ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
-                ctx.globalAlpha = 0.8;
-                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, 0, fullCircle); ctx.stroke();
+                const start = -Math.PI / 2 + fullCircle * index / hackers.length;
+                const sectorEnd = start + fullCircle / hackers.length;
+                ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
+                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, start, sectorEnd); ctx.stroke();
+                if (hackers.length > 1) {
+                    ctx.globalAlpha = 0.4; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(center.x, center.y);
+                    ctx.lineTo(center.x + Math.cos(start) * radius, center.y + Math.sin(start) * radius); ctx.stroke();
+                }
                 if (progress > 0) {
-                    const end = -Math.PI / 2 + fullCircle * progress;
+                    const end = start + fullCircle / hackers.length * progress;
                     ctx.globalAlpha = 0.38;
                     ctx.beginPath(); ctx.moveTo(center.x, center.y);
-                    ctx.arc(center.x, center.y, radius, -Math.PI / 2, end); ctx.closePath(); ctx.fill();
+                    ctx.arc(center.x, center.y, radius, start, end); ctx.closePath(); ctx.fill();
                     ctx.globalAlpha = 0.9; ctx.lineWidth = 3;
-                    ctx.beginPath(); ctx.arc(center.x, center.y, radius + 4, -Math.PI / 2, end); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(center.x, center.y, radius + 4, start, end); ctx.stroke();
                 }
             }
             ctx.restore();
@@ -993,8 +1010,11 @@ export class ConquestRenderer {
             ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(4, star.radius * layout.scale), 0, fullCircle); ctx.fill(); ctx.restore();
         }
         const hole = this.mapPoint(blackHole.x, blackHole.y, layout);
-        ctx.fillStyle = '#010208'; ctx.strokeStyle = '#cfb2ec'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(hole.x, hole.y, 5, 0, fullCircle); ctx.fill(); ctx.stroke();
+        const holeRadius = Math.max(7, blackHole.radius * layout.scale);
+        ctx.save(); ctx.strokeStyle = '#ffd18a'; ctx.shadowColor = '#ffac50'; ctx.shadowBlur = 8; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(hole.x, hole.y, holeRadius * 1.8, holeRadius * .45, -.12, 0, fullCircle); ctx.stroke();
+        ctx.shadowBlur = 0; ctx.fillStyle = '#010103';
+        ctx.beginPath(); ctx.arc(hole.x, hole.y, holeRadius, 0, fullCircle); ctx.fill(); ctx.stroke(); ctx.restore();
         const player = this.mapPoint(world.player.x, world.player.y, layout);
         for (const body of bodies) {
             if (body.station && !world.planets[body.id]?.owner) continue;
@@ -1176,7 +1196,7 @@ export class ConquestRenderer {
         if (!dead) this.drawRocket(this.dockingVisualPlayer(world.others ? this.networkPose(player, elapsed) : player), world.elapsed);
         else if (this.deathPosition) this.drawExplosion();
         if (!menu && !dead) this.drawGuidance(world);
-        this.drawCaptureEffects();
+        this.drawCaptureEffects(world);
 
         if (!menu && !dead && !respawned) this.drawAimGuide(player, input.aimCursor, world.elapsed, world);
         if (!menu && !dead) this.drawDockingGuide(world, input.aimCursor);

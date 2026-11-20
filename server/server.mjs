@@ -204,7 +204,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
         enqueue(async () => {
             const count = Object.keys(room.sessions).length;
             room.tick(1 / 60, now());
-            const critical = room.world.events.some(event => ['captured', 'died', 'cargoPickedUp', 'upgraded', 'rocketUpgraded'].includes(event.type));
+            const critical = room.world.events.some(event => ['captured', 'died', 'cargoPickedUp', 'upgraded', 'rocketUpgraded', 'turretDestroyed'].includes(event.type));
             if (critical || now() - lastSave >= 1000 || count !== Object.keys(room.sessions).length) await checkpoint();
             events();
             if (now() - lastBroadcast >= 50) snapshots();

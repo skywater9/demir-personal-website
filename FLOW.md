@@ -23,14 +23,14 @@ flowchart TD
     feedback --> hack
     hack -->|Correct code| progress{Capture complete?}
     progress -->|No| hack
-    progress -->|Yes| capture[Transfer ownership, reset defenses, expand shield, announce capture]
+    progress -->|Yes| capture[First completion wins; cancel rivals; lock recapture for five seconds; reset defenses and announce]
     capture --> shop[T planet purchase or R rocket purchase at owned relay]
     shop -->|Server validates cargo and tier| purchase[Charge once; planet upgrade adds one independently operating turret, up to three; save and confirm]
     purchase --> shop
     shop -->|E detach| shared
     hack -->|E detach or disconnect| cancel[Reset partial hack]
     cancel --> shared
-    shared --> pickup[Collect nearby attracting cargo once; server resolves ties]
+    shared --> pickup[Inside a planet bubble its pods approach gently around the surface; nearby pickup still works outside; server collects once]
     pickup --> shared
     shared --> refuel[Owned pad gradually refuels; home produces no cargo and has no relay]
     refuel --> shared
@@ -40,8 +40,8 @@ flowchart TD
     fuelWarning -->|Reach owned pad| refuel
     fuelWarning -->|Fresh Space press or click| death[Death drops cargo and removes one rocket tier]
     shared -->|Lethal damage| death
-    shared -->|Shoot hostile turret inside its shield| turretDamage[Show hit turret health bar; five hits disable only that turret]
-    turretDamage --> turretRecovery[Turret stops firing; bar refills for ten seconds]
+    shared -->|Shoot hostile turret inside its shield| turretDamage[Show hit turret health bar; one hit destroys only that turret]
+    turretDamage --> turretRecovery[Destroyed turret never reactivates; destroy all remaining guns before capture]
     turretRecovery --> shared
     shared --> mapPilots[Map shows all pilots; distant pilots use edge direction markers]
     mapPilots --> shared
@@ -137,7 +137,7 @@ flowchart TD
     flight -->|Hostile projectile or fast impact| damage[Fuel damage; red hull flash and white leak particles]
     damage -->|Damage exceeds fuel before hit| death
     damage -->|Fuel covers damage, including equality| flight
-    flight -->|Star contact| death
+    flight -->|Star or black-hole contact| death
     death --> respawn[Respawn at protected home: full fuel, zero carried cargo]
     respawn --> flight
     flight -->|Slash| chat[Focus local chat; typing does not control rocket]

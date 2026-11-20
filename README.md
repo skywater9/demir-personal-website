@@ -15,7 +15,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
   provides one cargo per minute directly to its pilot, and sells rocket upgrades.
 - Planets are 20% smaller and have no separate relays. Aim the cursor at a planet,
   approach within 250 m of its surface and press E, then enter four displayed numbers from 1–4. Capture has no speed or heading restriction.
-  Active turrets prevent capture; disable every turret first. Moving the cursor away
+  Active turrets prevent capture; destroy every turret first. Moving the cursor away
   or leaving range cancels progress.
 - Captured planets produce orbiting cargo and offer defense upgrades through E.
   Return to the starter station for rocket upgrades. Planet ownership excludes stations.
@@ -37,18 +37,24 @@ without an endpoint the game runs locally. The shared class-box service is live;
   begin beside that zone and distribute around the surface without overlapping it.
 - E docks anywhere inside the home station bubble, at any speed or orientation.
 - Dropped cargo uses swept planet collisions and bounces off surfaces.
-- A separate black hole at the three-system centroid has gravitational pull and a lethal core.
+- A larger black hole sits above the three-system center, with a luminous accretion disk, a lethal core and strong gravity extending 3,500 m beyond its surface.
 - Pilots spawn and refuel at the starter station's left bay. Its home icon and label sit above a breathing double-ring shield.
 - Brake exhaust points along travel, with faster particles (170 m/s before power scaling); main engine particle speed remains unchanged.
 - UI checks: `node --test tests/planetInteraction.test.mjs tests/stationPrototype.test.mjs`.
 
 ## Combat and room activity
 
+- Turrets lead moving rockets using current velocity and bullet travel time, with direct aim when no intercept is reachable before the bullet expires. The shared head angle matches the shot direction.
+- A planet's initial inner bubble matches its capture-range ring. While inside it, that planet's cargo gently steers toward you at up to 40 m/s and 20 m/s², routing around the surface when needed. Outside it, the normal nearby pickup attraction still applies.
+
 - Local and remote rockets have a faint steady glow in their player color beneath the crisp pixel hull.
 
-- Each of the three planet upgrades adds one turret in a fixed slot around the planet (one, two, then three total), keeping the existing shield effects and prices. Each turret aims, fires, takes damage, and recovers independently.
+- Each of the three planet upgrades adds one turret in a fixed slot around the planet (one, two, then three total), keeping the existing shield effects and prices. Each turret aims and fires independently; one hostile hit permanently destroys it.
+- Capture progress is split into equal pie sectors for simultaneous hackers. Enemy sectors and takeover flashes are red from your view. The first completion wins, exits other capture panels and locks recapture for five seconds.
+- Basic guns fire roughly eight consecutive shots before overheating; firing speed and the 2.5-second cooldown are unchanged.
+- Hover arrowheads keep following the actual cursor over planets.
 - Turret heads share one server-controlled aim for owners and attackers. Bright bases and outlined barrels make them easier to spot.
-- Five hostile player-bullet hits disable a turret for 10 seconds. Enter its bullet shield before shooting it. A small bar appears on damage and refills while disabled; full health reactivates it. Friendly shots do not damage turrets, and hits during recovery do not extend the timer.
+- One hostile player-bullet hit destroys a turret permanently. Enter its bullet shield before shooting it. Every remaining turret must be destroyed before capture; friendly shots do not damage them. Later upgrades add new guns without restoring destroyed ones.
 - New pilots at every home get a large flashing relay arrow and “CAPTURE PLANETS TO GAIN CARGO” guidance until their first capture. Earth prefers Moon when neutral; other homes target nearby neutral relays.
 - The map shows every pilot using generated labels and ownership colors. Distant off-map pilots get edge direction markers; disconnected pilots dim during their grace window. The flight view still reveals nearby or recently firing ships only.
 - Room chat announces joins, disconnects, returns, departures, and deaths, including the attacker for projectile kills. Activity messages are transient and do not save chat text or credentials.

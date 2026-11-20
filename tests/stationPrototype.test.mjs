@@ -63,12 +63,14 @@ test('wrong or repeated digits do not advance capture; losing the cursor cancels
     assert.equal(world.hack, null);
 });
 
-test('active turrets block capture and disabled turrets permit starting a challenge', () => {
+test('all turrets must be destroyed before starting capture', () => {
     const world = createWorld('defenses', 0);
     Object.assign(world.planets.moon, { owner: 'hostile', level: 1,
-        turrets: [{ health: 5, disabledUntil: 0, angle: 0, nextShotAt: 0 }] });
+        turrets: [{ health: 1, disabledUntil: 0, angle: 0, nextShotAt: 0 }] });
     assert.equal(startMoonHack(world).ok, false);
     world.planets.moon.turrets[0].disabledUntil = world.elapsed + 10;
+    assert.equal(startMoonHack(world).ok, false, 'A legacy cooldown is not a substitute for destroying the turret.');
+    world.planets.moon.turrets[0].health = 0;
     assert.ok(startMoonHack(world).ok);
     assert.ok(world.hack);
 });

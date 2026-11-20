@@ -15,11 +15,13 @@ export function dockingPoint(body) {
         name: body.station ? 'Starter station' : `${body.name} surface` };
 }
 
+const planetCaptureRange = 250;
+
 export const tuning = Object.freeze({
     ...motionTuning,
     mainAcceleration: 240, brakeAcceleration: 300, brakeResponse: 8,
-    hackingDistance: 250, dockingSpeed: 20, dockingAngle: 35 * Math.PI / 180,
-    gunHeatPerShot: 0.26, gunCoolingRate: 0.25, gunOverheatDuration: 2.5, shotRecoil: 1.25,
+    hackingDistance: planetCaptureRange, dockingSpeed: 20, dockingAngle: 35 * Math.PI / 180,
+    gunHeatPerShot: 0.18, gunCoolingRate: 0.25, gunOverheatDuration: 2.5, shotRecoil: 1.25,
     shotFuelDamage: 5, impactFuelDamageRate: 0.5,
     maxStepDuration: 1, respawnDelay: 0.9,
     aimRotationAcceleration: 150, maxAimRotationRate: 8,
@@ -28,15 +30,17 @@ export const tuning = Object.freeze({
     cargoAltitudeVariation: 90, cargoOrbitSpeedVariation: 0.14,
     pickupLifetime: 90, pickupRadius: 30, maxPickups: 64,
     cargoAttractionRadius: 200, cargoAttractionAcceleration: 35,
+    cargoBubbleSpeed: 40, cargoBubbleAcceleration: 20,
     refuelRate: 12, homeRefuelRate: 24, refuelSnap: 0.05,
+    recaptureCooldown: 5, blackHoleInfluenceAltitude: 3500,
     hackPressInterval: 0.12, hackBasePresses: 4, hackExtraPresses: 2,
     upgradeCosts: Object.freeze([8, 16, 28]),
-    homeShieldAltitude: 150, smallShieldAltitude: 200, outerFieldAltitude: 1000,
+    homeShieldAltitude: 150, smallShieldAltitude: planetCaptureRange + motionTuning.shipRadius, outerFieldAltitude: 1000,
     rocketRepulsion: 24, outerRepulsion: 14, bulletSlowFactor: 0.45,
     outerBulletSlowFactor: 0.75, dockingDistance: 100, refugeRadius: 100,
     bulletSpeed: 680, bulletRadius: 3, bulletLifetime: 5, fireCooldown: 0.24,
     turretRange: 1700, turretCooldown: 2.4, turretBulletSpeed: 190,
-    turretHealth: 5, turretRadius: 22, turretRecoveryDuration: 10,
+    turretHealth: 1, turretRadius: 22,
     rocketUpgradeCosts: Object.freeze([8, 16, 28, 40]),
     maxProjectiles: 256, maxEvents: 200
 });
@@ -51,8 +55,8 @@ export const systems = Object.freeze([
 // Keep the central hazard separate from systems so it never generates planets.
 export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black hole',
     x: systems.reduce((sum, system) => sum + system.x, 0) / systems.length,
-    y: systems.reduce((sum, system) => sum + system.y, 0) / systems.length,
-    radius: 160, gravity: 45 });
+    y: systems.reduce((sum, system) => sum + system.y, 0) / systems.length - 1800,
+    radius: 320, gravity: 360 });
 
 const planetNames = [
     ['Earth', 'Moon', 'Venus', 'Mercury', 'Mars', 'Jupiter', 'Saturn', 'Neptune'],
@@ -154,7 +158,8 @@ export function gravityAt(x, y) {
         const distance = Math.max(0.001, Math.hypot(dx, dy));
         const surface = body.radius + tuning.shipRadius;
         const radialDistance = Math.max(surface, distance);
-        const fade = Math.max(0, Math.min(1, (tuning.influenceAltitude - radialDistance + surface) / 300));
+        const influence = body.id === blackHole.id ? tuning.blackHoleInfluenceAltitude : tuning.influenceAltitude;
+        const fade = Math.max(0, Math.min(1, (influence - radialDistance + surface) / 300));
         const acceleration = body.gravity * (surface / radialDistance) ** 2 * fade;
         ax += dx / distance * acceleration;
         ay += dy / distance * acceleration;
@@ -205,14 +210,16 @@ export function dockingStatus(world, bodyId = nearestRelay(world.player, world).
     const otherPilots = world.players ? Object.values(world.players).map(actor => actor.player) : world.others || [];
     const defensesActive = !body.station && world.planets[body.id].owner !== player.id
         && world.planets[body.id].level > 0 && (!world.planets[body.id].turrets?.length
-            || world.planets[body.id].turrets.some(turret => turret.disabledUntil <= world.elapsed));
+            || world.planets[body.id].turrets.some(turret => turret.health > 0));
     const occupied = otherPilots.some(other => other.id !== player.id && other.docked === body.id);
-    const ready = !player.deadUntil && !player.docked && !protectedHome && !occupied && !defensesActive
+    const recaptureLocked = !body.station && world.planets[body.id].owner !== player.id
+        && world.elapsed < (world.planets[body.id].recaptureAt || 0);
+    const ready = !player.deadUntil && !player.docked && !protectedHome && !occupied && !defensesActive && !recaptureLocked
         && distance <= (body.station ? tuning.homeShieldAltitude : tuning.hackingDistance)
 ;
     return { bodyId: body.id, distance, speed, angle, ready,
         reason: ready ? '' : player.deadUntil ? 'RESPAWNING'
-            : defensesActive ? 'DESTROY TURRETS FIRST' : occupied ? 'OCCUPIED' : protectedHome ? 'PROTECTED'
+            : recaptureLocked ? 'CAPTURE COOLDOWN' : defensesActive ? 'DESTROY TURRETS FIRST' : occupied ? 'OCCUPIED' : protectedHome ? 'PROTECTED'
                 : distance > (body.station ? tuning.homeShieldAltitude : tuning.hackingDistance) ? 'NOT IN RANGE'
                     : 'UNAVAILABLE' };
 }
@@ -260,7 +267,7 @@ export function interact(world, bodyId = null) {
     const body = bodyFor(status.bodyId);
     const planet = world.planets[body.id];
     if (!body.station && planet.owner !== player.id) {
-        if (prepareTurrets(planet).some(turret => turret.disabledUntil <= world.elapsed)) {
+        if (prepareTurrets(planet).some(turret => turret.health > 0)) {
             return { ok: false, reason: 'DESTROY TURRETS FIRST' };
         }
         world.hack = { bodyId: body.id, progress: 0, required: 4, digit: challengeDigit(0),
@@ -295,11 +302,20 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
     hack.lastAcceptedAt = world.elapsed;
     if (hack.progress >= hack.required) {
         Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 0, stock: 0,
+            recaptureAt: world.elapsed + tuning.recaptureCooldown,
             nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
         delete world.planets[hack.bodyId].turrets;
         world.stats.captures += 1;
         emit(world, 'captured', { bodyId: hack.bodyId });
+        const winnerId = world.player.id;
         world.hack = null;
+        for (const [id, actor] of Object.entries(world.players || {})) {
+            if (id === winnerId || actor.hack?.bodyId !== hack.bodyId) continue;
+            withPlayer(world, id, () => {
+                world.hack = null;
+                emit(world, 'hackCancelled', { bodyId: hack.bodyId, reason: 'Another pilot captured this planet.' });
+            });
+        }
         return { ok: true, reason: 'Captured.' };
     }
     hack.digit = challengeDigit(0, hack.digit);
@@ -766,8 +782,35 @@ function prepareTurrets(planet) {
         planet.turrets.push({ health: tuning.turretHealth, angle: -Math.PI / 2 + index * Math.PI * 2 / 3,
             disabledUntil: 0, nextShotAt: 0 });
     }
+    // Old five-health saves remain readable; recovery timers no longer reactivate destroyed guns.
+    for (const turret of planet.turrets) {
+        turret.health = turret.health > 0 ? tuning.turretHealth : 0;
+        turret.disabledUntil = 0;
+    }
     for (const key of ['turretHealth', 'turretDisabledUntil', 'turretAngle', 'nextShotAt']) delete planet[key];
     return planet.turrets;
+}
+
+// Solve a constant-velocity intercept; use direct aim when no reachable positive intercept exists.
+function turretAim(x, y, target) {
+    const dx = target.x - x, dy = target.y - y;
+    const vx = target.vx || 0, vy = target.vy || 0;
+    const a = vx * vx + vy * vy - tuning.turretBulletSpeed ** 2;
+    const b = 2 * (dx * vx + dy * vy);
+    const c = dx * dx + dy * dy;
+    let time = 0;
+    if (Math.abs(a) < 1e-8) {
+        if (Math.abs(b) > 1e-8) time = -c / b;
+    } else {
+        const discriminant = b * b - 4 * a * c;
+        if (discriminant >= 0) {
+            const root = Math.sqrt(discriminant);
+            const times = [(-b - root) / (2 * a), (-b + root) / (2 * a)].filter(value => value > 0);
+            if (times.length) time = Math.min(...times);
+        }
+    }
+    if (!Number.isFinite(time) || time < 0 || time > tuning.bulletLifetime) time = 0;
+    return Math.atan2(dy + vy * time, dx + vx * time);
 }
 
 // Aim and fire every independent turret at its nearest visible enemy once per galaxy step.
@@ -780,15 +823,7 @@ function fireTurrets(world) {
         const refuge = dockingPoint(body);
         for (const { x, y, index } of turretPositions(body, planet.level)) {
             const turret = states[index];
-            if (turret.disabledUntil > world.elapsed) {
-                turret.health = tuning.turretHealth * Math.max(0, 1 - (turret.disabledUntil - world.elapsed) / tuning.turretRecoveryDuration);
-                continue;
-            }
-            if (turret.disabledUntil) {
-                turret.disabledUntil = 0;
-                turret.health = tuning.turretHealth;
-                turret.nextShotAt = world.elapsed;
-            }
+            if (turret.health <= 0) continue;
             let target = null;
             let distance = tuning.turretRange;
             for (const player of players) {
@@ -799,12 +834,12 @@ function fireTurrets(world) {
                 target = player; distance = candidateDistance;
             }
             if (!target) continue;
-            turret.angle = Math.atan2(target.y - y, target.x - x);
+            turret.angle = turretAim(x, y, target);
             if (world.elapsed + 1e-9 < turret.nextShotAt || world.projectiles.length >= tuning.maxProjectiles) continue;
             world.projectiles.push({ id: `turret-${world.eventCounter + 1}`, owner: planet.owner,
                 source: 'turret', bodyId: body.id, turretIndex: index, x, y,
-                vx: (target.x - x) / distance * tuning.turretBulletSpeed,
-                vy: (target.y - y) / distance * tuning.turretBulletSpeed,
+                vx: Math.cos(turret.angle) * tuning.turretBulletSpeed,
+                vy: Math.sin(turret.angle) * tuning.turretBulletSpeed,
                 radius: tuning.bulletRadius, expiresAt: world.elapsed + tuning.bulletLifetime });
             turret.nextShotAt = world.elapsed + tuning.turretCooldown;
             emit(world, 'turretFired', { bodyId: body.id, turretIndex: index });
@@ -812,12 +847,15 @@ function fireTurrets(world) {
     }
 }
 
-// Disable only the turret that was hit; further hits never extend its recovery timer.
-function hitTurret(world, body, index) {
+// One hostile hit permanently destroys only this gun; emit a durable outcome before broadcasting it.
+function hitTurret(world, body, index, attackerId) {
     const turret = prepareTurrets(world.planets[body.id])[index];
-    if (!turret || turret.disabledUntil > world.elapsed) return;
-    turret.health = Math.max(0, turret.health - 1);
-    if (turret.health === 0) turret.disabledUntil = world.elapsed + tuning.turretRecoveryDuration;
+    if (!turret || turret.health <= 0) return;
+    turret.health = 0;
+    turret.nextShotAt = 0;
+    const destroyed = () => emit(world, 'turretDestroyed', { bodyId: body.id, turretIndex: index });
+    if (world.players?.[attackerId]) withPlayer(world, attackerId, destroyed);
+    else destroyed();
 }
 
 // Step one projectile through shields and refuge before its swept moving-player hit can apply.
@@ -844,6 +882,7 @@ function moveProjectile(world, shot, dt, previousPlayer) {
         }
         if (planet.owner && planet.owner !== shot.owner && planet.level >= 1 && shot.source === 'player') {
             for (const turret of turretPositions(body, planet.level)) {
+                if (planet.turrets?.[turret.index]?.health === 0) continue;
                 const fraction = circleHit(start, end, turret, tuning.turretRadius + radius);
                 if (fraction !== null) interactions.push({ fraction, type: 'turret', body, turretIndex: turret.index });
             }
@@ -888,7 +927,7 @@ function moveProjectile(world, shot, dt, previousPlayer) {
             if (world.players) withPlayer(world, interaction.playerId, () => damagePlayer(world, tuning.shotFuelDamage, reason, cause));
             else damagePlayer(world, tuning.shotFuelDamage, reason, cause);
         }
-        else if (interaction.type === 'turret') hitTurret(world, interaction.body, interaction.turretIndex);
+        else if (interaction.type === 'turret') hitTurret(world, interaction.body, interaction.turretIndex, shot.owner);
         else if (interaction.type === 'shield') emit(world, 'shieldBlocked', { bodyId: interaction.body.id });
         else if (interaction.type === 'refuge') emit(world, 'refugeBlocked', { bodyId: interaction.body.id });
         return false;
@@ -929,6 +968,30 @@ function moveCargoWithBounce(pickup, dt) {
     }
 }
 
+// Steer gently toward a pilot, travelling around the planet when its surface blocks the direct route.
+function attractBubbleCargo(pickup, player, body, dt) {
+    const dx = player.x - pickup.x, dy = player.y - pickup.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 1e-8) return;
+    let directionX = dx / distance, directionY = dy / distance;
+    if (circleHit(pickup, player, body, body.radius + 5) !== null) {
+        const radialX = pickup.x - body.x, radialY = pickup.y - body.y;
+        const radius = Math.hypot(radialX, radialY);
+        if (radius < 1e-8) return;
+        const targetX = player.x - body.x, targetY = player.y - body.y;
+        const turn = radialX * targetY - radialY * targetX >= 0 ? 1 : -1;
+        directionX = -radialY / radius * turn;
+        directionY = radialX / radius * turn;
+    }
+    const speed = Math.min(tuning.cargoBubbleSpeed, distance * 0.6);
+    const changeX = directionX * speed - (pickup.vx || 0);
+    const changeY = directionY * speed - (pickup.vy || 0);
+    const change = Math.hypot(changeX, changeY);
+    const blend = change > 0 ? Math.min(1, tuning.cargoBubbleAcceleration * dt / change) : 0;
+    pickup.vx = (pickup.vx || 0) + changeX * blend;
+    pickup.vy = (pickup.vy || 0) + changeY * blend;
+}
+
 // Orbit planet cargo, drift death drops, expire, and collect with swept player-relative contact.
 function movePickups(world, dt, previousPlayer) {
     world.pickups = world.pickups.filter(pickup => {
@@ -936,18 +999,26 @@ function movePickups(world, dt, previousPlayer) {
         const pickupStart = { x: pickup.x, y: pickup.y };
         const pilots = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
         const alive = pilots.filter(player => !player.deadUntil);
-        const nearest = alive.reduce((best, player) => !best || Math.hypot(player.x - pickup.x, player.y - pickup.y)
+        const body = bodyFor(pickup.bodyId);
+        const bubble = body && !body.station && world.planets[body.id]?.owner ? body : null;
+        const insideBubble = player => bubble && Math.hypot(player.x - bubble.x, player.y - bubble.y)
+            <= bubble.radius + tuning.smallShieldAltitude;
+        const eligible = alive.filter(player => insideBubble(player)
+            || Math.hypot(player.x - pickup.x, player.y - pickup.y) < tuning.cargoAttractionRadius);
+        const nearest = eligible.reduce((best, player) => !best || Math.hypot(player.x - pickup.x, player.y - pickup.y)
             < Math.hypot(best.x - pickup.x, best.y - pickup.y) ? player : best, null);
         if (pickup.orbiting) {
             const gravity = gravityAt(pickup.x, pickup.y);
             pickup.vx = (pickup.vx || 0) + gravity.ax * dt;
             pickup.vy = (pickup.vy || 0) + gravity.ay * dt;
         }
-        // Gently attract only nearby cargo; distant orbits and powerless coasting stay unchanged.
+        // Bubble occupants attract this planet's cargo; other pilots retain the nearby-pickup magnet.
         const dx = nearest ? nearest.x - pickup.x : 0;
         const dy = nearest ? nearest.y - pickup.y : 0;
         const distance = Math.hypot(dx, dy);
-        if (nearest && distance > 0 && distance < tuning.cargoAttractionRadius) {
+        if (nearest && insideBubble(nearest)) {
+            attractBubbleCargo(pickup, nearest, bubble, dt);
+        } else if (nearest && distance > 0 && distance < tuning.cargoAttractionRadius) {
             const acceleration = tuning.cargoAttractionAcceleration * (1 - distance / tuning.cargoAttractionRadius);
             pickup.vx = (pickup.vx || 0) + dx / distance * acceleration * dt;
             pickup.vy = (pickup.vy || 0) + dy / distance * acceleration * dt;

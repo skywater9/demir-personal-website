@@ -11,13 +11,13 @@ function scene() {
     const context = new Proxy(state, {
         get(target, name) {
             if (name in target) return target[name];
-            return (...args) => calls.push({ name, args, color: target.strokeStyle, alpha: target.globalAlpha });
+            return (...args) => calls.push({ name, args, color: target.strokeStyle, fill: target.fillStyle, shadow: target.shadowColor, alpha: target.globalAlpha });
         },
         set(target, name, value) { target[name] = value; return true; }
     });
     const renderer = Object.create(ConquestRenderer.prototype);
     Object.assign(renderer, { context, canvas: { width: 2000, height: 2000 }, camera: { zoom: 1 },
-        visualTime: 0, lastElapsed: 0, reducedMotion: false, hackVisuals: new Map(),
+        visualTime: 0, lastElapsed: 0, reducedMotion: false, hackVisuals: new Map(), captureEffects: [], ownerPalette: new Map(),
         screen: (x, y) => ({ x, y }), inView: () => true });
     const world = createWorld('visuals', 0);
     const moon = bodies.find(body => body.id === 'moon');
@@ -87,4 +87,65 @@ test('multiplayer exposes capture progress to defenders without leaking the curr
     assert.equal(capture.playerId, attacker.playerId);
     assert.equal(capture.progress, 2);
     assert.equal(capture.digit, undefined);
+});
+
+
+test('enemy progress on a neutral planet and an enemy takeover flash use red rather than friendly green', () => {
+    const { renderer, world, moon, calls } = scene();
+    renderer.reducedMotion = true;
+    world.captures = [{ bodyId: moon.id, playerId: 'enemy', progress: 2, required: 4 }];
+    renderer.drawPlanetInteraction(world, null);
+    assert.ok(calls.some(call => call.name === 'fill' && call.fill === '#ff6268'));
+    assert.ok(!calls.some(call => call.name === 'fill' && call.fill === '#8cdeb0'));
+    renderer.reducedMotion = false;
+    renderer.beginCapture(moon.id, '#8cdeb0', 'enemy');
+    renderer.visualTime = .4; calls.length = 0;
+    renderer.drawCaptureEffects(world);
+    assert.ok(calls.some(call => call.name === 'fill' && call.fill === '#ff6268'));
+    assert.ok(!calls.some(call => call.name === 'fill' && call.fill === '#8cdeb0'));
+});
+
+test('simultaneous capture gives each unique hacker an equal sector with independent progress', () => {
+    const { renderer, world, moon, calls } = scene();
+    renderer.reducedMotion = true;
+    world.captures = [
+        { bodyId: moon.id, playerId: 'enemy-a', progress: 1, required: 4 },
+        { bodyId: moon.id, playerId: 'enemy-b', progress: 3, required: 4 },
+        { bodyId: moon.id, playerId: world.player.id, progress: 2, required: 4 }
+    ];
+    world.hack = { bodyId: moon.id, progress: 2, required: 4 };
+    renderer.drawPlanetInteraction(world, null);
+    const wedges = calls.filter(call => call.name === 'arc' && call.args[2] === moon.radius / 2);
+    assert.equal(wedges.length, 3, 'The local player in the public summary must not be counted twice.');
+    const expected = [.25, .75, .5];
+    wedges.forEach((wedge, index) => {
+        const start = -Math.PI / 2 + index * Math.PI * 2 / 3;
+        assert.ok(Math.abs(wedge.args[3] - start) < 1e-9);
+        assert.ok(Math.abs(wedge.args[4] - start - Math.PI * 2 / 3 * expected[index]) < 1e-9);
+    });
+});
+
+test('enemy planets have a red glowing surface outline', () => {
+    const { renderer, world, moon, calls } = scene();
+    world.planets.moon.owner = 'enemy';
+    renderer.label = () => {}; renderer.drawFuelZone = () => {};
+    renderer.drawBody(moon, world);
+    assert.ok(calls.some(call => call.name === 'stroke' && call.color === '#ff6268' && call.shadow === '#ff6268'));
+});
+
+test('hover arrowheads follow the actual cursor rather than snapping toward planet center', () => {
+    const { renderer, world, moon, calls } = scene();
+    world.player.y = moon.y - 700;
+    const cursor = { x: (moon.x + moon.radius * .6) / 2000, y: moon.y / 2000 };
+    renderer.drawAimGuide(world.player, cursor, 0, world);
+    const tip = calls.find(call => call.name === 'lineTo');
+    assert.ok(tip.args[0] > world.player.x, 'A right-of-center cursor must angle the guide to the right.');
+});
+
+test('black hole renders a warm disk and a dark core without changing its physical state', () => {
+    const { renderer, calls } = scene();
+    renderer.label = () => {};
+    renderer.drawBlackHole();
+    assert.ok(calls.filter(call => call.name === 'ellipse').length >= 7);
+    assert.ok(calls.some(call => call.name === 'fill' && call.fill === '#010103'));
 });

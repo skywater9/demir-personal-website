@@ -1,9 +1,9 @@
 import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-station-prototype';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-planet-services';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-planet-services';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-rocket-glow';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-predictive-defense';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-predictive-defense';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-predictive-defense';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -70,7 +70,7 @@ export class ConquestApp {
                 if (message.owner === this.world.player.id) return;
                 const body = bodies.find(body => body.id === message.bodyId);
                 this.appendChat(body?.name || 'Planet', true, message);
-                this.renderer.beginCapture?.(message.bodyId, message.color);
+                this.renderer.beginCapture?.(message.bodyId, message.color, message.owner);
             },
             onDeath: event => this.renderer.beginRemoteDeath?.(event),
             onStatus: status => {
@@ -617,8 +617,9 @@ export class ConquestApp {
             if (event.type === 'captured') {
                 this.message(`${body?.name || 'Planet'} captured! Produces cargo. Collect pods, refuel, and press E for defenses.`, 8);
                 this.appendChat(body?.name || 'Planet', true);
-                this.renderer.beginCapture?.(event.bodyId, this.world.player.color);
+                this.renderer.beginCapture?.(event.bodyId, this.world.player.color, this.world.player.id);
             }
+            if (event.type === 'hackCancelled' && event.reason) this.message(event.reason, 4);
             if (event.type === 'upgraded') this.message(`${body?.name || 'Planet'} defenses upgraded.`, 5);
             if (event.type === 'died') {
                 this.clearInput();

@@ -181,3 +181,23 @@ proxy/service deployment have not been performed.
 - At several headings, hold S while moving forward, backward, sideways, and diagonally. Both velocity components must fall to zero without reversing; release S to coast or fall again.
 - One brake plume points along full world velocity regardless of hull angle, with stronger emission at higher speed. Rotation alone emits none.
 - Check another pilot sees the same velocity-dependent brake plumes. Braking on a serviced ship must not launch or detach it, and an empty tank cannot provide braking.
+
+## Predictive turrets and inner-bubble cargo
+
+Run `node --test tests/planetDefenseCargo.test.mjs tests/stationPrototype.test.mjs`.
+
+- Fly sideways across turret view: its barrel and shots should lead the current trajectory. Fast unreachable targets must not cause invalid aim or projectile speeds.
+- The inner planet bubble and visible capture-range ring share their exact edge; starter-station shields retain their current radius.
+- Enter an owned planet's bubble: its pods outside the normal 200 m pickup magnet should approach gently, at a target maximum of 40 m/s. Opposite-side pods should route around the planet and remain outside its surface. Leave the bubble and distant pods keep drifting/orbiting.
+- With two pilots nearby, the nearest eligible collector attracts a pod, and an outside rival beyond normal pickup range does not prevent bubble attraction.
+
+## Capture races, one-hit turrets and black-hole update
+
+Run `node --test tests/planetCaptureRace.test.mjs tests/planetDefenseCargo.test.mjs tests/planetInteraction.test.mjs tests/planetServices.test.mjs tests/stationPrototype.test.mjs`.
+
+- Each active hacker fills its own equal sector. Enemy progress, enemy ownership outlines and takeover flashes are red from the viewer's perspective, including on neutral planets. Duplicate local/public summaries must not create extra sectors.
+- First completed capture owns the planet; other capture panels exit immediately, stale final digits cannot steal it, and recapture stays blocked for five seconds. The new owner's shop remains usable.
+- One hostile bullet destroys a turret, it stays gone after the former recovery interval, and all guns must be destroyed before capture. Friendly fire and shield interception retain their rules.
+- The base gun fires eight consecutive shots before overheating and remains blocked during the unchanged cooldown.
+- The larger black hole is above the system center, pulls from farther away, and remains lethal. Its game rendering and map marker show a warm disk around a dark core.
+- Hover arrowheads keep pointing to off-center cursor positions inside a planet, independently of planet highlighting.

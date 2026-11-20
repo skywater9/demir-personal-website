@@ -70,10 +70,12 @@ test('fast death cargo bounces instead of tunneling through the planet', () => {
     assert.ok(pod.y < moon.y - moon.radius);
 });
 
-test('black hole lies between the three systems and its core is lethal', () => {
+test('larger black hole is above the system center, pulls strongly from farther away and remains lethal', () => {
     assert.equal(systems.length, 3);
     assert.equal(blackHole.x, systems.reduce((sum, system) => sum + system.x, 0) / 3);
-    assert.equal(blackHole.y, systems.reduce((sum, system) => sum + system.y, 0) / 3);
+    assert.ok(blackHole.y < systems.reduce((sum, system) => sum + system.y, 0) / 3 - 1000);
+    assert.ok(blackHole.radius >= 300);
+    assert.ok(gravityAt(blackHole.x + 2200, blackHole.y).ax < -1);
     assert.ok(gravityAt(blackHole.x + blackHole.radius + 100, blackHole.y).ax < 0);
     const world = createWorld('hole', 0);
     Object.assign(world.player, { x: blackHole.x, y: blackHole.y, landedOn: null, docked: null });

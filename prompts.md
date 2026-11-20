@@ -1097,3 +1097,27 @@ but the server directly link has new verison
 177.
 
 each rocket should glow slightly of their player color
+
+178.
+
+also turrets should shoot at where the rocket is going, so aim in the rockets trajectory, also when you are in the inner bubble of a planet, cargo surrounding the planet should float toward you but not too fast. make the initial small bubble size same as capturing range
+
+179.
+
+also place a red glowing outline to planets owned by enemy rockets. also when an enemy is capturing a planet, for me it still fills up with green if it is neutral. also when another player takes over my planet, after hacking is done the planet flashes green for a second, also if multiple people are capturing a planet at the same time, split up the pie chart to however many people are hacking it, and fill up each their own sector. The person who wins the capture gets the planet and others who are still on the capture screen are exited, planet recapture cooldown of 5 seconds
+
+180.
+
+also add more bullets before the cooldown for the rocket gun
+
+181.
+
+also the black hole should be bigger, and look more realistic like the one in interstellar, also it should have  a strong gravity, also place it more upwards. on the map
+
+182.
+
+actually make it a requirement to destry turrets, but make them one shot to destroy
+
+183.
+
+also when the cursor is on the planet, the line that goes from the cursor becomes fixed on the planet center, but the arrow line should still follow the cursor
