@@ -48,6 +48,12 @@ export const systems = Object.freeze([
     { id: 'ember', name: 'Ember', x: -7150, y: -8450, radius: 480, gravity: 16, color: '#ffc58f' }
 ].map(system => Object.freeze(system)));
 
+// Keep the central hazard separate from systems so it never generates planets.
+export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black hole',
+    x: systems.reduce((sum, system) => sum + system.x, 0) / systems.length,
+    y: systems.reduce((sum, system) => sum + system.y, 0) / systems.length,
+    radius: 160, gravity: 45 });
+
 const planetNames = [
     ['Earth', 'Moon', 'Venus', 'Mercury', 'Mars', 'Jupiter', 'Saturn', 'Neptune'],
     ['Aster', 'Cobalt', 'Iris', 'Lumen', 'Nacre', 'Opal', 'Prism', 'Vale'],
@@ -79,6 +85,13 @@ export const starterStations = Object.freeze(Array.from({ length: 8 }, (_, index
     radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
 })));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
+
+// Share the visible refueling box between rendering and authoritative service checks.
+export function fuelZone(body) {
+    const halfWidth = tuning.padHalfWidth + 16;
+    return { left: body.x - halfWidth, right: body.x + halfWidth,
+        top: body.y - body.radius - 110, bottom: body.y - body.radius + 15 };
+}
 
 // Bound controls before they can introduce non-finite velocities into a saved world.
 function control(value) {
@@ -135,7 +148,7 @@ export function nearestBody(player) {
 export function gravityAt(x, y) {
     let ax = 0;
     let ay = 0;
-    for (const body of [...bodies, ...systems]) {
+    for (const body of [...bodies, ...systems, blackHole]) {
         const dx = body.x - x;
         const dy = body.y - y;
         const distance = Math.max(0.001, Math.hypot(dx, dy));
@@ -184,7 +197,7 @@ export function dockingStatus(world, bodyId = nearestRelay(world.player, world).
     const player = world.player;
 
     const point = dockingPoint(body);
-    const distance = body.station ? Math.hypot(player.x - point.x, player.y - point.y)
+    const distance = body.station ? Math.max(0, Math.hypot(player.x - body.x, player.y - body.y) - body.radius)
         : Math.max(0, Math.hypot(player.x - body.x, player.y - body.y) - body.radius - tuning.shipRadius);
     const speed = Math.hypot(player.vx, player.vy);
     const angle = Math.abs(normalizeAngle(player.angle - point.angle));
@@ -194,16 +207,14 @@ export function dockingStatus(world, bodyId = nearestRelay(world.player, world).
         && world.planets[body.id].level > 0 && (!world.planets[body.id].turrets?.length
             || world.planets[body.id].turrets.some(turret => turret.disabledUntil <= world.elapsed));
     const occupied = otherPilots.some(other => other.id !== player.id && other.docked === body.id);
-    const capturing = !body.station && world.planets[body.id].owner !== player.id;
     const ready = !player.deadUntil && !player.docked && !protectedHome && !occupied && !defensesActive
-        && distance <= (body.station ? tuning.dockingDistance : tuning.hackingDistance)
-        && (capturing || speed <= tuning.dockingSpeed);
+        && distance <= (body.station ? tuning.homeShieldAltitude : tuning.hackingDistance)
+;
     return { bodyId: body.id, distance, speed, angle, ready,
         reason: ready ? '' : player.deadUntil ? 'RESPAWNING'
             : defensesActive ? 'DESTROY TURRETS FIRST' : occupied ? 'OCCUPIED' : protectedHome ? 'PROTECTED'
-                : distance > (body.station ? tuning.dockingDistance : tuning.hackingDistance) ? 'NOT IN RANGE'
-                    : !capturing && speed > tuning.dockingSpeed ? 'SLOW DOWN'
-                        : 'UNAVAILABLE' };
+                : distance > (body.station ? tuning.homeShieldAltitude : tuning.hackingDistance) ? 'NOT IN RANGE'
+                    : 'UNAVAILABLE' };
 }
 
 // Treat optional home markers as hostile fixture data while always protecting the local home.
@@ -231,6 +242,10 @@ function detach(world) {
 export function interact(world, bodyId = null) {
     const player = world.player;
     if (player.deadUntil) return { ok: false, reason: 'RESPAWNING' };
+    if (player.shoppingOn) {
+        player.shoppingOn = null;
+        return { ok: true, reason: 'Shop closed.' };
+    }
     if (world.hack) {
         emit(world, 'hackCancelled', { bodyId: world.hack.bodyId });
         world.hack = null;
@@ -252,6 +267,10 @@ export function interact(world, bodyId = null) {
             heldDigit: null, lastAcceptedAt: world.elapsed - tuning.hackPressInterval, challengeId: world.eventCounter + 1 };
         emit(world, 'hackStarted', { bodyId: body.id });
         return { ok: true, reason: 'Enter the displayed numbers (1–4).' };
+    }
+    if (!body.station) {
+        player.shoppingOn = body.id;
+        return { ok: true, reason: 'Planet upgrades open.' };
     }
     const point = dockingPoint(body);
     Object.assign(player, { x: point.x, y: point.y, vx: 0, vy: 0, angle: 0,
@@ -291,6 +310,9 @@ export function hackDigit(world, digit, { repeat = false, challengeId } = {}) {
 
 // Keep a connection only while the cursor remains over the planet and the ship stays in range.
 function updatePlanetCapture(world, input) {
+    const shoppingOn = world.player.shoppingOn;
+    if (shoppingOn && (world.planets[shoppingOn]?.owner !== world.player.id
+        || dockingStatus(world, shoppingOn).distance > tuning.hackingDistance)) world.player.shoppingOn = null;
     if (!world.hack) return;
     const hack = world.hack;
     if (input.captureBody !== hack.bodyId || !dockingStatus(world, hack.bodyId).ready) {
@@ -320,14 +342,15 @@ const upgrades = Object.freeze([
 
 // Describe only the docked planet's next purchase, distinguishing eligibility from affordability.
 export function nextUpgrade(world) {
-    const bodyId = world.player.docked;
+    const bodyId = world.player.shoppingOn || world.player.docked;
     const planet = world.planets[bodyId];
     const level = planet?.level ?? 0;
     const upgrade = upgrades[level];
     const cost = tuning.upgradeCosts[level] ?? 0;
     let reason = '';
     if (world.player.deadUntil) reason = 'Respawning.';
-    else if (!planet) reason = 'Dock at an owned relay.';
+    else if (!planet) reason = 'Open an owned planet shop.';
+    else if (dockingStatus(world, bodyId).distance > tuning.hackingDistance) reason = 'Planet is out of range.';
     else if (bodyFor(bodyId)?.station) reason = 'Rocket upgrades available at this station.';
     else if (planet.owner !== world.player.id) reason = 'Capture this planet first.';
     else if (!upgrade) reason = 'All upgrades complete.';
@@ -341,7 +364,7 @@ export function nextUpgrade(world) {
 export function upgradePlanet(world) {
     const upgrade = nextUpgrade(world);
     if (!upgrade.available || !upgrade.affordable) return { ok: false, reason: upgrade.reason };
-    const bodyId = world.player.docked;
+    const bodyId = world.player.shoppingOn || world.player.docked;
     world.player.cargo -= upgrade.cost;
     world.planets[bodyId].level += 1;
     prepareTurrets(world.planets[bodyId]);
@@ -394,6 +417,7 @@ export function killPlayer(world, reason = 'Destroyed.', cause = {}) {
     player.rocketTier = Math.max(0, previousTier - 1);
     player.lastLostTier = previousTier > 0 ? previousTier : 0;
     player.cargo = 0;
+    player.shoppingOn = null;
     player.deadUntil = world.elapsed + tuning.respawnDelay;
     player.landedOn = null;
     player.vx = 0;
@@ -495,7 +519,7 @@ function firstContact(world, start, end) {
     const consider = contact => {
         if (contact && (!first || contact.fraction < first.fraction)) first = contact;
     };
-    for (const star of systems) {
+    for (const star of [...systems, blackHole]) {
         const fraction = circleHit(start, end, star, star.radius + tuning.shipRadius);
         if (fraction !== null) consider({ fraction, type: 'star', body: star });
     }
@@ -553,7 +577,7 @@ function resolveMovement(world, start, end) {
     player.x = start.x + (end.x - start.x) * hit.fraction;
     player.y = start.y + (end.y - start.y) * hit.fraction;
     if (hit.type === 'star') {
-        killPlayer(world, `Star contact: ${hit.body.name}.`);
+        killPlayer(world, hit.body.id === blackHole.id ? 'Absorbed by the black hole.' : `Star contact: ${hit.body.name}.`);
         return;
     }
     const speed = Math.hypot(player.vx, player.vy);
@@ -640,14 +664,14 @@ function launchPlanetCargo(world, body, planet) {
 // Refill only on an upright owned pad; cargo must be collected from the nearby floating pods.
 function servicePad(world, dt) {
     const player = world.player;
-    const body = bodyFor(player.landedOn || player.docked);
+    const station = bodyFor(player.docked || player.landedOn);
+    const body = station?.station ? station : bodies.find(candidate => {
+        if (candidate.station || world.planets[candidate.id]?.owner !== player.id) return false;
+        const zone = fuelZone(candidate);
+        return player.x >= zone.left && player.x <= zone.right && player.y >= zone.top && player.y <= zone.bottom;
+    });
     const planet = body && world.planets[body.id];
-    const atStation = body?.station && Math.hypot(player.x - dockingPoint(body).x, player.y - dockingPoint(body).y) < 1;
-    const atPad = body && !body.station && Math.abs(player.x - body.x) <= tuning.padHalfWidth && player.y < body.y
-        && Math.abs(Math.hypot(player.x - body.x, player.y - body.y) - body.radius - tuning.shipRadius) <= 0.1
-        && Math.abs(normalizeAngle(player.angle)) <= tuning.safeLandingAngle;
-    if (!body || planet.owner !== player.id || player.deadUntil || (!atStation && !atPad)
-        || Math.hypot(player.vx, player.vy) > 0.01) {
+    if (!body || planet.owner !== player.id || player.deadUntil) {
         stopRefueling(world);
         flushCollection(world);
         return;
@@ -720,7 +744,7 @@ function coolPlayerGun(player, dt, elapsed) {
 export function turretPositions(body, level) {
     const count = Math.max(0, Math.min(3, Math.floor(level || 0)));
     return Array.from({ length: count }, (_, index) => {
-        const angle = -Math.PI / 2 + index * Math.PI * 2 / 3;
+        const angle = -Math.PI / 4 + index * Math.PI * 2 / 3;
         return { index, angle, x: body.x + Math.cos(angle) * (body.radius + 26),
             y: body.y + Math.sin(angle) * (body.radius + 26) };
     });
@@ -831,7 +855,7 @@ function moveProjectile(world, shot, dt, previousPlayer) {
             if (fraction !== null) interactions.push({ fraction, type: 'refuge', body });
         }
     }
-    for (const star of systems) {
+    for (const star of [...systems, blackHole]) {
         const fraction = circleHit(start, end, star, star.radius + radius);
         if (fraction !== null) interactions.push({ fraction, type: 'surface', body: star });
     }
@@ -875,6 +899,36 @@ function moveProjectile(world, shot, dt, previousPlayer) {
     return true;
 }
 
+// Sweep cargo against planet surfaces so fast death drops cannot tunnel through a world.
+function moveCargoWithBounce(pickup, dt) {
+    let remaining = dt;
+    for (let bounce = 0; bounce < 3 && remaining > 1e-8; bounce++) {
+        const start = { x: pickup.x, y: pickup.y };
+        const end = { x: start.x + (pickup.vx || 0) * remaining, y: start.y + (pickup.vy || 0) * remaining };
+        let hit = null;
+        for (const body of planetBodies) {
+            const radius = body.radius + 5;
+            const inside = Math.hypot(start.x - body.x, start.y - body.y) < radius;
+            const fraction = inside ? 0 : circleHit(start, end, body, radius);
+            if (fraction !== null && (!hit || fraction < hit.fraction)) hit = { body, radius, fraction };
+        }
+        if (!hit) { pickup.x = end.x; pickup.y = end.y; return; }
+        const x = start.x + (end.x - start.x) * hit.fraction;
+        const y = start.y + (end.y - start.y) * hit.fraction;
+        const distance = Math.hypot(x - hit.body.x, y - hit.body.y);
+        const nx = distance > 0 ? (x - hit.body.x) / distance : 1;
+        const ny = distance > 0 ? (y - hit.body.y) / distance : 0;
+        pickup.x = hit.body.x + nx * (hit.radius + 0.05);
+        pickup.y = hit.body.y + ny * (hit.radius + 0.05);
+        const incoming = (pickup.vx || 0) * nx + (pickup.vy || 0) * ny;
+        if (incoming < 0) {
+            pickup.vx -= 1.75 * incoming * nx;
+            pickup.vy -= 1.75 * incoming * ny;
+        }
+        remaining *= 1 - hit.fraction;
+    }
+}
+
 // Orbit planet cargo, drift death drops, expire, and collect with swept player-relative contact.
 function movePickups(world, dt, previousPlayer) {
     world.pickups = world.pickups.filter(pickup => {
@@ -898,8 +952,7 @@ function movePickups(world, dt, previousPlayer) {
             pickup.vx = (pickup.vx || 0) + dx / distance * acceleration * dt;
             pickup.vy = (pickup.vy || 0) + dy / distance * acceleration * dt;
         }
-        pickup.x += (pickup.vx || 0) * dt;
-        pickup.y += (pickup.vy || 0) * dt;
+        moveCargoWithBounce(pickup, dt);
         const contacts = alive.map(player => {
             const previous = world.previousPlayers?.[player.id] || previousPlayer;
             const fraction = circleHit({ x: pickupStart.x - previous.x, y: pickupStart.y - previous.y },
@@ -1017,6 +1070,10 @@ export function stepWorld(world, input = {}, dt = tuning.fixedStep) {
         const point = dockingPoint(landedBody);
         world.player.x = point.x; world.player.y = point.y;
     }
+    if (world.player.docked && !bodyFor(world.player.docked)?.station) {
+        world.player.shoppingOn = world.player.docked;
+        world.player.docked = null;
+    }
     const dockedBody = bodyFor(world.player.docked);
     if (dockedBody) {
         const dock = dockingPoint(dockedBody);
@@ -1126,6 +1183,9 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
             const input = inputs[id] || {};
             const home = bodyFor(player.landedOn);
             if (home) { const point = dockingPoint(home); player.x = point.x; player.y = point.y; }
+            if (player.docked && !bodyFor(player.docked)?.station) {
+                player.shoppingOn = player.docked; player.docked = null;
+            }
             if (player.docked) Object.assign(player, dockingPoint(bodyFor(player.docked)));
             const previous = world.previousPlayers[id] = { x: player.x, y: player.y };
             coolPlayerGun(player, step, world.elapsed);

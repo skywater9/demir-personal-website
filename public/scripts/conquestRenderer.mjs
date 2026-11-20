@@ -1,6 +1,6 @@
 import {
-    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions
-} from './conquestPhysics.mjs?v=20261119-planet-ui';
+    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, fuelZone, blackHole
+} from './conquestPhysics.mjs?v=20261119-planet-services';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -396,6 +396,7 @@ export class ConquestRenderer {
         if (body.gas) {
             ctx.fillStyle = '#4e626b'; ctx.fillRect(pad.x - half + 2, pad.y + 3, 3, 8); ctx.fillRect(pad.x + half - 5, pad.y + 3, 3, 8);
         }
+        this.drawFuelZone(body);
         const home = body.id === world.player.homeId || Boolean(state.home);
         if (home) {
             this.label(`⌂ HOME BASE — ${body.name.toUpperCase()}`, pad.x, pad.y + 32, color, 'center');
@@ -406,6 +407,50 @@ export class ConquestRenderer {
             this.label(status, pad.x, pad.y + 32, color, 'center');
         }
         if (state.owner) for (const turret of turretPositions(body, state.level)) this.drawTurret(body, world, color, turret.index);
+    }
+
+    // Make the service area explicit using the same rectangle as the refueling simulation.
+    drawFuelZone(body) {
+        const zone = fuelZone(body);
+        const topLeft = this.screen(zone.left, zone.top);
+        const bottomRight = this.screen(zone.right, zone.bottom);
+        const ctx = this.context;
+        ctx.save();
+        ctx.fillStyle = '#ffe283'; ctx.strokeStyle = '#ffdc69';
+        ctx.globalAlpha = 0.09;
+        ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+        ctx.globalAlpha = 0.85; ctx.lineWidth = 1;
+        ctx.shadowColor = '#ffd15a'; ctx.shadowBlur = 6;
+        ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+        ctx.restore();
+        this.label('FUEL ZONE', (topLeft.x + bottomRight.x) / 2, topLeft.y - 5, '#ffe283', 'center');
+    }
+
+    // Render the central hazard as a dark core surrounded by a slowly moving accretion ring.
+    drawBlackHole() {
+        const point = this.screen(blackHole.x, blackHole.y);
+        const radius = blackHole.radius * this.camera.zoom / 2;
+        if (!this.inView(point, radius * 2)) return;
+        const ctx = this.context;
+        ctx.save();
+        ctx.strokeStyle = '#bb96ee'; ctx.lineWidth = 3;
+        ctx.shadowColor = '#9770df'; ctx.shadowBlur = 16;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.ellipse(point.x, point.y, radius * 1.8, radius * 0.65, -0.3, 0, fullCircle); ctx.stroke();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.fillStyle = '#010208';
+        ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, fullCircle); ctx.fill();
+        ctx.strokeStyle = '#d7b7fa'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(point.x, point.y, radius + 2, 0, fullCircle); ctx.stroke();
+        if (!this.reducedMotion) {
+            ctx.fillStyle = '#e8d5ff';
+            for (let i = 0; i < 8; i++) {
+                const angle = this.visualTime * 0.5 + i * fullCircle / 8;
+                ctx.fillRect(point.x + Math.cos(angle) * radius * 1.65 - 1,
+                    point.y + Math.sin(angle) * radius * 0.58 - 1, 2, 2);
+            }
+        }
+        ctx.restore();
+        this.label('BLACK HOLE', point.x, point.y - radius * 1.2 - 10, '#cfb2ec', 'center');
     }
 
     // Use the shared barrel angle and a bright silhouette so defenders see the same turret as attackers.
@@ -940,6 +985,9 @@ export class ConquestRenderer {
             ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10;
             ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(4, star.radius * layout.scale), 0, fullCircle); ctx.fill(); ctx.restore();
         }
+        const hole = this.mapPoint(blackHole.x, blackHole.y, layout);
+        ctx.fillStyle = '#010208'; ctx.strokeStyle = '#cfb2ec'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(hole.x, hole.y, 5, 0, fullCircle); ctx.fill(); ctx.stroke();
         const player = this.mapPoint(world.player.x, world.player.y, layout);
         for (const body of bodies) {
             if (body.station && !world.planets[body.id]?.owner) continue;
@@ -1102,6 +1150,7 @@ export class ConquestRenderer {
         this.updateRemoteExhaust(world, elapsed, menu);
         this.drawSpace();
         for (const star of this.starBodies) this.drawStar(star);
+        this.drawBlackHole();
         for (const body of bodies) this.drawShields(body, world);
         for (const body of bodies) this.drawBody(body, world);
         for (const body of bodies) this.drawStation(body, world);

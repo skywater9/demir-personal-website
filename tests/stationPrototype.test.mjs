@@ -84,7 +84,7 @@ test('multiplayer reserves different stations and validates fractional capture s
     assert.equal(room.setInput(one.playerId, { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, capture: true, captureBody: 'not-a-planet' }), false);
 });
 
-// High-speed flybys remain eligible while station docking still needs a safe speed.
+// High-speed flybys remain eligible and station bubble docking also ignores speed.
 test('planet capture accepts high speed and arbitrary heading', () => {
     const world = createWorld('flyby', 0);
     startMoonHack(world);
@@ -95,5 +95,5 @@ test('planet capture accepts high speed and arbitrary heading', () => {
     assert.ok(hackDigit(world, world.hack.digit).ok);
     const station = bodies.find(body => body.id === world.player.homeId);
     Object.assign(world.player, dockingPoint(station));
-    assert.equal(dockingStatus(world, station.id).ready, false);
+    assert.equal(dockingStatus(world, station.id).ready, true);
 });

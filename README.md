@@ -32,6 +32,12 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Each correct code animates a green ring and translucent sector over the planet.
   Defenders see red enemy capture progress; completion pulses green and leaves a
   gently glowing ownership outline. Neutral planets have no idle labels or range rings. The panel uses a white code key with an outward square pulse; progress is displayed on the planet.
+- Planet shops open in flight without teleporting, slowing, or attaching the rocket.
+  The yellow FUEL ZONE square refuels owned ships at any orientation. Turret slots
+  begin beside that zone and distribute around the surface without overlapping it.
+- E docks anywhere inside the home station bubble, at any speed or orientation.
+- Dropped cargo uses swept planet collisions and bounces off surfaces.
+- A separate black hole at the three-system centroid has gravitational pull and a lethal core.
 - Pilots spawn and refuel at the starter station's left bay. Its home icon and label sit above a breathing double-ring shield.
 - Brake exhaust points along travel, with faster particles (170 m/s before power scaling); main engine particle speed remains unchanged.
 - UI checks: `node --test tests/planetInteraction.test.mjs tests/stationPrototype.test.mjs`.

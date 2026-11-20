@@ -48,7 +48,7 @@ rocket upgrades, session hashes, and owned territory are preserved. Previous hom
 planets become ordinary owned planets, while pilots respawn at their new stations.
 Existing station saves are unchanged. Invalid saves stop startup and are never reset.
 
-Verify `/health` reports `"rules":"station-capture-v1"` before publishing the
+Verify `/health` reports `"rules":"planet-services-v2"` before publishing the
 matching Firebase client. Reload both browsers after the server restart. The
 `?prototype=stations` URL explicitly forces offline practice; omit that query for
 multiplayer testing.

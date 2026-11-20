@@ -312,3 +312,7 @@ kbd { font:inherit; color:#bac8c7; font-size:8px; }
 .relay-card.is-hacking .digit-button::after { content:''; position:absolute; inset:-2px; border:2px solid #d8ffe7; pointer-events:none; animation:hack-square-out 1s ease-out infinite; }
 @keyframes hack-square-out { from { transform:scale(1); opacity:.75; } to { transform:scale(1.3); opacity:0; } }
 @media(prefers-reduced-motion:reduce) { .relay-card.is-hacking .digit-button::after { animation:none; opacity:0; } }
+
+.capture-range-notice { margin:5px 0 0; color:#ef777b; font-size:11px; text-align:center; letter-spacing:.7px; animation:range-warning-pulse 1.4s ease-in-out infinite alternate; }
+@keyframes range-warning-pulse { from { opacity:.55; } to { opacity:.95; } }
+@media(prefers-reduced-motion:reduce) { .capture-range-notice { animation:none; } }

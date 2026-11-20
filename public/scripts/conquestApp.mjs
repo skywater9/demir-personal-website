@@ -1,9 +1,9 @@
 import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-station-prototype';
 import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-planet-ui';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-planet-ui';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-release-brake';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-planet-services';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-planet-services';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-planet-services';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -243,8 +243,8 @@ export class ConquestApp {
         if (this.mode !== 'flight' || event.ctrlKey || event.metaKey || event.altKey
             || ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target?.tagName)) return;
         // Keep shop shortcuts local to an owned relay; held keys must never repeat purchases.
-        const ownedRelay = this.world.player.docked && !this.world.hack
-            && this.world.planets[this.world.player.docked]?.owner === this.world.player.id;
+        const shopId = this.world.player.shoppingOn || this.world.player.docked;
+        const ownedRelay = shopId && !this.world.hack && this.world.planets[shopId]?.owner === this.world.player.id;
         if (ownedRelay && (event.code === 'KeyT' || event.code === 'KeyR')) {
             event.preventDefault();
             if (!event.repeat) {
@@ -263,7 +263,7 @@ export class ConquestApp {
             event.preventDefault();
             this.keys.add('KeyE');
             const body = bodies.find(item => item.id === this.interactionBody());
-            if (!event.repeat && (this.world.player.docked || this.world.hack || body)) this.interact();
+            if (!event.repeat && (this.world.player.docked || this.world.player.shoppingOn || this.world.hack || body)) this.interact();
             return;
         }
         if (event.code === 'Space' && !this.ui.fuelPrompt.hidden && this.world.player.fuel <= 0) {
@@ -519,7 +519,7 @@ export class ConquestApp {
         const aimedBody = this.captureBody();
         if (aimedBody) return aimedBody;
         const home = bodies.find(body => body.id === this.world.player.homeId);
-        if (home?.station && dockingStatus(this.world, home.id).distance <= tuning.dockingDistance) return home.id;
+        if (home?.station && dockingStatus(this.world, home.id).ready) return home.id;
         return null;
     }
 
@@ -738,13 +738,14 @@ export class ConquestApp {
     updateDocking() {
         const world = this.world;
         const player = world.player;
-        const body = bodies.find(body => body.id === (player.docked || world.hack?.bodyId || this.captureBody())) || nearestRelay(player, world);
+        const body = bodies.find(body => body.id === (player.docked || player.shoppingOn || world.hack?.bodyId || this.captureBody())) || nearestRelay(player, world);
         const checks = dockingStatus(world, body.id);
         const interactionReady = checks.ready && (body.station || this.captureBody() === body.id);
         const showError = this.world.elapsed < (this.dockErrorUntil || 0);
         this.ui.dockError.hidden = !showError;
+        const shopOpen = Boolean(player.docked || player.shoppingOn);
         const hoveringPlanet = !body.station && this.captureBody() === body.id;
-        const visible = this.mode === 'flight' && !player.deadUntil && (player.docked || world.hack || hoveringPlanet
+        const visible = this.mode === 'flight' && !player.deadUntil && (shopOpen || world.hack || hoveringPlanet
             || body.station && checks.distance <= tuning.dockingAssistDistance || showError);
         const wasHidden = this.ui.dockDialog.hidden;
         this.ui.dockDialog.hidden = !visible;
@@ -763,8 +764,8 @@ export class ConquestApp {
         const point = this.renderer.screen(station.x + 70, station.y);
         const stationX = point.x * bounds.width / canvas.width;
         const stationY = point.y * bounds.height / canvas.height;
-        this.ui.dockDialog.classList.toggle('station-dock', !player.docked);
-        this.ui.dockDialog.classList.toggle('planet-capture', !body.station && !player.docked);
+        this.ui.dockDialog.classList.toggle('station-dock', !shopOpen);
+        this.ui.dockDialog.classList.toggle('planet-capture', !body.station && !shopOpen);
         const panelWidth = this.ui.dockDialog.offsetWidth || 180;
         const panelHeight = this.ui.dockDialog.offsetHeight || 50;
         this.ui.dockDialog.style.left = `${Math.max(6, Math.min(bounds.width - panelWidth - 6, stationX))}px`;
@@ -774,7 +775,7 @@ export class ConquestApp {
         this.text('dockState', player.docked ? world.hack ? 'HACKING' : 'OWNED' : interactionReady ? 'READY' : 'ALIGNING');
         this.ui.dockChecks.hidden = true;
         this.ui.hackPanel.hidden = !world.hack;
-        this.ui.upgradePanel.hidden = !player.docked || Boolean(world.hack);
+        this.ui.upgradePanel.hidden = !shopOpen || Boolean(world.hack);
         const speedReady = checks.speed <= tuning.dockingSpeed;
         const angleReady = checks.angle <= tuning.dockingAngle;
         this.text('dockSpeedCheck', speedReady ? 'SPEED OK' : 'SLOW DOWN');
@@ -791,10 +792,11 @@ export class ConquestApp {
         this.text('dockCurrentSpeed', `${speed.toFixed(1)} m/s`);
         this.text('dockTargetSpeed', `${tuning.dockingSpeed.toFixed(1)} m/s`);
         this.ui.dockVelocity.classList.toggle('is-ready', speedReady);
-        this.ui.interactButton.disabled = !player.docked && !world.hack && !interactionReady;
-        this.ui.interactButton.classList.toggle('is-ready', !player.docked && interactionReady);
+        this.ui.interactButton.disabled = !shopOpen && !world.hack && !interactionReady;
+        this.ui.interactButton.classList.toggle('is-ready', !shopOpen && interactionReady);
         const outOfRange = !body.station && checks.distance > tuning.hackingDistance;
-        this.text('interactLabel', world.hack ? 'to Cancel' : player.docked ? 'to Leave' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : outOfRange ? 'to CAPTURE · OUT OF RANGE' : 'to CAPTURE');
+        this.text('interactLabel', world.hack ? 'to Cancel' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');
+        this.ui.captureRangeNotice.hidden = !outOfRange || shopOpen || Boolean(world.hack);
         if (world.hack) {
             const hack = world.hack;
             const progress = hack.progress ?? hack.count ?? 0;
@@ -802,7 +804,7 @@ export class ConquestApp {
             this.text('digitButton', String(hack.digit));
             this.ui.digitButton.setAttribute('aria-label', 'Enter the displayed number, 1 through 4');
 
-        } else if (player.docked) {
+        } else if (shopOpen) {
             const upgrade = nextUpgrade(world);
             const rocket = nextRocketUpgrade(world);
             this.ui.upgradeButton.closest('.upgrade-option').hidden = Boolean(body.station);

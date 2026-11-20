@@ -29,7 +29,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
             const pathname = decodeURIComponent(new URL(request.url, 'http://service.invalid').pathname);
             if (pathname === '/health') {
                 response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-                response.end(JSON.stringify({ ok: true, room: 'galaxy', rules: 'station-capture-v1', capacity: playerLimit, online: clients.size })); return;
+                response.end(JSON.stringify({ ok: true, room: 'galaxy', rules: 'planet-services-v2', capacity: playerLimit, online: clients.size })); return;
             }
             const file = resolve(publicRoot, `.${pathname === '/' ? '/index.html' : pathname}`);
             if (!file.startsWith(`${publicRoot}${sep}`) || !mimeTypes[extname(file)]) { response.writeHead(404); response.end(); return; }
@@ -182,7 +182,7 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
                 }
                 room.sessions[playerId].lastActionId = message.actionId;
                 // Number entry and capture initiation must preserve cursor targeting and moving-flight controls.
-                if (!['interact', 'digit'].includes(message.action)) {
+                if (!['interact', 'digit', 'planetUpgrade'].includes(message.action)) {
                     room.setInput(playerId, { ...emptyInput, aimAngle: room.world.players[playerId].player.aimAngle }, now());
                 }
                 const result = room.action(playerId, message);
