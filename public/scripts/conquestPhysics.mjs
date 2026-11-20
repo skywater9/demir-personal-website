@@ -77,7 +77,7 @@ export const systems = Object.freeze([
 export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black hole',
     ...galaxyCenter,
     radius: 320, gravity: 360 });
-export const galaxyRadius = 16000;
+export const galaxyRadius = 14500;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
@@ -118,30 +118,20 @@ export const roguePlanets = Object.freeze([
     ['Pale', 7700, -12900, 140, 3.2, '#b7c8da'],
     ['Mica', 10200, 4900, 150, 4.3, '#bc9c84'],
     ['Serein', -9400, 4700, 185, 6.8, '#829bb2'],
-    ['Morrow', -14500, -8500, 165, 5.2, '#8f829e'],
     ['Fallow', -12300, -13000, 150, 4.1, '#b5a182'],
-    ['Aureole', -3900, 10500, 180, 6.2, '#c09a72'],
     ['Kestrel', -500, -11900, 145, 4.0, '#859dac'],
-    ['Vesper', 15000, 8200, 175, 6.0, '#a984a2'],
-    ['Flintglass', 16200, -5600, 155, 4.7, '#889cab'],
     ['Nival', 11800, -15600, 150, 4.0, '#a6c0d0'],
     ['Umber', -1800, -16200, 175, 5.9, '#a98a79'],
-    ['Beryl', -18500, -4000, 155, 4.3, '#a98a79'],
     ['Glimmer', -4900, -17000, 155, 3.8, '#739a91'],
     ['Hush', 4800, -17000, 165, 4.3, '#a984a2'],
-    ['Mistral', 20400, -1000, 165, 3.8, '#829bb2'],
-    ['Nacreveil', 19900, -9300, 175, 4.3, '#a98a79'],
-    ['Oriole', 17000, -14000, 185, 4.8, '#739a91'],
     ['Quartz', 6500, -19200, 155, 5.8, '#829bb2'],
-    ['Rill', 200, -20600, 165, 6.3, '#a98a79'],
-    ['Silt', -6600, -19500, 175, 3.8, '#739a91'],
-    ['Thistle', -12400, -18700, 185, 4.3, '#a984a2']
+    ['Rill', 200, -20600, 165, 6.3, '#a98a79']
 ].map(([name, x, y, radius, gravity, color]) => {
     const dx = x - blackHole.x;
     const dy = y - blackHole.y;
     const distance = Math.hypot(dx, dy);
     // Contract the outskirts while keeping the developed inner clusters in place.
-    const scale = distance > 9000 ? (9000 + (distance - 9000) * 0.24) / distance : 1;
+    const scale = distance > 9000 ? (9000 + (distance - 9000) * 0.18) / distance : 1;
     return Object.freeze({
         id: `rogue-${name.toLowerCase()}`, name, x: Math.round(blackHole.x + dx * scale),
         y: Math.round(blackHole.y + dy * scale), radius, gravity, color, land: '#687982'
@@ -153,7 +143,7 @@ export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 // Reserve protected, widely separated outposts so the server can assign a random free home.
 export const starterStations = Object.freeze([
     [2450, 600], [8000, 1500], [-4000, 3500], [-7000, -12000],
-    [1000, -14500], [12500, -9000], [14000, 800], [-14000, 800]
+    [1000, -14500], [12500, -9000], [12800, -200], [-12800, -200]
 ].map(([x, y], index) => Object.freeze({
     id: `station-${index + 1}`, name: `Starter station ${index + 1}`, station: true,
     x, y, radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
@@ -161,7 +151,7 @@ export const starterStations = Object.freeze([
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
 export const territoryBodies = Object.freeze([...bodies, ...celestialBodies]);
 
-const retiredPlanetIds = new Set(['rogue-jasper', 'rogue-keel', 'rogue-dewpoint', 'rogue-eider', 'rogue-lark', 'rogue-frostmere', 'rogue-cresset', 'rogue-pumice', 'rogue-iolite', 'rogue-asterfall']);
+const retiredPlanetIds = new Set(['rogue-mistral', 'rogue-vesper', 'rogue-nacreveil', 'rogue-beryl', 'rogue-oriole', 'rogue-thistle', 'rogue-aureole', 'rogue-silt', 'rogue-flintglass', 'rogue-morrow', 'rogue-jasper', 'rogue-keel', 'rogue-dewpoint', 'rogue-eider', 'rogue-lark', 'rogue-frostmere', 'rogue-cresset', 'rogue-pumice', 'rogue-iolite', 'rogue-asterfall']);
 
 // Clear retired territory and redirect saved navigation to the pilot's home.
 export function removeRetiredPlanets(world) {

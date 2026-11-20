@@ -1401,3 +1401,7 @@ also make the 3 star systems more symmetrically spread around the black hole, so
 252.
 
 push changes to website
+
+253.
+
+make map even smaller and remove 10 planets before piushing
