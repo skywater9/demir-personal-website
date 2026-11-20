@@ -173,9 +173,9 @@ export function capturePressesRequired(body, level = 0) {
 
 // Share the visible refueling box between rendering and authoritative service checks.
 export function fuelZone(body) {
-    const halfWidth = tuning.padHalfWidth + 16;
+    const halfWidth = tuning.padHalfWidth + 48;
     return { left: body.x - halfWidth, right: body.x + halfWidth,
-        top: body.y - body.radius - 110, bottom: body.y - body.radius + 15 };
+        top: body.y - body.radius - 170, bottom: body.y - body.radius + 15 };
 }
 
 // Bound controls before they can introduce non-finite velocities into a saved world.

@@ -1449,3 +1449,7 @@ my station just spawned at almost the very edge, stations should still try to sp
 264.
 
 deploy
+
+265.
+
+make fuel area larger and push

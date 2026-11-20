@@ -690,3 +690,5 @@ The expanded map centers its 8,800 m galaxy outline on the black hole. Outer pla
 Sol, Vega, and Ember are spaced 120 degrees apart around the black hole.
 
 The galaxy edge stops outward motion. Pilots can turn and fly back inward.
+
+Planet fuel zones are 192 m wide and reach 170 m above the pad. The drawn zone and refueling use the same bounds.
