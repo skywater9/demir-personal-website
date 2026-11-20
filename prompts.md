@@ -1317,3 +1317,7 @@ for the shield renderer, there should only be two types of circles, when the pla
 231.
 
 deploy these changes
+
+232.
+
+also black hole cargo is not moving toward the player for some reason

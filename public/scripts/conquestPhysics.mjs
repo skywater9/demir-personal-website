@@ -1292,7 +1292,9 @@ function movePickups(world, dt, previousPlayer) {
         const dx = nearest ? nearest.x - pickup.x : 0;
         const dy = nearest ? nearest.y - pickup.y : 0;
         const distance = Math.hypot(dx, dy);
-        if (nearest && insideBubble(nearest)) {
+        if (nearest && !pickup.blackHoleOrbit && Number.isFinite(pickup.orbitRadius)) {
+            attractBubbleCargo(pickup, nearest, blackHole, dt, world.planets[blackHole.id]);
+        } else if (nearest && insideBubble(nearest)) {
             attractBubbleCargo(pickup, nearest, bubble, dt, world.planets[bubble.id]);
         } else if (nearest && distance > 0 && distance < tuning.cargoAttractionRadius) {
             const acceleration = tuning.cargoAttractionAcceleration * (1 - distance / tuning.cargoAttractionRadius);

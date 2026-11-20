@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-shield-rings';
+import { bodies, territoryBodies, celestialBodies, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-black-hole-magnet';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
