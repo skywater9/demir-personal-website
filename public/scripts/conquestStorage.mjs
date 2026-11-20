@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-forty-outer-worlds';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-compact-galaxy';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;

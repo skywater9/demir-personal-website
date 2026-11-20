@@ -1369,3 +1369,15 @@ clicking tab should not just make map larger but have it zoom out so you can see
 244.
 
 double the amount of sparse planets and deploy
+
+245.
+
+I didn't see more planets on the current website can you refresh server
+
+246.
+
+<image attached> basically condense these planets in the large circle shown on the map, that should be the map, with the black hole in the middle
+
+247.
+
+deploy changes

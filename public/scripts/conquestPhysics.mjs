@@ -66,6 +66,7 @@ export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black 
     x: systems.reduce((sum, system) => sum + system.x, 0) / systems.length,
     y: systems.reduce((sum, system) => sum + system.y, 0) / systems.length - 1800,
     radius: 320, gravity: 360 });
+export const galaxyRadius = 18000;
 export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
@@ -134,9 +135,17 @@ export const roguePlanets = Object.freeze([
     ['Rill', 200, -20600, 165, 6.3, '#a98a79'],
     ['Silt', -6600, -19500, 175, 3.8, '#739a91'],
     ['Thistle', -12400, -18700, 185, 4.3, '#a984a2']
-].map(([name, x, y, radius, gravity, color]) => Object.freeze({
-    id: `rogue-${name.toLowerCase()}`, name, x, y, radius, gravity, color, land: '#687982'
-})));
+].map(([name, x, y, radius, gravity, color]) => {
+    const dx = x - blackHole.x;
+    const dy = y - blackHole.y;
+    const distance = Math.hypot(dx, dy);
+    // Contract the outskirts while keeping the developed inner clusters in place.
+    const scale = distance > 9000 ? (9000 + (distance - 9000) * 0.45) / distance : 1;
+    return Object.freeze({
+        id: `rogue-${name.toLowerCase()}`, name, x: Math.round(blackHole.x + dx * scale),
+        y: Math.round(blackHole.y + dy * scale), radius, gravity, color, land: '#687982'
+    });
+}));
 
 export const planetBodies = Object.freeze([...systemPlanets, ...roguePlanets]);
 

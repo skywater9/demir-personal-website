@@ -1,6 +1,6 @@
 import {
-    bodies, territoryBodies, celestialBodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-forty-outer-worlds';
+    bodies, territoryBodies, celestialBodies, systems, galaxyRadius, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
+} from './conquestPhysics.mjs?v=20261119-compact-galaxy';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -170,12 +170,8 @@ export class ConquestRenderer {
         const width = this.mapCanvas.width;
         const height = this.mapCanvas.height;
         if (this.mapExpanded) {
-            const left = Math.min(...territoryBodies.map(body => body.x - body.radius));
-            const right = Math.max(...territoryBodies.map(body => body.x + body.radius));
-            const top = Math.min(...territoryBodies.map(body => body.y - body.radius));
-            const bottom = Math.max(...territoryBodies.map(body => body.y + body.radius));
-            const scale = Math.min(width / (right - left), height / (bottom - top)) * 0.86;
-            return { width, height, scale, centerX: (left + right) / 2, centerY: (top + bottom) / 2 };
+            const scale = Math.min(width, height) * 0.45 / galaxyRadius;
+            return { width, height, scale, centerX: blackHole.x, centerY: blackHole.y };
         }
         const center = this.mapCoordinates(world.player.x, world.player.y);
         const scale = Math.min(width, height) * 0.44 / 8000;
@@ -1057,10 +1053,16 @@ export class ConquestRenderer {
         const layout = this.mapLayout(world);
         const { width, height } = layout;
         ctx.fillStyle = '#0c1620'; ctx.fillRect(0, 0, width, height);
+        const galaxyCenter = this.mapPoint(blackHole.x, blackHole.y, layout);
+        ctx.strokeStyle = '#36515e';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath(); ctx.arc(galaxyCenter.x, galaxyCenter.y, galaxyRadius * layout.scale, 0, fullCircle); ctx.stroke();
+        ctx.setLineDash([]);
         ctx.font = '8px monospace'; ctx.textAlign = 'center'; ctx.lineWidth = 1;
         for (const system of systems) {
             const point = this.mapPoint(system.x, system.y, layout);
-            const members = bodies.filter(body => body.systemId === system.id);
+            const members = bodies.filter(body => !body.station && body.systemId === system.id);
             const radius = Math.max(1, ...members.map(body => Math.hypot(body.x - system.x, body.y - system.y))) * layout.scale;
             ctx.strokeStyle = '#263e4c'; ctx.setLineDash([2, 3]);
             ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, fullCircle); ctx.stroke(); ctx.setLineDash([]);
