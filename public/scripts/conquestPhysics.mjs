@@ -99,7 +99,21 @@ export const roguePlanets = Object.freeze([
     ['Rime', 4300, -10200, 145, 3.4, '#a7c6df'],
     ['Dusk', -10700, -4600, 170, 5.8, '#a78bba'],
     ['Sable', -1600, 5900, 155, 4.8, '#bf9a78'],
-    ['Cairn', 11400, -2200, 160, 5.2, '#9caab5']
+    ['Cairn', 11400, -2200, 160, 5.2, '#9caab5'],
+    ['Brume', -10500, 900, 155, 4.6, '#8e9ba9'],
+    ['Tarn', 5600, 7900, 175, 6.1, '#739a91'],
+    ['Shale', -4000, -11300, 165, 5.3, '#a39287'],
+    ['Pale', 7700, -12900, 140, 3.2, '#b7c8da'],
+    ['Mica', 10200, 4900, 150, 4.3, '#bc9c84'],
+    ['Serein', -9400, 4700, 185, 6.8, '#829bb2'],
+    ['Morrow', -14500, -8500, 165, 5.2, '#8f829e'],
+    ['Fallow', -12300, -13000, 150, 4.1, '#b5a182'],
+    ['Aureole', -3900, 10500, 180, 6.2, '#c09a72'],
+    ['Kestrel', 800, 9300, 145, 4.0, '#859dac'],
+    ['Vesper', 15000, 8200, 175, 6.0, '#a984a2'],
+    ['Flintglass', 16200, -5600, 155, 4.7, '#889cab'],
+    ['Nival', 11800, -15600, 150, 4.0, '#a6c0d0'],
+    ['Umber', -1800, -16200, 175, 5.9, '#a98a79']
 ].map(([name, x, y, radius, gravity, color]) => Object.freeze({
     id: `rogue-${name.toLowerCase()}`, name, x, y, radius, gravity, color, land: '#687982'
 })));
@@ -154,7 +168,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 1, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 3, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -405,7 +419,7 @@ export function migrateUpgradeTracks(world) {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
     world.celestialTargetsVersion = 1;
-    world.roguePlanetsVersion = 1;
+    world.roguePlanetsVersion = 3;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {

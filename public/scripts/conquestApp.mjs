@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-stellar-balance';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-expanded-worlds';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-stellar-balance';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-stellar-balance';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-stellar-balance';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-expanded-worlds';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-expanded-worlds';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-expanded-worlds';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
