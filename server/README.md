@@ -107,11 +107,10 @@ checked, and heartbeat detects broken sockets. Monotonic command IDs survive
 reconnects so replaying a purchase cannot charge cargo twice. Invalid positions,
 resource amounts, and hit claims are never accepted as controls.
 
-Rocket costs initially use 8/16/28/40 cargo. All tiers slightly improve steering
-and braking. Tier 1 adds speed-fading acceleration, faster fire and lower heat;
-tier 2 fires pairs; tier 3 reduces powered-control fuel use by 20%; tier 4 alternates
-faster barrels and increases bullet speed by 30%. Death removes one tier, at most
-once, and the death notice identifies the loss. These are initial playtest values.
+BOOSTER, WEAPON and PLANET upgrades use a shared 5-cargo-per-level price curve,
+from 5 to 50 cargo across ten levels. Death removes one BOOSTER and WEAPON level,
+at most once, and the death notice identifies both losses. See the root README
+for the current weapon milestones, capture rules and planetary defenses.
 
 Each planet upgrade adds one independently aiming turret. Turrets lead targets using current velocity and bullet travel time, fire every 1.4 seconds, and limit homing correction to 0.28 radians/second toward the original target without changing speed. One hostile hit destroys a gun permanently, and every active turret must be destroyed before capture. Old five-health saves remain readable and normalize surviving turrets to one health; zero-health turrets stay destroyed. Capture cancellation and five-second recapture locks are authoritative shared state. Critical turret destruction is persisted before it is broadcast. Station shields retain their current radius; planet inner shields match the capture ring and contain their associated cargo. Only the current planet owner can attract or collect it, with stronger attraction closer to the surface. Death-drop cargo remains public. Neutral captures require eight presses from 1–3; each defense tier adds two presses and one digit through tier three (14 presses from 1–6). Restart clears old partial challenges before applying these rules.
 

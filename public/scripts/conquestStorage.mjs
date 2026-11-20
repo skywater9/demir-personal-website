@@ -1,4 +1,4 @@
-import { bodies, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-upgrade-tracks-capture';
+import { bodies, territoryBodies, celestialBodies, createWorld, stepWorld, tuning, interact, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-shield-rings';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;
@@ -10,7 +10,8 @@ export function validWorld(world) {
         || !Number.isFinite(world.createdAt) || !Number.isFinite(world.updatedAt)
         || !Number.isInteger(world.eventCounter) || world.eventCounter < 0
         || !Number.isFinite(world.elapsed) || world.elapsed < 0 || world.elapsed > 31536000
-        || !world.planets || Object.keys(world.planets).length !== bodies.length) return false;
+        || !world.planets || ![bodies.length, territoryBodies.length].includes(Object.keys(world.planets).length)
+        || world.celestialTargetsVersion !== undefined && world.celestialTargetsVersion !== 1) return false;
     const player = world.player;
     for (const key of ['x', 'y', 'vx', 'vy', 'angle', 'fuel', 'cargo', 'deadUntil', 'aimAngle', 'rotationVelocity']) {
         if (!Number.isFinite(player[key]) || Math.abs(player[key]) > 1e8) return false;
@@ -25,13 +26,15 @@ export function validWorld(world) {
         || player.cargo < 0 || !(player.docked === null || bodyIds.has(player.docked))
         || !(player.landedOn === null || bodyIds.has(player.landedOn))) return false;
     if (world.upgradeTracksVersion === 2 && (!Number.isInteger(player.weaponTier) || player.weaponTier < 0 || player.weaponTier > tuning.maxRocketLevel)) return false;
-    for (const body of bodies) {
+    for (const body of territoryBodies) {
         const state = world.planets[body.id];
+        if (!state && celestialBodies.some(candidate => candidate.id === body.id) && world.celestialTargetsVersion !== 1) continue;
         if (!state || !(state.owner === null || state.owner === 'pilot')
             || !Number.isInteger(state.level) || state.level < 0 || state.level > (world.upgradeTracksVersion === 2 ? tuning.maxPlanetLevel : 20)
             || !Number.isFinite(state.stock) || state.stock < 0 || state.stock > 1e6) return false;
         if (state.nextCargoAt !== undefined && (!Number.isFinite(state.nextCargoAt) || Math.abs(state.nextCargoAt) > 1e8)) return false;
         if (state.recaptureAt !== undefined && (!Number.isFinite(state.recaptureAt) || state.recaptureAt < 0 || state.recaptureAt > 1e8)) return false;
+        if (state.capturedAt !== undefined && (!Number.isFinite(state.capturedAt) || state.capturedAt < 0 || state.capturedAt > world.elapsed)) return false;
         if (state.turrets !== undefined && (!Array.isArray(state.turrets) || state.turrets.length !== state.level
             || !state.turrets.every(turret => turret && ['health', 'angle', 'disabledUntil', 'nextShotAt'].every(key =>
                 Number.isFinite(turret[key]) && Math.abs(turret[key]) < 1e8)
@@ -45,7 +48,7 @@ export function validWorld(world) {
     }
     if (world.planets[player.homeId].owner !== player.id) return false;
     if (!world.stats || !['captures', 'deaths', 'cargoCollected', 'shots'].every(key => Number.isFinite(world.stats[key]) && world.stats[key] >= 0)) return false;
-    if (!world.target || !bodyIds.has(world.target.bodyId) || !['planet', 'relay'].includes(world.target.type)) return false;
+    if (!world.target || !territoryBodies.some(body => body.id === world.target.bodyId) || !['planet', 'relay'].includes(world.target.type)) return false;
     for (const key of ['events', 'projectiles', 'pickups']) {
         if (!Array.isArray(world[key]) || world[key].length > 1500) return false;
     }
@@ -119,6 +122,7 @@ export class ConquestStore {
             return null;
         }
         const world = structuredClone(saved.world);
+        migrateUpgradeTracks(world);
         if (world.hack && world.player.docked) interact(world);
         world.hack = null;
         // Use fixed steps so offline coasting, fuel service, production, and respawn obey the live rules.

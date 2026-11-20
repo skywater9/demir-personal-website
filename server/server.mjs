@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, dirname, extname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
-import { bodies } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, territoryBodies } from '../public/scripts/conquestPhysics.mjs';
 import { GameRoom, playerLimit } from './room.mjs';
 import { GalaxyStore } from './persistence.mjs';
 
@@ -69,11 +69,16 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
         for (const event of room.world.events.splice(0)) {
             const actor = room.world.players[event.playerId];
             if (clients.has(event.playerId)) send(clients.get(event.playerId).socket, { type: 'event', event });
+            if (event.type === 'turretDestroyed') {
+                for (const [id, client] of clients) if (id !== event.playerId) {
+                    send(client.socket, { type: 'event', event });
+                }
+            }
             if (event.type === 'turretDestroyed' && event.allTurretsDown === true) {
                 const owner = room.world.planets[event.bodyId]?.owner;
                 const ownerClient = clients.get(owner);
                 if (ownerClient && owner !== event.playerId) {
-                    const name = bodies.find(body => body.id === event.bodyId)?.name || 'Your planet';
+                    const name = territoryBodies.find(body => body.id === event.bodyId)?.name || 'Your territory';
                     send(ownerClient.socket, { type: 'alert', bodyId: event.bodyId, kind: event.type,
                         text: `${name}: all turrets destroyed! Repairs unlock after their cooldowns.` });
                 }

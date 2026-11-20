@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, bodies, planetBodies, starterStations, stepWorld, interact, dockingPoint, nextRocketUpgrade, hackDigit, capturePress, tuning, dockingStatus } from '../public/scripts/conquestPhysics.mjs';
+import { createWorld, bodies, planetBodies, starterStations, systems, stepWorld, interact, dockingPoint, nextRocketUpgrade, hackDigit, capturePress, tuning, dockingStatus } from '../public/scripts/conquestPhysics.mjs';
 import { GameRoom } from '../server/room.mjs';
 import { validateSave } from '../server/persistence.mjs';
 
@@ -85,13 +85,29 @@ test('all turrets must be destroyed before starting capture', () => {
 
 test('multiplayer reserves different stations and validates fractional capture saves', () => {
     const room = new GameRoom(null, 1000);
-    const one = room.join('', 1000), two = room.join('', 1000);
-    assert.notEqual(room.world.players[one.playerId].player.homeId, room.world.players[two.playerId].player.homeId);
+    const joins = Array.from({ length: 8 }, () => room.join('', 1000));
+    const homes = joins.map(joined => room.world.players[joined.playerId].player.homeId);
+    assert.equal(new Set(homes).size, 8);
     assert.ok(Object.values(room.world.players).every(actor => actor.player.homeId.startsWith('station-')));
+    const homeBodies = homes.map(id => bodies.find(body => body.id === id));
+    for (let first = 0; first < homeBodies.length; first++) for (let second = first + 1; second < homeBodies.length; second++) {
+        assert.ok(Math.hypot(homeBodies[first].x - homeBodies[second].x, homeBodies[first].y - homeBodies[second].y)
+            >= tuning.stationMinimumSeparation);
+    }
+    const [one] = joins;
     const actor = room.world.players[one.playerId];
     actor.hack = { bodyId: 'moon', digit: 0, progress: 0.5, required: 4 };
     assert.doesNotThrow(() => validateSave(room.saved()));
     assert.equal(room.setInput(one.playerId, { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, capture: true, captureBody: 'not-a-planet' }), false);
+});
+
+test('system centers are closer together and every random home slot respects minimum separation', () => {
+    for (let first = 0; first < starterStations.length; first++) for (let second = first + 1; second < starterStations.length; second++) {
+        assert.ok(Math.hypot(starterStations[first].x - starterStations[second].x,
+            starterStations[first].y - starterStations[second].y) >= tuning.stationMinimumSeparation);
+    }
+    const nearestSystems = Math.min(...systems.slice(1).map(system => Math.hypot(system.x, system.y)));
+    assert.ok(nearestSystems < Math.hypot(9100, -6175), 'Vega and Ember have moved closer to Sol');
 });
 
 // High-speed flybys remain eligible and station bubble docking also ignores speed.

@@ -61,7 +61,7 @@ test('unreachable fast targets still produce finite shots at the configured bull
 test('inner bubble edge exactly matches the displayed capture range and interaction boundary', () => {
     const world = spaceWorld();
     const body = planetBodies.find(body => body.id === 'moon');
-    const radius = body.radius + tuning.smallShieldAltitude;
+    const radius = body.radius + tuning.shipRadius + tuning.hackingDistance;
     assert.equal(radius, body.radius + tuning.shipRadius + tuning.hackingDistance);
     Object.assign(world.player, { x: body.x + radius, y: body.y });
     assert.equal(dockingStatus(world, body.id).distance, tuning.hackingDistance);

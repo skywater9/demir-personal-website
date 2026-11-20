@@ -12,7 +12,7 @@ flowchart TD
     connect --> accepted{Connected and room has a slot?}
     accepted -->|No| retry[Show connection or full-room reason; retry]
     retry --> onlineMenu
-    accepted -->|New pilot| spawn[Assign protected starter station, anonymous label and color]
+    accepted -->|New pilot| spawn[Randomly assign a protected starter station at least 5,000 units from other home stations; assign anonymous label and color]
     accepted -->|Valid reconnect| recover[Restore server-confirmed state]
     spawn --> guide[Large blinking yellow CAPTURE PLANET arrow toward nearest capturable planet]
     guide --> shared[Fly in the shared galaxy; server owns outcomes]
@@ -32,9 +32,9 @@ flowchart TD
     rocketTracks --> weaponMilestones[Weapon three: twin; five: alternating twin; ten: instant player-color laser]
     weaponMilestones --> shop
     shop -->|E detach| shared
-    hack -->|Cancel button, out of range or disconnect| cancel[Reset partial hack]
+    hack -->|Out of range, death or disconnect| cancel[Reset partial hack; no cancel button is shown]
     cancel --> shared
-    shared --> pickup[Planet pods stay inside its bubble; only its owner attracts and collects them; death drops remain public]
+    shared --> pickup[Planet pods stay inside its bubble; only its owner attracts and collects them; death drops remain public; black-hole pods are worth ten cargo]
     pickup --> shared
     shared --> refuel[Owned pad gradually refuels; home station refuels faster and grants one cargo per minute; rates doubled]
     refuel --> shared
@@ -113,21 +113,28 @@ flowchart TD
     resume --> flight
     flight -->|Map click or destination selector| target[Set relay or pad destination]
     target --> flight
-    flight -->|Approach relay| checks[Show proximity ghost, bay guide and compact station-side E prompt]
+    flight -->|Approach relay, planet, star or black hole| checks[Show target range and E interaction prompt]
     checks -->|Unavailable E press| dockError[Show blocking reason in red below relay dialog]
     dockError --> checks
     checks -->|Leave range| flight
-    checks -->|Within service range and E| attach{Owned planet or home station?}
-    attach -->|No| hack[Press E repeatedly within planet shield range; cursor can move away]
+    checks -->|Within range and E| attach{Target owned or home station?}
+    attach -->|Neutral or hostile territory| hack[Press E repeatedly to capture; cursor may move away]
     hack -->|Held E or too-fast press| hack
     hack -->|Fresh E press| progress{Hack complete?}
-    progress -->|No| hack
-    progress -->|Yes| capture[Capture planet; reset upgrades; preserve cargo for collection]
-    capture --> captureEffect[Expand shield in player color; announce capture in local chat]
+    progress -->|No; rival progress continues independently| hack
+    progress -->|Yes; first finisher wins| capture[Capture planet, star or black hole; reset upgrades and preserve cargo for collection]
+    capture --> captureEffect[Start at defense level 1; add turret and colored shield; repel enemies for five seconds; lock recapture for five seconds]
     captureEffect --> upgrade[Planet offers BOOSTER R, WEAPON F and PLANET T; home offers BOOSTER and WEAPON]
     attach -->|Yes| upgrade
-    hack -->|Cancel button or leave range| cancel[Reset all hack progress]
+    hack -->|Move out of range, die or disconnect| cancel[Reset that pilot's hack progress]
     cancel --> flight
+    enemyApproach[Enemy rocket approaches owned territory] --> shield[Shield slows enemy rockets and hostile bullets; dotted ring marks turret range]
+    shield --> turrets{Any live turrets?}
+    turrets -->|Yes| destroy[Enemy shoots turret; show debris burst and red pulse on remaining guns]
+    destroy --> turrets
+    turrets -->|All down| hack
+    hack -->|Another pilot finishes first| lostRace[Close losing capture panel; apply five-second recapture lock]
+    lostRace --> flight
     upgrade -->|Enough cargo and T or click| purchase[Deduct cargo; upgrade planet up to ten only when all guns are repaired]
     purchase --> upgrade
     upgrade -->|R| rocketPurchase[Buy BOOSTER level with carried cargo]

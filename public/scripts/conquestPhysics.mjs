@@ -22,7 +22,7 @@ export const tuning = Object.freeze({
     mainAcceleration: 240, brakeAcceleration: 300, brakeResponse: 8,
     hackingDistance: planetCaptureRange, dockingSpeed: 20, dockingAngle: 35 * Math.PI / 180,
     gunHeatPerShot: 0.18, gunCoolingRate: 0.25, gunOverheatDuration: 2.5, shotRecoil: 1.25,
-    shotFuelDamage: 5, impactFuelDamageRate: 0.5,
+    shotFuelDamage: 5, playerShotFuelDamage: 8, playerHitboxBonus: 5, impactFuelDamageRate: 0.5,
     maxStepDuration: 1, respawnDelay: 0.9,
     aimRotationAcceleration: 150, maxAimRotationRate: 8,
     aimRotationResponse: 100, aimRotationDamping: 20,
@@ -35,23 +35,28 @@ export const tuning = Object.freeze({
     recaptureCooldown: 5, blackHoleInfluenceAltitude: 3500,
     hackPressInterval: 0.1, hackBasePresses: 8, hackExtraPresses: 2, captureDecayRate: .65,
     maxPlanetLevel: 10, maxRocketLevel: 10, turretRepairCooldown: 5,
-    upgradeCosts: Object.freeze([8, 16, 28, ...Array.from({ length: 7 }, (_, index) => 40 + index * 12)]),
-    homeShieldAltitude: 150, smallShieldAltitude: planetCaptureRange + motionTuning.shipRadius, outerFieldAltitude: 1000,
-    rocketRepulsion: 24, outerRepulsion: 14, bulletSlowFactor: 0.45,
+    upgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
+    stationMinimumSeparation: 5000,
+    starCaptureAltitude: 750, blackHoleCaptureAltitude: 1600,
+    starCaptureMultiplier: 2, blackHoleCaptureMultiplier: 3,
+    homeShieldAltitude: 150, smallShieldAltitude: 190, outerFieldAltitude: 1000,
+    rocketRepulsion: 24, newCaptureRepulsion: 110, rocketFieldDrag: 0.55,
+    outerRepulsion: 14, bulletSlowFactor: 0.45,
     outerBulletSlowFactor: 0.75, dockingDistance: 100, refugeRadius: 100,
     bulletSpeed: 680, bulletRadius: 3, bulletLifetime: 5, fireCooldown: 0.24,
     turretRange: 1700, turretCooldown: 1.4, turretBulletSpeed: 190, turretHomingRate: .28,
     turretHealth: 1, turretRadius: 32,
-    rocketUpgradeCosts: Object.freeze([8, 16, 28, ...Array.from({ length: 7 }, (_, index) => 40 + index * 12)]),
-    laserRange: 12000, laserFlashDuration: .14, blackHoleCargoCount: 6, blackHoleCargoValue: 5, blackHoleCargoInterval: 12,
+    rocketUpgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
+    starCargoValue: 5,
+    laserRange: 12000, laserFlashDuration: .14, blackHoleCargoCount: 6, blackHoleCargoValue: 10, blackHoleCargoInterval: 12,
     maxProjectiles: 256, maxEvents: 200
 });
 
 // Each system record is its central lethal star, keeping map and collision coordinates identical.
 export const systems = Object.freeze([
     { id: 'sol', name: 'Sol', x: 0, y: 0, radius: 540, gravity: 18, color: '#fff0a6' },
-    { id: 'vega', name: 'Vega', x: 9100, y: -6175, radius: 630, gravity: 22, color: '#e5f5ff' },
-    { id: 'ember', name: 'Ember', x: -7150, y: -8450, radius: 480, gravity: 16, color: '#ffc58f' }
+    { id: 'vega', name: 'Vega', x: 6825, y: -4631, radius: 630, gravity: 22, color: '#e5f5ff' },
+    { id: 'ember', name: 'Ember', x: -5363, y: -6338, radius: 480, gravity: 16, color: '#ffc58f' }
 ].map(system => Object.freeze(system)));
 
 // Keep the central hazard separate from systems so it never generates planets.
@@ -59,6 +64,7 @@ export const blackHole = Object.freeze({ id: 'central-black-hole', name: 'Black 
     x: systems.reduce((sum, system) => sum + system.x, 0) / systems.length,
     y: systems.reduce((sum, system) => sum + system.y, 0) / systems.length - 1800,
     radius: 320, gravity: 360 });
+export const celestialBodies = Object.freeze([...systems, blackHole]);
 
 const planetNames = [
     ['Earth', 'Moon', 'Venus', 'Mercury', 'Mars', 'Jupiter', 'Saturn', 'Neptune'],
@@ -84,13 +90,24 @@ export const planetBodies = Object.freeze(systems.flatMap((system, systemIndex) 
     })
 ));
 
-// Reserve small protected outposts for pilots without granting a starting planet.
-export const starterStations = Object.freeze(Array.from({ length: 8 }, (_, index) => Object.freeze({
+// Reserve protected, widely separated outposts so the server can assign a random free home.
+export const starterStations = Object.freeze([
+    [2450, 600], [8000, 1500], [-4000, 3500], [-7000, -12000],
+    [1000, -14500], [12500, -9000], [14500, 3000], [-14500, 3000]
+].map(([x, y], index) => Object.freeze({
     id: `station-${index + 1}`, name: `Starter station ${index + 1}`, station: true,
-    x: 2450 + (index % 4) * 450, y: 600 + Math.floor(index / 4) * 450,
-    radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
+    x, y, radius: 35, gravity: 0, color: '#8cbdcc', systemId: 'sol'
 })));
 export const bodies = Object.freeze([...planetBodies, ...starterStations]);
+export const territoryBodies = Object.freeze([...bodies, ...celestialBodies]);
+
+// Give stars and the black hole longer capture sequences than planets.
+export function capturePressesRequired(body, level = 0) {
+    const base = tuning.hackBasePresses + Math.max(0, level) * tuning.hackExtraPresses;
+    const multiplier = body.id === blackHole.id ? tuning.blackHoleCaptureMultiplier
+        : systems.some(system => system.id === body.id) ? tuning.starCaptureMultiplier : 1;
+    return base * multiplier;
+}
 
 // Share the visible refueling box between rendering and authoritative service checks.
 export function fuelZone(body) {
@@ -106,7 +123,7 @@ function control(value) {
 
 // Resolve public body IDs without accepting arbitrary collision geometry from callers.
 function bodyFor(bodyId) {
-    return bodies.find(body => body.id === bodyId);
+    return territoryBodies.find(body => body.id === bodyId);
 }
 
 // Timestamp bounded outcome events with a counter that survives draining the event array.
@@ -121,7 +138,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -129,7 +146,7 @@ export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now(
             fuel: tuning.maxFuel, cargo: 0, landedOn: home.id, docked: null,
             deadUntil: 0, aimAngle: 0, gunHeat: 0, gunOverheatedUntil: 0
         },
-        planets: Object.fromEntries(bodies.map(body => [body.id, {
+        planets: Object.fromEntries(territoryBodies.map(body => [body.id, {
             owner: body.id === home.id ? 'pilot' : null, home: body.id === home.id, level: 0, stock: 0,
             nextCargoAt: tuning.cargoSpawnInterval
         }])),
@@ -273,10 +290,10 @@ export function interact(world, bodyId = null) {
         if (prepareTurrets(planet).some(turret => turret.health > 0)) {
             return { ok: false, reason: 'DESTROY TURRETS FIRST' };
         }
-        world.hack = { bodyId: body.id, progress: 0, required: tuning.hackBasePresses + planet.level * tuning.hackExtraPresses, digit: 0,
+        world.hack = { bodyId: body.id, progress: 0, required: capturePressesRequired(body, planet.level), digit: 0,
             heldDigit: null, lastAcceptedAt: world.elapsed - tuning.hackPressInterval, challengeId: world.eventCounter + 1 };
         emit(world, 'hackStarted', { bodyId: body.id });
-        return { ok: true, reason: 'Enter the displayed numbers.' };
+        return { ok: true, reason: 'Press E repeatedly to capture.' };
     }
     if (!body.station) {
         player.shoppingOn = body.id;
@@ -299,10 +316,11 @@ export function capturePress(world, { repeat = false, challengeId } = {}) {
     hack.progress += 1;
     hack.lastAcceptedAt = world.elapsed;
     if (hack.progress >= hack.required) {
-        Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 0,
-            recaptureAt: world.elapsed + tuning.recaptureCooldown,
+        Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 1,
+            capturedAt: world.elapsed, recaptureAt: world.elapsed + tuning.recaptureCooldown,
             nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
-        delete world.planets[hack.bodyId].turrets;
+        world.planets[hack.bodyId].turrets = [];
+        prepareTurrets(world.planets[hack.bodyId]);
         world.stats.captures += 1;
         emit(world, 'captured', { bodyId: hack.bodyId });
         const winnerId = world.player.id;
@@ -366,6 +384,11 @@ export function planetInteractionDistance(body, planet) {
 
 // Preserve earned levels where possible while moving old combined upgrades into separate tracks.
 export function migrateUpgradeTracks(world) {
+    world.planets ||= {};
+    for (const body of celestialBodies) world.planets[body.id] ||= {
+        owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
+    };
+    world.celestialTargetsVersion = 1;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {
@@ -404,9 +427,12 @@ export function weaponStats(player) {
 // Share one bounded field definition across physics, cargo containment, and rendering.
 export function planetShield(body, planet) {
     const level = Math.max(0, Math.min(tuning.maxPlanetLevel, planet?.level || 0));
-    const altitude = tuning.smallShieldAltitude + level * 30;
-    return { altitude, radius: body.radius + altitude, retention: .94 - level * .016,
-        repulsion: .08 + level * .012, rocketForce: tuning.rocketRepulsion + level * 2 };
+    const shieldLevel = Math.max(1, level);
+    const altitude = body.id === blackHole.id ? tuning.blackHoleCaptureAltitude + shieldLevel * 60
+        : systems.some(system => system.id === body.id) ? tuning.starCaptureAltitude + shieldLevel * 40
+            : tuning.smallShieldAltitude + shieldLevel * 30;
+    return { altitude, radius: body.radius + altitude, retention: .88 - level * .02,
+        repulsion: .14 + level * .012, rocketForce: tuning.rocketRepulsion + level * 2 };
 }
 
 // Describe only the docked planet's next purchase, distinguishing eligibility from affordability.
@@ -750,7 +776,7 @@ function resolveMovement(world, start, end) {
 // Apply soft hostile fields without clamping rocket positions or changing friendly motion.
 function repelRockets(world, dt) {
     const player = world.player;
-    for (const body of bodies) {
+    for (const body of territoryBodies) {
         const planet = world.planets[body.id];
         if (!planet.owner || planet.owner === player.id) continue;
         const dx = player.x - body.x;
@@ -759,7 +785,16 @@ function repelRockets(world, dt) {
         const home = isHome(world, body);
         const field = planetShield(body, planet);
         const small = home ? body.radius + tuning.homeShieldAltitude : field.radius;
-        const force = distance < small ? (home ? tuning.rocketRepulsion : field.rocketForce) * (1 - distance / small) : 0;
+        const newlyCaptured = !home && world.elapsed < (planet.recaptureAt || 0)
+            && world.elapsed >= (planet.capturedAt || 0);
+        const baseForce = home ? tuning.rocketRepulsion
+            : newlyCaptured ? tuning.newCaptureRepulsion : field.rocketForce;
+        const force = distance < small ? baseForce * (1 - distance / small) : 0;
+        if (distance < small) {
+            const drag = Math.exp(-tuning.rocketFieldDrag * dt);
+            player.vx *= drag;
+            player.vy *= drag;
+        }
         player.vx += dx / distance * force * dt;
         player.vy += dy / distance * force * dt;
     }
@@ -774,7 +809,8 @@ function launchPlanetCargo(world, body, planet) {
     };
     const orbitAngle = random(seed) * Math.PI * 2;
     const direction = random(seed + 31.7) < 0.5 ? -1 : 1;
-    const altitude = tuning.cargoSurfaceOffset + random(seed + 83.2) * tuning.cargoAltitudeVariation;
+    const altitude = Math.max(cargoInnerRadius(body) - body.radius,
+        tuning.cargoSurfaceOffset + random(seed + 83.2) * tuning.cargoAltitudeVariation);
     const distance = body.radius + altitude;
     const x = body.x + Math.cos(orbitAngle) * distance;
     const y = body.y + Math.sin(orbitAngle) * distance;
@@ -786,7 +822,9 @@ function launchPlanetCargo(world, body, planet) {
         bodyId: body.id, orbiting: true, x, y,
         vx: -Math.sin(orbitAngle) * speed * direction,
         vy: Math.cos(orbitAngle) * speed * direction,
-        amount: 1, expiresAt: world.elapsed + tuning.pickupLifetime });
+        amount: body.id === blackHole.id ? tuning.blackHoleCargoValue
+            : systems.some(system => system.id === body.id) ? tuning.starCargoValue : 1,
+        expiresAt: world.elapsed + tuning.pickupLifetime });
     planet.stock -= 1;
     planet.nextCargoAt = world.elapsed + tuning.cargoSpawnInterval;
 }
@@ -871,13 +909,21 @@ function coolPlayerGun(player, dt, elapsed) {
     player.gunHeat = Math.max(0, player.gunHeat - tuning.gunCoolingRate * dt);
 }
 
-// Redistribute each level's defenses into equally spaced positions around the planet.
+// Keep the Dyson rails and turret hitboxes on the same compact orbit.
+export function dysonFrameRadius(body) {
+    return body.radius * 1.22;
+}
+
+// Redistribute each level's defenses into equally spaced positions around the body.
 export function turretPositions(body, level) {
     const count = Math.max(0, Math.min(tuning.maxPlanetLevel, Math.floor(level || 0)));
+    const floating = celestialBodies.some(candidate => candidate.id === body.id);
+    const radius = floating ? dysonFrameRadius(body) : body.radius + 26;
+    const firstAngle = floating ? -Math.PI / 2 : -Math.PI / 4;
     return Array.from({ length: count }, (_, index) => {
-        const angle = -Math.PI / 4 + index * Math.PI * 2 / count;
-        return { index, angle, x: body.x + Math.cos(angle) * (body.radius + 26),
-            y: body.y + Math.sin(angle) * (body.radius + 26) };
+        const angle = firstAngle + index * Math.PI * 2 / count;
+        return { index, angle, x: body.x + Math.cos(angle) * radius,
+            y: body.y + Math.sin(angle) * radius };
     });
 }
 
@@ -933,7 +979,7 @@ function fireTurrets(world) {
     const players = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
     // Share intrusion priorities across owned worlds while retaining each gun's range and occlusion.
     const intruders = new Map();
-    for (const body of planetBodies) {
+    for (const body of [...planetBodies, ...celestialBodies]) {
         const planet = world.planets[body.id];
         if (!planet.owner) continue;
         for (const player of players) {
@@ -944,7 +990,7 @@ function fireTurrets(world) {
             }
         }
     }
-    for (const body of bodies) {
+    for (const body of territoryBodies) {
         const planet = world.planets[body.id];
         if (!planet.owner || planet.level < 1) continue;
         const states = prepareTurrets(planet);
@@ -1026,7 +1072,7 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
     const start = { x: shot.x, y: shot.y };
     let end = { x: shot.x + shot.vx * dt, y: shot.y + shot.vy * dt };
     const interactions = [];
-    for (const body of bodies) {
+    for (const body of territoryBodies) {
         const planet = world.planets[body.id];
         if (planet.owner && planet.owner !== shot.owner) {
             const home = isHome(world, body);
@@ -1051,17 +1097,14 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
             if (fraction !== null) interactions.push({ fraction, type: 'refuge', body });
         }
     }
-    for (const star of [...systems, blackHole]) {
-        const fraction = circleHit(start, end, star, star.radius + radius);
-        if (fraction !== null) interactions.push({ fraction, type: 'surface', body: star });
-    }
     const targets = world.players ? Object.values(world.players).map(actor => actor.player) : [world.player];
     for (const player of targets) if (!player.deadUntil && shot.owner !== player.id) {
         const previous = shot.laser ? player : world.previousPlayers?.[player.id] || previousPlayer;
         const relativeStart = { x: start.x - (previous.x + (player.x - previous.x) * startFraction),
             y: start.y - (previous.y + (player.y - previous.y) * startFraction) };
         const relativeEnd = { x: end.x - player.x, y: end.y - player.y };
-        const fraction = circleHit(relativeStart, relativeEnd, { x: 0, y: 0 }, tuning.shipRadius + radius);
+        const hitRadius = tuning.shipRadius + radius + (shot.source === 'player' ? tuning.playerHitboxBonus : 0);
+        const fraction = circleHit(relativeStart, relativeEnd, { x: 0, y: 0 }, hitRadius);
         if (fraction !== null) interactions.push({ fraction, type: 'player', playerId: player.id });
     }
     interactions.sort((a, b) => a.fraction - b.fraction);
@@ -1095,8 +1138,9 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
         if (interaction.type === 'player') {
             const reason = shot.source === 'turret' ? 'Turret hit.' : 'Projectile hit.';
             const cause = { attackerId: shot.owner, source: shot.source };
-            if (world.players) withPlayer(world, interaction.playerId, () => damagePlayer(world, tuning.shotFuelDamage, reason, cause));
-            else damagePlayer(world, tuning.shotFuelDamage, reason, cause);
+            const damage = shot.source === 'player' ? tuning.playerShotFuelDamage : tuning.shotFuelDamage;
+            if (world.players) withPlayer(world, interaction.playerId, () => damagePlayer(world, damage, reason, cause));
+            else damagePlayer(world, damage, reason, cause);
         }
         else if (interaction.type === 'turret') hitTurret(world, interaction.body, interaction.turretIndex, shot.owner);
         else if (interaction.type === 'shield') emit(world, 'shieldBlocked', { bodyId: interaction.body.id });
@@ -1108,15 +1152,22 @@ function moveProjectile(world, shot, dt, previousPlayer, startFraction = 0) {
     return true;
 }
 
-// Sweep cargo against planet surfaces so fast death drops cannot tunnel through a world.
+// Keep cargo outside stellar turret rails and clear of ordinary planet surfaces.
+function cargoInnerRadius(body) {
+    const stellar = celestialBodies.some(candidate => candidate.id === body.id);
+    return (stellar ? dysonFrameRadius(body) : body.radius) + 5;
+}
+
+// Sweep cargo against planets and stellar rails, including pods restored inside a boundary.
 function moveCargoWithBounce(pickup, dt) {
     let remaining = dt;
     for (let bounce = 0; bounce < 3 && remaining > 1e-8; bounce++) {
         const start = { x: pickup.x, y: pickup.y };
         const end = { x: start.x + (pickup.vx || 0) * remaining, y: start.y + (pickup.vy || 0) * remaining };
         let hit = null;
-        for (const body of planetBodies) {
-            const radius = body.radius + 5;
+        for (const body of territoryBodies) {
+            if (body.station) continue;
+            const radius = cargoInnerRadius(body);
             const inside = Math.hypot(start.x - body.x, start.y - body.y) < radius;
             const fraction = inside ? 0 : circleHit(start, end, body, radius);
             if (fraction !== null && (!hit || fraction < hit.fraction)) hit = { body, radius, fraction };
@@ -1184,7 +1235,7 @@ function attractBubbleCargo(pickup, player, body, dt, planet) {
     const distance = Math.hypot(dx, dy);
     if (distance < 1e-8) return;
     let directionX = dx / distance, directionY = dy / distance;
-    if (circleHit(pickup, player, body, body.radius + 5) !== null) {
+    if (circleHit(pickup, player, body, cargoInnerRadius(body)) !== null) {
         const radialX = pickup.x - body.x, radialY = pickup.y - body.y;
         const radius = Math.hypot(radialX, radialY);
         if (radius < 1e-8) return;

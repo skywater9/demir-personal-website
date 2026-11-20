@@ -1,6 +1,6 @@
 import {
-    bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-upgrade-tracks-capture';
+    bodies, territoryBodies, celestialBodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
+} from './conquestPhysics.mjs?v=20261119-shield-rings';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -193,7 +193,7 @@ export class ConquestRenderer {
         const layout = this.mapLayout(this.lastMapWorld);
         let nearest = null;
         let nearestDistance = 10;
-        for (const body of bodies) {
+        for (const body of territoryBodies) {
             if (body.station && !this.lastMapWorld.planets[body.id]?.owner) continue;
             const point = this.mapPoint(body.x, body.y, layout);
             const x = bounds.left + point.x / layout.width * bounds.width;
@@ -259,7 +259,7 @@ export class ConquestRenderer {
     }
 
     // Distinguish solid lethal system stars from decorative background pixels.
-    drawStar(star) {
+    drawStar(star, world = this.lastWorld) {
         const ctx = this.context;
         const center = this.screen(star.x, star.y);
         const radius = Math.max(1, star.radius * this.camera.zoom / 2);
@@ -283,7 +283,9 @@ export class ConquestRenderer {
         ctx.strokeStyle = '#ffe5ad'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(center.x, center.y, radius, 0, fullCircle); ctx.stroke();
         ctx.restore();
-        this.label(`${star.name.toUpperCase()} / LETHAL STAR`, center.x, center.y - radius - 10, '#ffcf85', 'center');
+        const state = world?.planets?.[star.id];
+        const color = state?.owner ? this.ownerColor(state.owner, world.player) : '#ffcf85';
+        this.label(star.name.toUpperCase(), center.x, center.y - radius - 10, color, 'center', true, 11);
     }
 
     // Expand the newly owned shield in the conqueror's color without changing simulation state.
@@ -297,7 +299,7 @@ export class ConquestRenderer {
         if (this.reducedMotion) return;
         const ctx = this.context;
         for (const effect of this.captureEffects) {
-            const body = bodies.find(body => body.id === effect.bodyId);
+            const body = territoryBodies.find(body => body.id === effect.bodyId);
             if (!body) continue;
             const progress = Math.max(0, this.visualTime - effect.startedAt);
             const color = effect.owner && world ? this.captureColor(effect.owner, world) : effect.color;
@@ -316,33 +318,63 @@ export class ConquestRenderer {
     // Show the progressively larger soft planet field and the protected starter-station shield.
     drawShields(body, world) {
         const state = world.planets[body.id];
-        if (!state?.owner) return;
+        if (!state || (body.station && !state.owner)) return;
         const ctx = this.context;
         const center = this.screen(body.x, body.y);
         const scale = this.camera.zoom / 2;
         const home = world.player.homeId === body.id || Boolean(state.home);
         const smallRadius = home ? body.radius + tuning.homeShieldAltitude : planetShield(body, state).radius;
-        // Breathe the station field visually while keeping its physical protection radius stable.
-        const fieldRadius = smallRadius * scale + (body.station && !this.reducedMotion ? Math.sin(this.visualTime * 2.2) * 1.5 : 0);
-        const maxRadius = smallRadius * scale;
-        if (!this.inView(center, maxRadius)) return;
-        const color = this.ownerColor(state.owner, world.player);
+        const fieldRadius = smallRadius * scale;
+        const turretRadius = (body.radius + tuning.turretRange) * scale;
+        const hasTurrets = state.owner && !home && state.turrets?.some(turret => turret.health > 0);
+        if (!this.inView(center, hasTurrets ? Math.max(fieldRadius, turretRadius) : fieldRadius)) return;
+        const color = state.owner ? this.ownerColor(state.owner, world.player) : neutralColor;
         ctx.save();
         ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.045;
-        ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius, 0, fullCircle); ctx.fill();
-        ctx.globalAlpha = home ? 0.95 : state.level >= 1 ? 0.8 : 0.4;
+        ctx.globalAlpha = state.owner ? 0.8 : 0.35;
         ctx.lineWidth = home ? 2 : 1;
-        if (!home && state.level === 0) ctx.setLineDash([3, 4]);
+        ctx.setLineDash(state.owner ? [] : [4, 5]);
         ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius, 0, fullCircle); ctx.stroke();
-        ctx.setLineDash([]);
-        if (home || body.station) {
-            ctx.globalAlpha = 0.4;
+        if (hasTurrets && turretRadius > fieldRadius) {
+            ctx.globalAlpha = 0.14;
+            ctx.strokeStyle = color;
             ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius + 3, 0, fullCircle); ctx.stroke();
+            ctx.setLineDash([2, 6]);
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, turretRadius, 0, fullCircle);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        if (state.owner && celestialBodies.some(candidate => candidate.id === body.id)) {
+            this.drawDysonStructure(body, world, color);
         }
         ctx.restore();
+    }
+
+    // Add the captured system's Dyson frame and evenly spaced floating defensive turrets.
+    drawDysonStructure(body, world, color) {
+        const ctx = this.context;
+        const center = this.screen(body.x, body.y);
+        const radius = dysonFrameRadius(body) * this.camera.zoom / 2;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.65;
+        for (const offset of [-3, 0, 3]) {
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, radius + offset, 0, fullCircle);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 0.38;
+        for (const tilt of [0, Math.PI / 3, 2 * Math.PI / 3]) {
+            ctx.beginPath();
+            ctx.ellipse(center.x, center.y, radius, radius * 0.42, tilt, 0, fullCircle);
+            ctx.stroke();
+        }
+        ctx.restore();
+        for (const turret of turretPositions(body, world.planets[body.id].level)) {
+            this.drawTurret(body, world, color, turret.index);
+        }
     }
 
     // Preserve the textured planet and upright pad sprite while labeling the local economy.
@@ -380,28 +412,22 @@ export class ConquestRenderer {
         if (state.owner) { ctx.shadowColor = outline; ctx.shadowBlur = 7; }
         ctx.beginPath(); ctx.arc(center.x, center.y, radius + 1, 0, fullCircle); ctx.stroke();
         ctx.restore();
-        if (!state.owner) return;
-        const pad = this.screen(body.x, body.y - body.radius);
-        const half = Math.max(3, Math.round(tuning.padHalfWidth * scale));
-        ctx.fillStyle = '#1a3039'; ctx.fillRect(pad.x - half, pad.y - 3, half * 2, 5);
-        ctx.fillStyle = '#d5e0cc'; ctx.fillRect(pad.x - half, pad.y - 4, half * 2, 2);
-        ctx.fillStyle = targetColor;
-        for (let x = -half; x < half; x += 5) ctx.fillRect(pad.x + x, pad.y - 2, 2, 2);
-        ctx.fillStyle = color;
-        ctx.fillRect(pad.x - half, pad.y - 8, 2, 3); ctx.fillRect(pad.x + half - 2, pad.y - 8, 2, 3);
-        if (body.gas) {
-            ctx.fillStyle = '#4e626b'; ctx.fillRect(pad.x - half + 2, pad.y + 3, 3, 8); ctx.fillRect(pad.x + half - 5, pad.y + 3, 3, 8);
+        const labelColor = state.owner ? color : body.color;
+        if (state.owner) {
+            const pad = this.screen(body.x, body.y - body.radius);
+            const half = Math.max(3, Math.round(tuning.padHalfWidth * scale));
+            ctx.fillStyle = '#1a3039'; ctx.fillRect(pad.x - half, pad.y - 3, half * 2, 5);
+            ctx.fillStyle = '#d5e0cc'; ctx.fillRect(pad.x - half, pad.y - 4, half * 2, 2);
+            ctx.fillStyle = targetColor;
+            for (let x = -half; x < half; x += 5) ctx.fillRect(pad.x + x, pad.y - 2, 2, 2);
+            ctx.fillStyle = color;
+            ctx.fillRect(pad.x - half, pad.y - 8, 2, 3); ctx.fillRect(pad.x + half - 2, pad.y - 8, 2, 3);
+            if (body.gas) {
+                ctx.fillStyle = '#4e626b'; ctx.fillRect(pad.x - half + 2, pad.y + 3, 3, 8); ctx.fillRect(pad.x + half - 5, pad.y + 3, 3, 8);
+            }
+            this.drawFuelZone(body);
         }
-        this.drawFuelZone(body);
-        const home = body.id === world.player.homeId || Boolean(state.home);
-        if (home) {
-            this.label(`⌂ HOME BASE — ${body.name.toUpperCase()}`, pad.x, pad.y + 32, color, 'center');
-        } else {
-            const status = !state.owner ? 'UNCAPTURED · AIM + HOLD E'
-                : `${state.owner === world.player.id ? 'OWN' : 'HOSTILE'} / L${state.level} / ${Math.floor(state.stock)} CARGO`;
-            this.label(body.name.toUpperCase(), pad.x, pad.y + 21, color, 'center');
-            this.label(status, pad.x, pad.y + 32, color, 'center');
-        }
+        this.label(body.name.toUpperCase(), center.x, center.y + radius + 16, labelColor, 'center', true, 11);
         if (state.owner) for (const turret of turretPositions(body, state.level)) this.drawTurret(body, world, color, turret.index);
     }
 
@@ -423,7 +449,7 @@ export class ConquestRenderer {
     }
 
     // Keep the black-hole halo circular, with glowing pixels orbiting on matching round paths.
-    drawBlackHole() {
+    drawBlackHole(world = this.lastWorld) {
         const point = this.screen(blackHole.x, blackHole.y);
         const radius = blackHole.radius * this.camera.zoom / 2;
         if (!this.inView(point, radius * 3)) return;
@@ -449,7 +475,9 @@ export class ConquestRenderer {
             ctx.fillRect(Math.cos(angle) * orbitRadius - 1, Math.sin(angle) * orbitRadius - 1, 2, 2);
         }
         ctx.restore();
-        this.label('BLACK HOLE', point.x, point.y - radius * 2.3 - 10, '#ffd292', 'center');
+        const owner = world?.planets?.[blackHole.id]?.owner;
+        this.label(blackHole.name.toUpperCase(), point.x, point.y - radius * 2.3 - 10,
+            owner ? this.ownerColor(owner, world.player) : '#ffd292', 'center', true, 11);
     }
 
     // Use the shared barrel angle and a bright silhouette so defenders see the same turret as attackers.
@@ -464,6 +492,14 @@ export class ConquestRenderer {
         if (state.health === 0) return;
         const scale = Math.max(0.8, this.camera.zoom);
         ctx.save(); ctx.translate(point.x, point.y); ctx.scale(scale, scale);
+        const enemy = planet.owner !== world.player.id;
+        const pulse = this.reducedMotion ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(this.visualTime * 9));
+        if (enemy) {
+            ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = hostileColor; ctx.lineWidth = 2;
+            ctx.shadowColor = hostileColor; ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.arc(4, 2, tuning.turretRadius * 0.68, 0, fullCircle); ctx.stroke();
+            ctx.restore();
+        }
         ctx.save(); ctx.rotate(position.angle + Math.PI / 2);
         ctx.shadowColor = color; ctx.shadowBlur = 5;
         ctx.fillStyle = '#132833'; ctx.fillRect(-12, -3, 24, 12);
@@ -476,6 +512,24 @@ export class ConquestRenderer {
         ctx.fillStyle = color; ctx.fillRect(16, -4, 5, 8);
         ctx.restore(); ctx.shadowBlur = 0;
         ctx.restore();
+    }
+
+    // Scatter a short red and amber debris burst when the authoritative room reports a turret kill.
+    turretBurst(world, event) {
+        if (this.reducedMotion) return;
+        const body = territoryBodies.find(candidate => candidate.id === event.bodyId);
+        const position = body && turretPositions(body, world.planets[body.id]?.level)[event.turretIndex];
+        if (!position) return;
+        for (let index = 0; index < 28; index++) {
+            const seed = ++this.particleSerial;
+            const angle = this.random(seed * 19) * fullCircle;
+            const speed = 50 + this.random(seed * 23) * 150;
+            const lifetime = 0.35 + this.random(seed * 29) * 0.45;
+            this.particles.push({ x: position.x, y: position.y, vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed, life: lifetime, lifetime, kind: 'turret',
+                size: 2 + this.random(seed * 31) * 3 });
+        }
+        if (this.particles.length > 360) this.particles.splice(0, this.particles.length - 360);
     }
 
     // Draw station geometry at its physical scale, its receiver, and the turret refuge boundary.
@@ -532,7 +586,7 @@ export class ConquestRenderer {
             const density = Math.log2(Math.max(1, Number(pickup.amount) || 1));
             const bundleScale = Math.min(2.8, 1 + density * .18);
             ctx.save();
-            const body = bodies.find(body => body.id === pickup.bodyId && !body.station);
+            const body = territoryBodies.find(body => body.id === pickup.bodyId && !body.station);
             if (body) {
                 const center = this.screen(body.x, body.y);
                 ctx.beginPath(); ctx.arc(center.x, center.y, (planetShield(body, world?.planets[body.id]).radius) * this.camera.zoom / 2, 0, fullCircle); ctx.clip();
@@ -668,7 +722,8 @@ export class ConquestRenderer {
             const point = this.screen(particle.x, particle.y);
             if (!this.inView(point, 4)) continue;
             const age = 1 - particle.life / particle.lifetime;
-            const colors = particle.kind === 'damage' ? ['#ffffff', '#f2f5fa', '#d5dfeb', '#9aaabb']
+            const colors = particle.kind === 'turret' ? ['#fff3bf', '#ffb55d', '#fa6268', '#9e303e']
+                : particle.kind === 'damage' ? ['#ffffff', '#f2f5fa', '#d5dfeb', '#9aaabb']
                 : particle.kind === 'main' ? ['#fff0b2', '#edb264', '#cb7041', '#724c3d']
                 : ['#f4fff9', '#c9fff2', '#79d6cf', '#40858c'];
             ctx.globalAlpha = Math.max(0, 1 - age);
@@ -815,7 +870,7 @@ export class ConquestRenderer {
         if (!cursor) return null;
         const x = cursor.x * this.canvas.width;
         const y = cursor.y * this.canvas.height;
-        return bodies.find(body => {
+        return territoryBodies.find(body => {
             if (body.station) return false;
             const center = this.screen(body.x, body.y);
             return Math.hypot(center.x - x, center.y - y) <= Math.max(10, body.radius * this.camera.zoom / 2);
@@ -859,7 +914,7 @@ export class ConquestRenderer {
         }
         const activeKeys = new Set();
         const ctx = this.context;
-        for (const body of bodies) {
+        for (const body of territoryBodies) {
             if (body.station) continue;
             const center = this.screen(body.x, body.y);
             const radius = body.radius * this.camera.zoom / 2;
@@ -868,13 +923,6 @@ export class ConquestRenderer {
             const hovering = hovered?.id === body.id;
             if (!hovering && !hackers.length) continue;
             ctx.save(); ctx.setLineDash([]);
-            if (hovering) {
-                const rangeRadius = (planetShield(body, world.planets[body.id]).radius) * this.camera.zoom / 2;
-                ctx.strokeStyle = '#9ba9ae'; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
-                ctx.setLineDash([1, 4]);
-                ctx.beginPath(); ctx.arc(center.x, center.y, rangeRadius, 0, fullCircle); ctx.stroke();
-                ctx.setLineDash([]);
-            }
             if (hovering && !hackers.length) {
                 const ready = dockingStatus(world, body.id).ready;
                 ctx.strokeStyle = '#f1f6f3';
@@ -1016,10 +1064,17 @@ export class ConquestRenderer {
             ctx.save(); ctx.fillStyle = star.color || '#fff0a6';
             ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10;
             ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(4, star.radius * layout.scale), 0, fullCircle); ctx.fill(); ctx.restore();
+            const owner = world.planets[star.id]?.owner;
+            if (owner) {
+                ctx.save(); ctx.strokeStyle = this.ownerColor(owner, world.player); ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(5, star.radius * layout.scale + 3), 0, fullCircle); ctx.stroke(); ctx.restore();
+            }
         }
         const hole = this.mapPoint(blackHole.x, blackHole.y, layout);
         const holeRadius = Math.max(7, blackHole.radius * layout.scale);
-        ctx.save(); ctx.strokeStyle = '#ffd18a'; ctx.shadowColor = '#ffac50'; ctx.shadowBlur = 8; ctx.lineWidth = 2;
+        const holeOwner = world.planets[blackHole.id]?.owner;
+        const holeColor = holeOwner ? this.ownerColor(holeOwner, world.player) : '#ffd18a';
+        ctx.save(); ctx.strokeStyle = holeColor; ctx.shadowColor = holeColor; ctx.shadowBlur = 8; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(hole.x, hole.y, holeRadius * 1.6, 0, fullCircle); ctx.stroke();
         ctx.shadowBlur = 0; ctx.fillStyle = '#010103';
         ctx.beginPath(); ctx.arc(hole.x, hole.y, holeRadius, 0, fullCircle); ctx.fill(); ctx.stroke(); ctx.restore();
@@ -1184,9 +1239,10 @@ export class ConquestRenderer {
         this.updateExhaust(world, input, elapsed, menu, dead);
         this.updateRemoteExhaust(world, elapsed, menu);
         this.drawSpace();
-        for (const star of this.starBodies) this.drawStar(star);
-        this.drawBlackHole();
+        for (const star of this.starBodies) this.drawStar(star, world);
+        this.drawBlackHole(world);
         for (const body of bodies) this.drawShields(body, world);
+        for (const body of celestialBodies) this.drawShields(body, world);
         for (const body of bodies) this.drawBody(body, world);
         for (const body of bodies) this.drawStation(body, world);
         this.drawObjects(world);

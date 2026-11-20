@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConquestRenderer } from '../public/scripts/conquestRenderer.mjs';
-import { createWorld, bodies, systems, stepWorld, dockingPoint, killPlayer, turretPositions } from '../public/scripts/conquestPhysics.mjs';
+import { createWorld, bodies, systems, stepWorld, dockingPoint, killPlayer, turretPositions, tuning } from '../public/scripts/conquestPhysics.mjs';
 
 // Observe real drawing operations and fail on invalid coordinates without requiring an installed browser.
 function makeRenderer() {
@@ -398,6 +398,21 @@ test('map player marker is larger and nearly white, while stars have a broad glo
     renderer.drawStar(star);
     assert.ok(calls.some(call => call[0] === 'arc' && call[3] > star.radius * .5 / 2));
     assert.ok(renderer.context.shadowBlur >= 30);
+});
+
+test('owned planet draws a faint turret range circle and turret destruction scatters debris', () => {
+    const { renderer, calls } = makeRenderer();
+    const world = createWorld('turret-range-render');
+    const body = bodies.find(candidate => candidate.id === 'moon');
+    Object.assign(world.planets[body.id], { owner: world.player.id, level: 1,
+        turrets: [{ health: 1, angle: 0, disabledUntil: 0, nextShotAt: 0 }] });
+    renderer.camera = { x: body.x, y: body.y, zoom: .5 };
+    renderer.drawShields(body, world);
+    assert.ok(calls.some(call => call[0] === 'setLineDash' && call[1]?.[0] === 2 && call[1]?.[1] === 6));
+    assert.ok(calls.some(call => call[0] === 'arc'
+        && Math.abs(call[3] - (body.radius + tuning.turretRange) * .25) < .01));
+    renderer.turretBurst(world, { bodyId: body.id, turretIndex: 0 });
+    assert.equal(renderer.particles.filter(particle => particle.kind === 'turret').length, 28);
 });
 
 // The first destination explains the cargo loop without keeping tutorial copy after a capture.

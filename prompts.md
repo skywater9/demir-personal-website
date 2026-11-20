@@ -1233,3 +1233,87 @@ make the player color more apparent so the glow and rocket coloring is a bit str
 211.
 
 when you firsst spawn in, place a large yellow blinking arrow to the nearest planet and say CAPTURE PLANET
+
+212.
+
+remove the cancel capture button
+
+213.
+
+upgrades should start at 5 cargo and go up from there instead of 8
+
+214.
+
+also upgrades should be in increments of 5, instead of 8
+
+215.
+
+also blackhole orbiting cargo should be instead 10 cargo worth each. Also, move the solar systems closer together around the black hole. Also anotehr problem im having is that new player stations spawn right next to each other, they should spawn in random locations, at a reasonable distance minimum
+
+216.
+
+also, make the black hole and stars capturable too, doing so creates a dyson sphere structure, larger barrier radius, turrets float, and cargo produced by stars is worth 5, and 10 for black hole
+
+217.
+
+stars and black hole should use same capture flow, but spam capture takes longer, also larger distance to be able to start capture
+
+218.
+
+when you first capture a planet, it should automatically add a turret and slight shield. so basically already at level 1
+
+219.
+
+same for star and black hole
+
+220.
+
+<image attached> this text for each planet seems residual, just keep the plenet name, at the same color as the owner player, and a bit larger
+
+221.
+
+also enemy turrets should have a red pulsing outline, indicating that you have to destroy it
+
+222.
+
+also make a particle explosion effect for destroyed turrets
+
+223.
+
+also make enemy fire do more damage to players when its directly from other players, also make hitbox a bit more generous for hitting other players
+
+224.
+
+If someone is stealing your planet you can press E to contest in a spam battle, where the first person who reaches end wins. A newly captured planet pushes enemy rockets away for a few seconds, and make sure there is a 5 second recapture cooldown
+
+224.
+
+also indicate the turret lock on range for each planet with a faint dotted line, and the force field should slow down rockets and enemy bullets a bit more
+
+225.
+
+and also the force field should be smaller when it starts
+
+226.
+
+pressing E while controlling sun says planet already controlled instead of opening upgrades
+
+227.
+
+make the solid circle turrets are on triple line, and place turrets on top, and make the solid circle "dyson sphere" much smaller radius. Also place ovals too around the sun that same color to make it seem like it is a wireframe spherr
+
+228.
+
+why is there a double/dotted line on the sun force field when captured?
+
+229.
+
+issue where blackhole cargo spawns and gets stuck inside the black hole, make it so that the cargo for the sun and black hole cannot go closer to the sun/black hole than the turret line. Also add the 3D oval things for the black hole too
+
+230.
+
+for the shield renderer, there should only be two types of circles, when the planet/object is not captured, just a dashed line indicating capture radius. Then, a solid line for shield bubble that slows bullets and rockets down for enemies, which is always same as the capture distance, and the dotted circle for that cpature distance is invisible after capture, replaced by this solid circle. And then there is a dotted line outside of the solid line indicating turret distance
+
+231.
+
+deploy these changes

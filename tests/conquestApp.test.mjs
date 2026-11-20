@@ -401,6 +401,23 @@ test('station docking prompt replaces checks, ignores cursor movement, and E att
     assert.equal(nodes.get('dockError').hidden, true);
 });
 
+// During an active capture, leave E exclusively for progress; out-of-range movement remains the cancel path.
+test('capture hides the cancel-capable interaction button while E advances capture', async () => {
+    const { app, page, nodes } = harness();
+    app.newSession(); placeAtRelay(app);
+    app.interactionBody = () => bodies[1].id;
+    app.world.planets[bodies[1].id].owner = null;
+    delete app.world.planets[bodies[1].id].turrets;
+    await app.interact();
+    app.updateDocking();
+    assert.ok(app.world.hack);
+    assert.equal(nodes.get('interactButton').hidden, true);
+    assert.equal(nodes.get('hackPanel').hidden, false);
+    page.fire('keydown', { code: 'KeyE' });
+    assert.equal(app.world.hack.progress, 1);
+});
+
+
 // Shop shortcuts use the same guarded purchase action as clicking and reserve rocket upgrades safely.
 test('owned relay shop supports independent T and R purchases without repeated spending', () => {
     const { app, page, nodes } = harness();

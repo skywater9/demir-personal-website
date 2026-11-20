@@ -33,6 +33,7 @@ test('first completed capture wins, cancels all rivals and enforces a five-secon
     assert.equal(room.action(b, stale).ok, false);
     assert.equal(room.action(b, { action: 'interact', bodyId: body.id }).reason, 'CAPTURE COOLDOWN');
     assert.doesNotThrow(() => validateSave(room.saved()));
+    room.world.planets.moon.turrets.forEach(turret => { turret.health = 0; });
     room.world.elapsed = room.world.planets.moon.recaptureAt - .01;
     assert.equal(room.action(b, { action: 'interact', bodyId: body.id }).ok, false);
     room.world.elapsed += .02;

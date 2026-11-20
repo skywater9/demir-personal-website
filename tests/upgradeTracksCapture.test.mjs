@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, planetBodies, starterStations, tuning, blackHole, interact, capturePress, stepWorld,
+import { createWorld, planetBodies, starterStations, tuning, blackHole, systems, celestialBodies, capturePressesRequired, interact, capturePress, stepWorld,
     upgradeRocket, upgradeWeapon, upgradePlanet, nextRocketUpgrade, nextWeaponUpgrade, boosterStats, weaponStats,
     killPlayer, planetShield, turretPositions, repairTurrets, turretRepairStatus, canCollectCargo, migrateUpgradeTracks } from '../public/scripts/conquestPhysics.mjs';
 import { GameRoom } from '../server/room.mjs';
@@ -22,6 +22,8 @@ function openSpace(world, extra = {}) {
 }
 
 test('owned planets sell independent ten-level BOOSTER and WEAPON tracks; home sells both', () => {
+    assert.deepEqual(tuning.upgradeCosts, [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]);
+    assert.deepEqual(tuning.rocketUpgradeCosts, tuning.upgradeCosts);
     const { world } = ownedShop();
     for (let level = 1; level <= 10; level++) {
         const previousWeapon = world.player.weaponTier;
@@ -84,14 +86,27 @@ test('laser reaches a distant rocket instantly, stops at the first target and do
         { x: 50000 + index * 5000, y: 50000, vx: 0, vy: 0, docked: null, landedOn: null, aimAngle: 0 }));
     room.world.players[ids[0]].player.weaponTier = 10;
     room.setInput(ids[0], { burn: false, rcsX: 0, rcsY: 0, fire: true, aimAngle: 0 }, 1000); room.tick(1 / 60, 1000);
-    assert.equal(room.world.players[ids[1]].player.fuel, 95);
+    assert.equal(room.world.players[ids[1]].player.fuel, 100 - tuning.playerShotFuelDamage);
     assert.equal(room.world.players[ids[2]].player.fuel, 100);
     const beam = room.world.projectiles.find(shot => shot.laser);
     assert.ok(beam.resolved); assert.equal(beam.color, room.world.players[ids[0]].player.color);
     assert.ok(beam.x < room.world.players[ids[1]].player.x);
     room.setInput(ids[0], { burn: false, rcsX: 0, rcsY: 0, fire: false, aimAngle: 0 }, 1000); room.tick(.05, 1000);
-    assert.equal(room.world.players[ids[1]].player.fuel, 95);
+    assert.equal(room.world.players[ids[1]].player.fuel, 100 - tuning.playerShotFuelDamage);
     assert.doesNotThrow(() => validateSave(room.saved()));
+});
+
+test('player shots deal more damage and connect through a slightly larger hit radius', () => {
+    const room = new GameRoom(null, 1000);
+    const [attacker, target] = [room.join('', 1000), room.join('', 1000)].map(joined => joined.playerId);
+    const player = room.world.players[target].player;
+    Object.assign(room.world.players[attacker].player, { x: 49000, y: 50000, landedOn: null, docked: null });
+    Object.assign(player, { x: 50000, y: 50000, vx: 0, vy: 0, landedOn: null, docked: null });
+    room.world.projectiles.push({ id: 'grazing-player-shot', source: 'player', owner: attacker,
+        x: 49800, y: 50000 + tuning.shipRadius + tuning.bulletRadius + 3,
+        vx: 30000, vy: 0, radius: tuning.bulletRadius, expiresAt: 10 });
+    room.tick(1 / 60, 1000);
+    assert.equal(player.fuel, 100 - tuning.playerShotFuelDamage);
 });
 
 test('death removes one level from each track and preserves both loss indicators', () => {
@@ -121,6 +136,53 @@ test('E capture decays to zero when idle, rejects repeats and gains access throu
     stepWorld(world, {}, .01); assert.equal(world.hack, null);
 });
 
+test('stars and the black hole use extended E captures and begin with one floating defense', () => {
+    for (const body of [...systems, blackHole]) {
+        const world = createWorld(`capture-${body.id}`, 0);
+        Object.assign(world.player, { x: body.x, y: body.y - body.radius - 400,
+            vx: 0, vy: 0, landedOn: null, docked: null, shoppingOn: null });
+        const expectedMultiplier = body.id === blackHole.id ? 3 : 2;
+        assert.equal(capturePressesRequired(body), tuning.hackBasePresses * expectedMultiplier);
+        assert.ok(interact(world, body.id).ok);
+        assert.equal(world.hack.required, capturePressesRequired(body));
+        while (world.hack) {
+            world.elapsed += tuning.hackPressInterval + .01;
+            assert.ok(capturePress(world).ok);
+        }
+        assert.equal(world.planets[body.id].owner, world.player.id);
+        assert.equal(world.planets[body.id].level, 1);
+        assert.equal(world.planets[body.id].turrets.length, 1);
+        assert.equal(world.planets[body.id].capturedAt, world.elapsed);
+        assert.equal(world.planets[body.id].recaptureAt, world.elapsed + tuning.recaptureCooldown);
+    }
+    assert.equal(celestialBodies.length, systems.length + 1);
+});
+
+test('fresh hostile capture shield pushes rockets away and locks recapture for five seconds', () => {
+    const world = createWorld('capture-push', 0);
+    const body = planetBodies.find(candidate => candidate.id === 'moon');
+    Object.assign(world.planets[body.id], { owner: 'enemy', level: 1,
+        capturedAt: 2, recaptureAt: 7, turrets: [{ health: 0, angle: 0, disabledUntil: 0, nextShotAt: 0 }] });
+    Object.assign(world.player, { x: body.x + body.radius + 120, y: body.y,
+        vx: 0, vy: 0, landedOn: null, docked: null, shoppingOn: null });
+    world.elapsed = 3;
+    stepWorld(world, {}, .1);
+    assert.ok(world.player.vx > 0, 'the fresh shield should push the enemy rocket outward');
+    assert.equal(interact(world, body.id).reason, 'CAPTURE COOLDOWN');
+    world.elapsed = 7;
+    world.planets[body.id].turrets[0].health = 0;
+    assert.ok(interact(world, body.id).ok, 'capture becomes available once the timer ends and defenses are down');
+});
+
+test('capture begins with a smaller field than the original neutral capture radius', () => {
+    const body = planetBodies.find(candidate => candidate.id === 'moon');
+    const freshField = planetShield(body, { level: 1 });
+    assert.equal(tuning.smallShieldAltitude, 190);
+    assert.equal(freshField.altitude, 220);
+    assert.ok(freshField.altitude < tuning.hackingDistance + tuning.shipRadius);
+    assert.equal(planetShield(body, { level: 10 }).altitude, freshField.altitude + 9 * 30);
+});
+
 test('capture preserves banked and floating cargo for collection by the new owner without crediting their ship', () => {
     const { world, body, planet } = ownedShop();
     world.player.shoppingOn = null;
@@ -130,7 +192,8 @@ test('capture preserves banked and floating cargo for collection by the new owne
     world.pickups = [pod]; const carried = world.player.cargo;
     assert.equal(canCollectCargo(world, pod), false); assert.ok(interact(world, body.id).ok);
     while (world.hack) { world.elapsed += .11; assert.ok(capturePress(world).ok); }
-    assert.equal(planet.level, 0); assert.equal(planet.stock, 7);
+    assert.equal(planet.level, 1); assert.equal(planet.stock, 7);
+    assert.equal(planet.turrets.length, 1); assert.equal(planet.turrets[0].health, 1);
     assert.equal(world.player.cargo, carried); assert.equal(world.pickups[0], pod);
     assert.equal(canCollectCargo(world, pod), true);
 });
@@ -158,18 +221,18 @@ test('new turrets beyond level five get twin barrels, and repairs preserve their
     assert.ok(repairTurrets(world).ok); assert.equal(planet.turrets[5].double, true);
 });
 
-test('black hole cargo orbits outside the lethal core, is worth five and is collectible without ownership', () => {
+test('black hole cargo orbits outside the lethal core, is worth ten and is collectible without ownership', () => {
     const world = createWorld('black-hole-cargo', 0);
     world.elapsed = 10; stepWorld(world);
     const pod = world.pickups.find(pickup => pickup.blackHoleOrbit);
-    assert.ok(pod); assert.equal(pod.amount, 5); assert.ok(canCollectCargo(world, pod));
+    assert.ok(pod); assert.equal(pod.amount, 10); assert.ok(canCollectCargo(world, pod));
     const initial = { x: pod.x, y: pod.y };
     stepWorld(world, {}, .5);
     assert.ok(Math.hypot(pod.x - initial.x, pod.y - initial.y) > 1);
     assert.ok(Math.abs(Math.hypot(pod.x - blackHole.x, pod.y - blackHole.y) - pod.orbitRadius) < 1e-6);
     Object.assign(world.player, { x: pod.x, y: pod.y, vx: 0, vy: 0, docked: null, landedOn: null });
     const cargo = world.player.cargo; stepWorld(world, {}, .001);
-    assert.equal(world.player.cargo, cargo + 5);
+    assert.equal(world.player.cargo, cargo + 10);
 });
 
 test('legacy levels migrate once without erasing territory or cargo and clamp planets to ten', () => {

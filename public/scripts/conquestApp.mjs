@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-upgrade-tracks-capture';
-import { bodies, tuning, createWorld, stepWorld, targetFor,
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-shield-rings';
+import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-upgrade-tracks-capture';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-upgrade-tracks-capture';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-upgrade-tracks-capture';
+    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-shield-rings';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-shield-rings';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-shield-rings';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -69,7 +69,7 @@ export class ConquestApp {
             onAlert: message => { this.message(message.text, 8); this.appendChat(message.text, false, { system: true, color: '#ff947b' }); },
             onCapture: message => {
                 if (message.owner === this.world.player.id) return;
-                const body = bodies.find(body => body.id === message.bodyId);
+                const body = territoryBodies.find(body => body.id === message.bodyId);
                 this.appendChat(body?.name || 'Planet', true, message);
                 this.renderer.beginCapture?.(message.bodyId, message.color, message.owner);
             },
@@ -264,7 +264,7 @@ export class ConquestApp {
                 if (freshPress) this.pressCapture();
                 return;
             }
-            const body = bodies.find(item => item.id === this.interactionBody());
+            const body = territoryBodies.find(item => item.id === this.interactionBody());
             if (freshPress && (this.world.player.docked || this.world.player.shoppingOn || this.world.hack || body)) this.interact();
             return;
         }
@@ -451,7 +451,7 @@ export class ConquestApp {
 
     // Select either a relay or landing pad, with owned planets defaulting to their useful service pad.
     chooseTarget(bodyId, type = null) {
-        if (!bodies.some(body => body.id === bodyId)) return;
+        if (!territoryBodies.some(body => body.id === bodyId)) return;
         const chosenType = type || (this.world.planets[bodyId].owner === this.world.player.id ? 'planet' : 'relay');
         if (this.connection) this.connection.action('target', { bodyId, targetType: chosenType });
         else setTarget(this.world, bodyId, chosenType);
@@ -543,7 +543,7 @@ export class ConquestApp {
         const canvas = this.ui.flightCanvas;
         const x = this.aimCursor.x * canvas.width;
         const y = this.aimCursor.y * canvas.height;
-        const body = bodies.find(body => {
+        const body = territoryBodies.find(body => {
             const center = this.renderer.screen(body.x, body.y);
             const radius = Math.max(10, body.radius * (this.renderer.camera?.zoom || 1) / 2);
             return Math.hypot(center.x - x, center.y - y) <= radius;
@@ -619,6 +619,7 @@ export class ConquestApp {
                 this.animateFuelDamage(event.amount, event.fuel);
             }
             if (event.type === 'cargoPickedUp') this.animateCargoCollection();
+            if (event.type === 'turretDestroyed') this.renderer.turretBurst?.(this.world, event);
             const action = eventActions[event.type];
             if (action) {
                 const amount = event.type === 'hackProgress' && this.world.hack
@@ -627,9 +628,9 @@ export class ConquestApp {
                 this.emit(action, { amount, planetLevel: event.bodyId ? this.world.planets[event.bodyId]?.level || 0 : 0,
                     ...(event.type === 'damaged' ? { fuel: event.fuel } : {}) });
             }
-            const body = bodies.find(item => item.id === event.bodyId);
+            const body = territoryBodies.find(item => item.id === event.bodyId);
             if (event.type === 'captured') {
-                this.message(`${body?.name || 'Planet'} captured! Produces cargo. Collect pods, refuel, and press E for defenses.`, 8);
+                this.message(`${body?.name || 'Territory'} captured! Collect cargo and upgrade its defenses.`, 8);
                 this.appendChat(body?.name || 'Planet', true);
                 this.renderer.beginCapture?.(event.bodyId, this.world.player.color, this.world.player.id);
             }
@@ -754,7 +755,7 @@ export class ConquestApp {
     updateDocking() {
         const world = this.world;
         const player = world.player;
-        const body = bodies.find(body => body.id === (player.docked || player.shoppingOn || world.hack?.bodyId || this.captureBody())) || nearestRelay(player, world);
+        const body = territoryBodies.find(body => body.id === (player.docked || player.shoppingOn || world.hack?.bodyId || this.captureBody())) || nearestRelay(player, world);
         const checks = dockingStatus(world, body.id);
         const interactionReady = checks.ready && (body.station || this.captureBody() === body.id);
         const showError = this.world.elapsed < (this.dockErrorUntil || 0);
@@ -787,7 +788,9 @@ export class ConquestApp {
         this.ui.dockDialog.style.left = `${Math.max(6, Math.min(bounds.width - panelWidth - 6, stationX))}px`;
         this.ui.dockDialog.style.top = `${Math.max(6, Math.min(bounds.height - panelHeight - 6, stationY - panelHeight / 2))}px`;
         this.ui.dockDialog.classList.toggle('is-hacking', Boolean(world.hack));
-        this.text('dockTitle', world.hack ? 'CAPTURE PLANET' : body.station ? 'STARTER STATION' : body.name.toUpperCase());
+        const celestialTarget = celestialBodies.some(candidate => candidate.id === body.id);
+        this.text('dockTitle', world.hack ? celestialTarget ? `CAPTURE ${body.id === 'central-black-hole' ? 'BLACK HOLE' : 'STAR'}` : 'CAPTURE PLANET'
+            : body.station ? 'STARTER STATION' : body.name.toUpperCase());
         this.text('dockState', player.docked ? world.hack ? 'HACKING' : 'OWNED' : interactionReady ? 'READY' : 'ALIGNING');
         this.ui.dockChecks.hidden = true;
         this.ui.hackPanel.hidden = !world.hack;
@@ -810,6 +813,8 @@ export class ConquestApp {
         this.ui.dockVelocity.classList.toggle('is-ready', speedReady);
         const interactKey = this.ui.interactButton.querySelector('kbd');
         if (interactKey) interactKey.hidden = Boolean(world.hack);
+        // Hide the dock action during a capture; E and its square control are reserved for progress.
+        this.ui.interactButton.hidden = Boolean(world.hack);
         this.ui.interactButton.disabled = !shopOpen && !world.hack && !interactionReady;
         this.ui.interactButton.classList.toggle('is-ready', !shopOpen && interactionReady);
         this.text('interactLabel', world.hack ? 'Cancel capture' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');

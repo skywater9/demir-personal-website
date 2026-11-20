@@ -26,6 +26,7 @@ The conquest tests use the shipped page/controller and real simulation:
   reaches within 1° of the cursor in 0.8 seconds without snapping.
 - Actual homepage IDs and button/key handlers, docking/hacking/upgrades, menus,
   self-destruct confirmation, record retention, and 30-second refresh expiry.
+- Current capture hides the dock/cancel action while the E capture control remains active. Upgrade tracks cost 5, 10, …, 50 cargo; six black-hole pods each award ten cargo. Multiplayer assigns eight home stations randomly from sites at least 5,000 world units apart.
 - Renderer geometry for all systems/planet types/shield tiers, map hit tests,
   centered nozzle particles, death frames and reduced-motion dash cues. Rotation
   jets stop for sub-degree corrections and turn rates below 0.4 rad/s without suppressing
@@ -230,7 +231,9 @@ Run `node --test tests/landingContact.test.mjs tests/planetInteraction.test.mjs`
 
 - `node --test tests/upgradeTracksCapture.test.mjs tests/planetUpgradeRepair.test.mjs tests/planetCaptureRace.test.mjs tests/stationPrototype.test.mjs` checks independent caps and shops, acceleration fade/fuel efficiency, weapon milestones and instant nearest-hit laser damage, both death losses, E repeat rejection/decay, growing interaction range, capture cargo rights, atomic repair-all gating, twin new turrets, adjacent-world defense priorities, black-hole orbits/value and idempotent save migration.
 - `node --test --test-name-pattern='E advances|planet shop shows|death notice names' tests/conquestApp.test.mjs` exercises actual page handlers and notices for the new controls. Older relay/staged tests in that file remain historical.
+- `node --test --test-name-pattern='stars and the black hole|fresh hostile capture|capture begins with a smaller|player shots deal|first completed capture|capture preserves|owned planet draws a faint turret range' tests/upgradeTracksCapture.test.mjs tests/planetCaptureRace.test.mjs tests/conquestRenderer.test.mjs` checks celestial capture, initial shield size, temporary repulsion/cooldown, shot tuning, range rings and turret debris.
 - `node --test tests/planetInteraction.test.mjs` covers contested sectors, hostile colors and the yellow CAPTURE PLANET tutorial arrow in rendered canvas commands.
 - `node --test server/tests/network.test.mjs` uses real sockets for E capture, independent purchases, last-turret-only owner alerts, repair-all purchases, duplicate-action protection, death losses and persisted reconnect state.
 - Manual visual checks: confirm BOOSTER/WEAPON/PLANET on owned planets and BOOSTER/WEAPON at home; fire weapon levels 3, 5 and 10; verify the player-color beam stops on a nearer target. Let capture decay, move the cursor away, then leave shield range. Destroy two turrets at different times: only the last loss alerts the owner, and the replacement repair button remains disabled until both cooldowns and total cargo permit repair. Capture a cargo-rich planet: pods remain and become collectible without increasing carried cargo immediately.
 - Earlier numeric-code, twenty-level and per-gun repair UI notes above are superseded.
+- The network suite also needs permission to bind a local loopback socket; in restricted sandboxes it may fail with `listen EPERM` before exercising gameplay.

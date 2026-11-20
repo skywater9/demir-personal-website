@@ -7,13 +7,13 @@ without an endpoint the game runs locally. The shared class-box service is live;
 
 ## Current upgrades and capture
 
-- BOOSTER and WEAPON are independent tracks, each capped at 10. Owned planets sell both plus PLANET upgrades; home stations sell BOOSTER and WEAPON only. R buys BOOSTER, F buys WEAPON, and T buys PLANET or repairs. Each track uses prices 8/16/28/40/52/64/76/88/100/112 cargo.
+- BOOSTER and WEAPON are independent tracks, each capped at 10. Owned planets sell both plus PLANET upgrades; home stations sell BOOSTER and WEAPON only. R buys BOOSTER, F buys WEAPON, and T buys PLANET or repairs. Each track uses prices 5/10/15/20/25/30/35/40/45/50 cargo.
 - BOOSTER increases low-speed acceleration by 15% per level; the extra acceleration fades with speed, leaving normal engine strength. Propulsion fuel use falls by 3.5% per level. WEAPON gradually increases fire rate, heat endurance and projectile lifetime. Level 3 unlocks twin shots, level 5 alternating twin shots, and level 10 a player-colored instant laser with a 12,000 m range. Lasers stop at their first target, solid surface or hostile home shield; soft planet fields do not bend them.
 - Death drops carried cargo and removes one level from both tracks, floored at zero. Both losses appear during respawn and in the death notification.
 - Initiate capture with E while aiming at a planet, then press E repeatedly. Holding E and number keys do not advance capture. Required presses are 8 + 2 × planet level; progress decays at 0.65 press-equivalents per second. Cursor movement is allowed; leaving the growing shield range resets capture. Concurrent sectors and first-finish-wins rules remain. Capturing resets defenses but preserves banked and floating cargo for the new owner to collect; no cargo is credited automatically.
-- PLANET caps at 10. Each level adds a turret, grows the shield and expands interaction range for capture, shops and repairs. Turrets added at levels 6–10 have double barrels. Larger hitboxes make one-hit turret destruction more forgiving. Nearby friendly planets prioritize shield intruders within each turret's normal range and line of sight.
+- PLANET caps at 10. Each level costs the next 5-cargo step and adds a turret, grows the shield and expands interaction range for capture, shops and repairs. Turrets added at levels 6–10 have double barrels. Larger hitboxes make one-hit turret destruction more forgiving. Nearby friendly planets prioritize shield intruders within each turret's normal range and line of sight.
 - Destroyed guns replace the PLANET button with REPAIR TURRETS. Upgrades are blocked until every gun is repaired. After all destroyed guns finish their five-second cooldowns, the same button repairs them together for 2 × planet level per gun. Only the loss of the final turret sends a private owner alert; individual losses and capture attempts do not.
-- Refueling is twice as fast, retaining its slower finish near full and faster home-station rate. Shared five-value cargo pods orbit the black hole; up to six replenish on a twelve-second cadence. First spawn shows a large blinking yellow CAPTURE PLANET arrow to the nearest capturable planet. Player colors are stronger on hulls and glow, with a light tint on the cursor and aim line.
+- Refueling is twice as fast, retaining its slower finish near full and faster home-station rate. Shared ten-value cargo pods orbit the black hole; up to six replenish on a twelve-second cadence. First spawn shows a large blinking yellow CAPTURE PLANET arrow to the nearest capturable planet. Player colors are stronger on hulls and glow, with a light tint on the cursor and aim line.
 - Existing combined rocket upgrades migrate into separate tracks without clearing territory or cargo. Planet levels above ten are capped, with a private server backup before migration. Historical notes below describe earlier iterations when they differ from this section.
 
 ## Starter station prototype
@@ -643,7 +643,7 @@ The station prompt stays anchored to the relay as the camera moves. Failed docki
 
 Owned relay shops show side-by-side planet and rocket previews. Press **T** or click the planet button to buy its next defense tier at the displayed cargo cost. **R** buys the next rocket upgrade at the displayed cargo cost. Holding T never repeats purchases.
 
-The shop places Rocket on the left and Planet on the right. Planet prices appear as a yellow number and cargo-crate icon.
+The shop places Rocket on the left and Planet on the right. Upgrade prices increase by 5 cargo per level and appear as a yellow number with a cargo-crate icon. During capture, the dock/detach action is hidden; leave the planet's interaction range to abandon the attempt. Multiplayer home stations are selected randomly from eight sites separated by at least 5,000 world units. Vega and Ember are moved 25% closer to Sol.
 
 Owned relay shops display a large “BUY UPGRADE” heading below the relay name.
 
@@ -655,7 +655,9 @@ The chat hint reads “Press / to chat.”; opening chat replaces that line with
 
 Cargo within 200 world units gently accelerates toward a live player, with attraction fading to zero at the edge. Distant cargo keeps its existing drift or orbit. Neptune sits directly below Earth, opposite the Moon. Planetary orbit spacing is reduced to 2,000–2,900 units and system centers are 35% closer; planets, relays, and stars retain their tested clearances. Saved landed/docked ships follow relocated pads and relays.
 
-The capture panel reads “CAPTURE PLANET” and “Enter code,” followed by a pulsing square number key, progress bar, and E to detach. Correct number presses flash green; wrong numbers flash red. Reduced motion disables the key pulse.
+The capture panel reads “CAPTURE PLANET,” “CAPTURE STAR,” or “CAPTURE BLACK HOLE.” Fresh E presses advance the pie; simultaneous players race in separate sectors, and the first to finish takes ownership. Leaving range, dying, or disconnecting resets that pilot's progress.
+
+Latest multiplayer capture/combat update: stars and the black hole are capturable with the same E-spam race as planets, requiring twice and three times the neutral planet press count respectively. Their interaction radii are 750 m and 1,600 m; first capture gives level one, one floating turret and a small colored Dyson shield. Stars produce five-value cargo; the black hole produces ten-value pods. First capture finisher wins; the new owner repels enemy rockets for five seconds, matching the recapture lock. Enemy turrets pulse red and burst into particles when destroyed. Player shots deal eight fuel damage and have a 5 m larger hit radius. Captured fields start at 190 m, grow 30 m per level, slow hostile rockets and deflect/slow hostile bullets; faint dotted rings show the approximate 1,700 m turret lock range. The original planet capture radius remains 250 m.
 
 Gun tips heat with firing and lock fire for 2.5 seconds while cooling. Overheating emits no steam: the aim cursor blinks red with a shrinking cooldown pie that empties when firing becomes available again. Shots add a small opposite-direction impulse in flight. Cargo orbital speed varies by ±14%.
 

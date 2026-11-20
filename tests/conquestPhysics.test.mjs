@@ -413,7 +413,7 @@ test('projectiles sweep across moving rockets, ignore friendly hits, obey cooldo
     world.projectiles.push(shot(world.player.x - 100, world.player.y, 30000, 0));
     stepWorld(world);
     assert.equal(world.stats.deaths, 0);
-    close(world.player.fuel, 100 - tuning.shotFuelDamage);
+    close(world.player.fuel, 100 - tuning.playerShotFuelDamage);
     assert.equal(world.projectiles.length, 0);
     const friendly = inSpace();
     friendly.projectiles.push(shot(friendly.player.x - 100, friendly.player.y, 30000, 0, { owner: 'pilot' }));
@@ -452,7 +452,7 @@ test('enemy shots fired inside ordinary bullet barriers can hit, while home bloc
     world.projectiles.push(shot(world.player.x - 40, world.player.y, 6000, 0));
     stepWorld(world);
     assert.equal(world.stats.deaths, 0);
-    close(world.player.fuel, 100 - tuning.shotFuelDamage);
+    close(world.player.fuel, 100 - tuning.playerShotFuelDamage);
     const home = createWorld('shield');
     const homeBody = bodies[0];
     home.projectiles.push(shot(homeBody.x, homeBody.y - homeBody.radius - 250, 0, 40000));
@@ -516,7 +516,7 @@ test('relay refuge intercepts swept turret bullets but leaves player bullets let
         world.projectiles.push(shot(world.player.x - 200, world.player.y, 40000, 0, { source }));
         stepWorld(world);
         assert.equal(world.stats.deaths, 0);
-        close(world.player.fuel, source === 'player' ? 100 - tuning.shotFuelDamage : 100);
+        close(world.player.fuel, source === 'player' ? 100 - tuning.playerShotFuelDamage : 100);
         assert.equal(world.projectiles.length, 0);
     }
 });
