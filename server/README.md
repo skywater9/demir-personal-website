@@ -28,6 +28,31 @@ The public address is `$STUDENT_URL`; the WebSocket path is `/game`, and a read-
 health response is at `/health`. No SSH login, password, or key belongs in this repo.
 No AI tool or model is installed or run by this server.
 
+## Station capture release
+
+Update an existing service from its repository root:
+
+```sh
+cd "$HOME/projects/rocket-game"
+git pull --ff-only origin main
+npm ci --prefix server
+svc restart game
+svc logs game
+```
+
+Run each next command only if the preceding command succeeds. The server automatically
+migrates old planet-home saves to starter stations. Before returning migrated state,
+it writes an exact private backup beside the save file, named
+`galaxy.json.pre-stations-<timestamp>.bak` with owner-only permissions. Cargo, fuel,
+rocket upgrades, session hashes, and owned territory are preserved. Previous home
+planets become ordinary owned planets, while pilots respawn at their new stations.
+Existing station saves are unchanged. Invalid saves stop startup and are never reset.
+
+Verify `/health` reports `"rules":"station-capture-v1"` before publishing the
+matching Firebase client. Reload both browsers after the server restart. The
+`?prototype=stations` URL explicitly forces offline practice; omit that query for
+multiplayer testing.
+
 ## Browser connection
 
 - Visiting the game at `$STUDENT_URL/` connects to its own server automatically.

@@ -1,6 +1,42 @@
 import { mkdir, readFile, writeFile, rename, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { bodies, tuning } from '../public/scripts/conquestPhysics.mjs';
+import { bodies, planetBodies, starterStations, dockingPoint, tuning } from '../public/scripts/conquestPhysics.mjs';
+
+// Move legacy planet homes to stations without erasing earned territory or pilot resources.
+export function migrateStationHomes(data) {
+    if (data?.schema !== 1 || !data.world?.planets || !data.world.players) return { data, migrated: false };
+    if (starterStations.some(station => data.world.planets[station.id])) return { data, migrated: false };
+    const legacy = data.world;
+    const actors = Object.values(legacy.players);
+    const homeIds = new Set();
+    if (actors.length > starterStations.length || planetBodies.some(body => !legacy.planets[body.id])) {
+        throw new Error('Invalid legacy galaxy; station migration stopped.');
+    }
+    for (const actor of actors) {
+        const home = actor.player?.homeId;
+        if (!planetBodies.some(body => body.id === home) || homeIds.has(home)
+            || legacy.planets[home]?.owner !== actor.player.id || !legacy.planets[home]?.home) {
+            throw new Error('Invalid legacy home; station migration stopped.');
+        }
+        homeIds.add(home);
+    }
+    const migrated = structuredClone(data);
+    const world = migrated.world;
+    for (const body of planetBodies) world.planets[body.id].home = false;
+    for (const station of starterStations) world.planets[station.id] = {
+        owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
+    };
+    Object.values(world.players).forEach((actor, index) => {
+        const station = starterStations[index];
+        Object.assign(world.planets[station.id], { owner: actor.player.id, home: true });
+        Object.assign(actor.player, dockingPoint(station), { homeId: station.id, landedOn: station.id,
+            docked: null, vx: 0, vy: 0, angle: 0, rotationVelocity: 0 });
+        actor.hack = null;
+        actor.refueling = null;
+    });
+    validateSave(migrated);
+    return { data: migrated, migrated: true };
+}
 
 // Validate snapshots before restoration rather than silently replacing corrupt persistent territory.
 export function validateSave(data) {
@@ -64,7 +100,16 @@ export class GalaxyStore {
 
     // Missing state means a new galaxy; malformed state is an actionable startup error.
     async load() {
-        try { return validateSave(JSON.parse(await readFile(this.file, 'utf8'))); }
+        try {
+            const original = await readFile(this.file, 'utf8');
+            const result = migrateStationHomes(JSON.parse(original));
+            const data = validateSave(result.data);
+            if (result.migrated) {
+                // Preserve the exact original privately before the service can checkpoint the new schema.
+                await writeFile(`${this.file}.pre-stations-${Date.now()}.bak`, original, { mode: 0o600, flag: 'wx' });
+            }
+            return data;
+        }
         catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     }
 

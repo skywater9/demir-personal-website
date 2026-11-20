@@ -42,7 +42,7 @@ test('two real connections share captures, purchases, chat and restart recovery'
     t.after(async () => { a.socket.terminate(); b.socket.terminate(); await game.close(); await rm(dir, { recursive: true, force: true }); });
     assert.notEqual(a.welcome.playerId, b.welcome.playerId);
     const aid = a.welcome.playerId, bid = b.welcome.playerId;
-    assert.equal(a.welcome.world.target.bodyId, 'moon');
+    assert.ok(!a.welcome.world.target.bodyId.startsWith('station-'));
     const joined = await a.wait(message => message.type === 'announcement' && message.text === `${b.welcome.world.player.label} joined the galaxy.`);
     assert.equal(joined.color, b.welcome.world.player.color);
     a.socket.send(JSON.stringify({ type: 'chat', sequence: 1, text: 'test space message' }));
@@ -52,19 +52,23 @@ test('two real connections share captures, purchases, chat and restart recovery'
     const actor = game.room.world.players[aid];
     const { dockingPoint, bodies } = await import('../../public/scripts/conquestPhysics.mjs');
     Object.assign(actor.player, dockingPoint(bodies[1]), { landedOn: null, vx: 0, vy: 0 });
-    a.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 1, action: 'interact' }));
+    game.room.setInput(aid, { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, captureBody: 'moon' });
+    a.socket.send(JSON.stringify({ type: 'action', sequence: 2, actionId: 1, action: 'interact', bodyId: 'moon' }));
     await a.wait(message => message.type === 'result' && message.actionId === 1);
     let sequence = 2, actionId = 1;
     while (actor.hack) {
+        game.room.setInput(aid, { burn: false, fire: false, rcsX: 0, rcsY: 0, aimAngle: 0, captureBody: 'moon' });
         game.room.tick(.15);
         a.socket.send(JSON.stringify({ type: 'action', sequence: ++sequence, actionId: ++actionId,
             action: 'digit', digit: actor.hack.digit, challengeId: actor.hack.challengeId }));
         await a.wait(message => message.type === 'result' && message.actionId === actionId);
+        if (actor.hack) assert.equal(game.room.inputs[aid].value.captureBody, 'moon', 'digit commands preserve cursor input');
     }
     assert.equal(game.room.world.planets.moon.owner, aid);
     const capture = await b.wait(message => message.type === 'capture');
     assert.equal(capture.bodyId, 'moon'); assert.equal(capture.owner, aid);
     actor.player.cargo = 20;
+    Object.assign(actor.player, dockingPoint(bodies.find(body => body.id === actor.player.homeId)), { docked: actor.player.homeId, landedOn: null });
     a.socket.send(JSON.stringify({ type: 'action', sequence: ++sequence, actionId: ++actionId, action: 'rocketUpgrade' }));
     const purchase = await a.wait(message => message.type === 'result' && message.actionId === actionId);
     assert.equal(purchase.world.player.rocketTier, 1);

@@ -77,7 +77,7 @@ test('rocket purchases and one-tier death loss are authoritative and idempotent'
     const a = room.join('', 1000);
     const actor = room.world.players[a.playerId];
     room.world.planets.moon.owner = a.playerId;
-    Object.assign(actor.player, dockingPoint(bodies[1]), { docked: 'moon', cargo: 100 });
+    Object.assign(actor.player, dockingPoint(bodies.find(body => body.id === actor.player.homeId)), { docked: actor.player.homeId, cargo: 100 });
     withPlayer(room.world, a.playerId, () => {
         assert.equal(upgradeRocket(room.world).ok, true);
         assert.equal(room.world.player.rocketTier, 1);
@@ -146,30 +146,30 @@ test('rocket tiers add fading acceleration, fuel efficiency and staged weapon be
     assert.ok(overheatTime(1) > overheatTime(0));
 });
 
-// An occupied receiver must not accept a second simultaneous hacker.
-test('a relay receiver has one occupant and stale challenge responses cannot capture', () => {
+// Planet hackers can compete without occupying a relay; stale inputs cannot advance either challenge.
+test('planet capture permits competing hackers and rejects stale challenge responses', () => {
     const room = new GameRoom(null, 1000);
     const a = room.join('', 1000), b = room.join('', 1000);
     for (const id of [a.playerId, b.playerId]) Object.assign(room.world.players[id].player,
         dockingPoint(bodies[1]), { landedOn: null, vx: 0, vy: 0 });
     assert.equal(room.action(a.playerId, { action: 'interact' }).ok, true);
-    assert.equal(room.action(b.playerId, { action: 'interact' }).reason, 'OCCUPIED');
+    assert.equal(room.action(b.playerId, { action: 'interact' }).ok, true);
     const actor = room.world.players[a.playerId];
     const wrong = room.action(a.playerId, { action: 'digit', digit: actor.hack.digit, challengeId: actor.hack.challengeId - 1 });
     assert.equal(wrong.ok, false);
     assert.equal(actor.hack.progress, 0);
 });
 
-// A captured preferred spawn must not prevent a new pilot using another unoccupied neutral home.
-test('home selection falls back safely and retargets a relay that becomes a protected home', () => {
+// Captured planets never consume station reservations for a newly joining pilot.
+test('new pilots reserve free stations even when every planet is already owned', () => {
     const room = new GameRoom(null, 1000);
     const a = room.join('', 1000);
-    for (const [id, planet] of Object.entries(room.world.planets)) if (id !== 'moon') planet.owner = a.playerId;
-    assert.equal(room.world.players[a.playerId].target.bodyId, 'moon');
+    for (const body of bodies.filter(body => !body.station)) room.world.planets[body.id].owner = a.playerId;
     const b = room.join('', 1000);
-    assert.equal(room.world.players[b.playerId].player.homeId, 'moon');
-    assert.notEqual(room.world.players[a.playerId].target.bodyId, 'moon');
-    assert.equal(room.world.planets.moon.home, true);
+    assert.ok(room.world.players[b.playerId].player.homeId.startsWith('station-'));
+    assert.notEqual(room.world.players[a.playerId].player.homeId, room.world.players[b.playerId].player.homeId);
+    assert.equal(room.world.planets.moon.owner, a.playerId);
+    assert.equal(room.world.planets.moon.home, false);
 });
 
 // Turret aim and recovery are shared state, not inferred separately for each viewer.

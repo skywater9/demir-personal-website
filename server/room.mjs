@@ -98,7 +98,7 @@ export class GameRoom {
         this.announce(id, 'disconnected — reconnecting for up to 30 seconds.');
         session.connected = false; session.expiresAt = now + reconnectMs;
         this.inputs[id] = { value: {}, at: now };
-        withPlayer(this.world, id, () => { if (this.world.player.docked) interact(this.world); });
+        withPlayer(this.world, id, () => { if (this.world.player.docked || this.world.hack) interact(this.world); });
     }
 
     // Release all territory after departure and remove the corresponding pilot reservation.
