@@ -16,7 +16,7 @@ export function dockingPoint(body) {
 }
 
 const planetCaptureRange = 250;
-const paidUpgradeCosts = Object.freeze([2, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
+const paidUpgradeCosts = Object.freeze([2, 5, 10, 17, 26, 37, 50, 65, 82, 101]);
 
 export const tuning = Object.freeze({
     ...motionTuning,
@@ -53,7 +53,7 @@ export const tuning = Object.freeze({
     turretHealth: 1, turretRadius: 32,
     rocketUpgradeCosts: paidUpgradeCosts,
     starCargoValue: 5,
-    laserRange: 12000, laserFlashDuration: .14, blackHoleCargoCount: 6, blackHoleCargoValue: 10, blackHoleCargoInterval: 12,
+    laserRange: 12000, laserFlashDuration: .14, blackHoleCargoValue: 10,
     maxProjectiles: 256, maxEvents: 200
 });
 
@@ -570,27 +570,28 @@ export function repairTurret(world, index) {
     return { ok: true, reason: 'Turret repaired.' };
 }
 
-// Describe an all-gun repair without charging or modifying the existing shop state.
+// Quote the destroyed turret whose cooldown ends first.
 export function turretRepairStatus(world) {
     const bodyId = world.player.shoppingOn;
     const body = bodyFor(bodyId), planet = world.planets[bodyId];
     const broken = (planet?.turrets || []).map((turret, index) => ({ turret, index })).filter(({ turret }) => turret.health === 0);
-    const readyAt = Math.max(0, ...broken.map(({ turret }) => turret.repairAt || 0));
-    const cost = broken.length * (planet?.level || 0) * 2;
+    const next = broken.reduce((first, candidate) =>
+        !first || (candidate.turret.repairAt || 0) < (first.turret.repairAt || 0) ? candidate : first, null);
+    const readyAt = next?.turret.repairAt || 0;
+    const cost = next ? planet.level * 2 : 0;
     const available = Boolean(broken.length && !world.player.deadUntil && body && !body.station
         && planet.owner === world.player.id && dockingStatus(world, bodyId).distance <= planetInteractionDistance(body, planet)
         && world.elapsed >= readyAt);
     return { brokenCount: broken.length, readyAt, cost, available, affordable: available && world.player.cargo >= cost,
-        indices: broken.map(({ index }) => index) };
+        nextIndex: next?.index ?? null, indices: broken.map(({ index }) => index) };
 }
 
-// Repair all destroyed guns atomically through the replacement planet-upgrade button.
+// Repair one gun through the existing shop action.
 export function repairTurrets(world) {
     const repair = turretRepairStatus(world);
     if (!repair.available || !repair.affordable) return { ok: false,
         reason: world.elapsed < repair.readyAt ? 'Repair cooling down.' : repair.available ? 'Not enough cargo.' : 'Repair unavailable.' };
-    for (const index of repair.indices) repairTurret(world, index);
-    return { ok: true, reason: 'Turrets repaired.' };
+    return repairTurret(world, repair.nextIndex);
 }
 
 // End a refueling interval once, keeping event counts independent of frame rate.
@@ -904,6 +905,12 @@ function isOwnedPlanetCargo(world, pickup) {
     return Boolean(pickup.orbiting && world.planets[pickup.bodyId]?.owner);
 }
 
+// Keep one pod's value consistent when launching or unpacking old cargo.
+function cargoPodValue(body) {
+    if (body === blackHole) return tuning.blackHoleCargoValue;
+    return systems.includes(body) ? tuning.starCargoValue : 1;
+}
+
 // Keep old bundle value in reserve so it can be released as separate pods.
 function indexPlanetCargo(world) {
     const cargoByBody = new Map();
@@ -911,13 +918,12 @@ function indexPlanetCargo(world) {
         if (!isOwnedPlanetCargo(world, pickup) || !Number.isFinite(pickup.amount) || pickup.amount <= 0) continue;
         const body = bodyFor(pickup.bodyId);
         const planet = world.planets[pickup.bodyId];
-        if (!celestialBodies.includes(body) && pickup.amount > 1) {
-            planet.stock += pickup.amount - 1;
-            pickup.amount = 1;
+        const podValue = cargoPodValue(body);
+        if (pickup.amount > podValue) {
+            planet.stock += (pickup.amount - podValue) / podValue;
+            pickup.amount = podValue;
         }
-        const cargo = cargoByBody.get(pickup.bodyId);
-        if (cargo) cargo.amount += pickup.amount;
-        else cargoByBody.set(pickup.bodyId, { amount: pickup.amount, first: pickup });
+        cargoByBody.set(pickup.bodyId, (cargoByBody.get(pickup.bodyId) ?? 0) + pickup.amount);
     }
     return cargoByBody;
 }
@@ -970,9 +976,8 @@ function producePlanetCargo(world, dt) {
         const planet = world.planets[body.id];
         if (!planet.owner || body.station || isHome(world, body)) continue;
         const cargo = cargoByBody.get(body.id);
-        const podValue = body.id === blackHole.id ? tuning.blackHoleCargoValue
-            : systems.includes(body) ? tuning.starCargoValue : 1;
-        const orbitalStock = (cargo?.amount ?? 0) / podValue;
+        const podValue = cargoPodValue(body);
+        const orbitalStock = (cargo ?? 0) / podValue;
         const bankLimit = Math.max(0, tuning.maxStock - orbitalStock);
         const multiplier = cargoProductionMultiplier(body);
         // Preserve banked cargo in older saves that already exceed the combined cap.
@@ -984,14 +989,10 @@ function producePlanetCargo(world, dt) {
         planet.nextCargoAt = Number.isFinite(planet.nextCargoAt)
             ? Math.min(planet.nextCargoAt, nextCargoDeadline) : nextCargoDeadline;
         if (planet.stock < 1 || bankLimit < 1 || world.elapsed + 1e-9 < planet.nextCargoAt) continue;
-        if (cargo && celestialBodies.includes(body)) {
-            cargo.first.amount += podValue;
-        } else {
-            if (cargo && world.pickups.length >= tuning.maxPickups - reserved) continue;
-            if (!reserveCargoPickupSlot(world)) continue;
-            launchPlanetCargo(world, body, planet, podValue);
-            if (!cargo) reserved--;
-        }
+        if (cargo && world.pickups.length >= tuning.maxPickups - reserved) continue;
+        if (!reserveCargoPickupSlot(world)) continue;
+        launchPlanetCargo(world, body, planet, podValue);
+        if (!cargo) reserved--;
         planet.stock -= 1;
         planet.nextCargoAt = nextCargoDeadline;
     }
@@ -1371,23 +1372,6 @@ function moveCargoWithBounce(pickup, dt) {
     }
 }
 
-// Replenish a small shared orbiting cache, with five cargo per pod and a bounded spawn cadence.
-function produceBlackHoleCargo(world) {
-    world.nextBlackHoleCargoAt ??= 10;
-    if (world.elapsed < world.nextBlackHoleCargoAt || world.pickups.length >= tuning.maxPickups) return;
-    world.nextBlackHoleCargoAt = world.elapsed + tuning.blackHoleCargoInterval;
-    if (world.pickups.filter(pickup => pickup.blackHoleOrbit).length >= tuning.blackHoleCargoCount) return;
-    const angle = world.elapsed * 2.399963;
-    const radius = blackHole.radius + 850 + (world.eventCounter % 3) * 130;
-    const x = blackHole.x + Math.cos(angle) * radius, y = blackHole.y + Math.sin(angle) * radius;
-    const gravity = gravityAt(x, y);
-    const speed = Math.sqrt(Math.max(1, gravity.magnitude * radius));
-    world.pickups.push({ id: `black-hole-cargo-${Math.round(world.elapsed * 1000)}`, blackHoleOrbit: true,
-        orbitAngle: angle, orbitRadius: radius, orbitSpeed: speed / radius,
-        x, y, vx: -Math.sin(angle) * speed, vy: Math.cos(angle) * speed,
-        amount: tuning.blackHoleCargoValue, expiresAt: world.elapsed + 300 });
-}
-
 // Derive availability from current planet ownership, so capture transfers collection rights immediately.
 export function canCollectCargo(world, pickup, player = world.player) {
     if (pickup.bodyId === undefined || pickup.bodyId === null) return true;
@@ -1625,7 +1609,6 @@ export function stepWorld(world, input = {}, dt = tuning.fixedStep) {
         world.updatedAt = world.createdAt + world.elapsed * 1000;
         coolPlayerGun(world.player, step, world.elapsed);
         produceStationCargo(world, step);
-        produceBlackHoleCargo(world);
         producePlanetCargo(world, step);
         const player = world.player;
         const previousPlayer = { x: player.x, y: player.y };
@@ -1724,7 +1707,6 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
         world.updatedAt = world.createdAt + world.elapsed * 1000;
         world.previousPlayers = {};
         produceStationCargo(world, step);
-        produceBlackHoleCargo(world);
         producePlanetCargo(world, step);
         for (const id of ids) withPlayer(world, id, () => {
             const player = world.player;

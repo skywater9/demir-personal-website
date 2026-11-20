@@ -12,8 +12,8 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Death drops carried cargo and removes one level from both tracks, floored at zero. Both losses appear during respawn and in the death notification.
 - Initiate capture with E while aiming at a planet, then press E repeatedly. Holding E and number keys do not advance capture. Required presses are 8 + 2 × planet level; progress decays at 0.65 press-equivalents per second. Cursor movement is allowed; leaving the growing shield range resets capture. Concurrent sectors and first-finish-wins rules remain. Capturing resets defenses but preserves banked and floating cargo for the new owner to collect; no cargo is credited automatically.
 - PLANET caps at 10. Each level costs the next 5-cargo step and adds a turret, grows the shield and expands interaction range for capture, shops and repairs. Turrets added at levels 6–10 have double barrels. Larger hitboxes make one-hit turret destruction more forgiving. Nearby friendly planets prioritize shield intruders within each turret's normal range and line of sight.
-- Destroyed guns replace the PLANET button with REPAIR TURRETS. Upgrades are blocked until every gun is repaired. After all destroyed guns finish their five-second cooldowns, the same button repairs them together for 2 × planet level per gun. Only the loss of the final turret sends a private owner alert; individual losses and capture attempts do not.
-- Refueling is twice as fast, retaining its slower finish near full and faster home-station rate. Shared ten-value cargo pods orbit the black hole; up to six replenish on a twelve-second cadence. First spawn shows a large blinking yellow CAPTURE PLANET arrow to the nearest capturable planet. Player colors are stronger on hulls and glow, with a light tint on the cursor and aim line.
+- Destroyed guns replace the PLANET button with REPAIR TURRET. Each purchase restores one turret after its cooldown for 2 × planet level. Upgrades unlock once every turret is restored. Only the loss of the final turret sends a private owner alert; individual losses and capture attempts do not.
+- Refueling is twice as fast, retaining its slower finish near full and faster home-station rate. The black hole produces cargo for its owner only. First spawn shows a large blinking yellow CAPTURE PLANET arrow to the nearest capturable planet. Player colors are stronger on hulls and glow, with a light tint on the cursor and aim line.
 - Existing combined rocket upgrades migrate into separate tracks without clearing territory or cargo. Planet levels above ten are capped, with a private server backup before migration. Historical notes below describe earlier iterations when they differ from this section.
 
 ## Starter station prototype
@@ -68,7 +68,7 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Basic guns fire roughly eight consecutive shots before overheating; firing speed and the 2.5-second cooldown are unchanged.
 - Hover arrowheads keep following the actual cursor over planets.
 - Turret heads share one server-controlled aim for owners and attackers. Bright bases and outlined barrels make them easier to spot.
-- One hostile player-bullet hit destroys a turret. After five seconds, its owner can use REPAIR TURRETS to restore the destroyed guns for **2 × current planet level per gun**. Repairs are manual and charge once; upgrades are blocked until every gun is repaired. Every live gun must be destroyed before capture. Owners receive a private notification only when all their turrets are destroyed.
+- One hostile player-bullet hit destroys a turret. After five seconds, its owner can use REPAIR TURRET to restore one gun for **2 × current planet level**. Each press buys one repair; upgrades are blocked until every gun is repaired. Every live gun must be destroyed before capture. Owners receive a private notification only when all their turrets are destroyed.
 - New pilots at every home get a large flashing relay arrow and “CAPTURE PLANETS TO GAIN CARGO” guidance until their first capture. Earth prefers Moon when neutral; other homes target nearby neutral relays.
 - The map shows every pilot using generated labels and ownership colors. Distant off-map pilots get edge direction markers; disconnected pilots dim during their grace window. The flight view still reveals nearby or recently firing ships only.
 - Room chat announces joins, disconnects, returns, departures, and deaths, including the attacker for projectile kills. Activity messages are transient and do not save chat text or credentials.
@@ -643,7 +643,7 @@ The station prompt stays anchored to the relay as the camera moves. Failed docki
 
 Owned relay shops show side-by-side planet and rocket previews. Press **T** or click the planet button to buy its next defense tier at the displayed cargo cost. **R** buys the next rocket upgrade at the displayed cargo cost. Holding T never repeats purchases.
 
-The shop places Rocket on the left and Planet on the right. Paid upgrades cost 2, then 5, then 10 cargo, and rise by 5 each step after that. Prices appear as a yellow number with a cargo-crate icon. During capture, the dock/detach action is hidden; leave the planet's interaction range to abandon the attempt. Multiplayer home stations are selected randomly from eight sites separated by at least 5,000 world units. Vega and Ember are moved 25% closer to Sol.
+The shop places Rocket on the left and Planet on the right. Paid upgrades cost 2, 5, 10, 17, 26, 37, 50, 65, 82, then 101 cargo, where the track has that many paid levels. Prices appear as a yellow number with a cargo-crate icon. During capture, the dock/detach action is hidden; leave the planet's interaction range to abandon the attempt. Multiplayer home stations are selected randomly from eight sites separated by at least 5,000 world units. Vega and Ember are moved 25% closer to Sol.
 
 Owned relay shops display a large “BUY UPGRADE” heading below the relay name.
 
@@ -681,7 +681,7 @@ the room but not persisted or uploaded to analytics.
 
 The Firebase game frontend is aligned with the deployed starter-station/planet-service version. Hover prompts show their action without a persistent OUT OF RANGE caption; interaction distance checks still apply.
 
-Eighteen neutral rogue planets sit outside the three star systems. They use the same capture, cargo, and upgrade rules as other planets. Cargo steers toward eligible pilots within 520 m at stars and 850 m at the black hole. Pods stay at least 65 m outside stellar turret rails.
+Eighteen neutral rogue planets sit outside the three star systems. They use the same capture, cargo, and upgrade rules as other planets. Owned stellar pods stay separate and steer toward their owners within 520 m at stars and 850 m at the black hole. Pods stay at least 65 m outside stellar turret rails.
 
 New pilots get the available starter station nearest the black hole at the map center, subject to the 2,000-unit separation rule. Three inner stations sit about 3,000 m from the black hole. Outer stations fill as inner sites become occupied.
 
@@ -697,7 +697,7 @@ The first flight entry shows a five-second intro at the top. That banner also sh
 
 After a successful capture, the confirmation tells pilots to aim at the captured world and press E to upgrade. The first capture arrow is larger both on screen and at the edge of the flight view.
 
-Within interaction range, hovering over a world draws a dotted line from the cursor to its center. An owned fuel zone draws a yellow dotted line from its pad to the ship whenever the ship is inside. Captured planets use the doubled production rate for as long as they are owned, and surface impacts on owned planets bounce without fuel damage.
+A dotted cursor guide points to a world within the rocket’s interaction range even when the cursor is away from it. An owned fuel zone draws a yellow dotted line from its pad to the ship whenever the ship is inside. Captured planets use the doubled production rate for as long as they are owned, and surface impacts on owned planets bounce without fuel damage.
 
 All three star systems and their planets are available from the start in an 8,400 m galaxy. When ten pilots are connected at once, the boundary expands to 10,000 m. The original worlds and eight starter stations keep their coordinates. Four extra starter stations give the room capacity for twelve pilots. The boundary stays expanded until the room is empty.
 

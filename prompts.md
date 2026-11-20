@@ -1597,3 +1597,31 @@ continue
 301.
 
 try connecting again
+
+302.
+
+allow for the player to repair turrets one by one for a planet that has destroyed turrets, instead of bulk purchase
+
+303.
+
+right now the problem is after players are fully upgraded the game seems to slow down like there is not really any objective, how can i fix this? also after answering this question make it so that the black hole does not emit publically available cargo, and the cargo for black hole and sun does not group.
+
+304.
+
+wait dont implement the objective, i was asking for ideas cancel that
+
+305.
+
+what are some other ideas for making endgame more fun
+
+306.
+
+I think the main problem is that cargo doesnt really have a use, so it is hard to incentivise. But i like the idea of a bounty for extra cargo, and also special event planets would be a good idea, what do you think for cargo
+
+307.
+
+make each planet and rocket upgrade cost increasingly more, also the cursor should have a line to the planet when rocket is in range, a dotted line
+
+308.
+
+push update

@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-separate-cargo';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-territory-gameplay';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, shopQuotes, upgradePlanet, repairTurrets,
-    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-separate-cargo';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-separate-cargo';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-separate-cargo';
+    blackHole, killPlayer, stationFor, upgradeRocket, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-territory-gameplay';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-territory-gameplay';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-territory-gameplay';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -892,13 +892,13 @@ export class ConquestApp {
             const repair = quotes.repairTurrets;
             if (repair.brokenCount) {
                 const seconds = Math.max(0, Math.ceil(repair.readyAt - world.elapsed));
-                this.text('planetUpgradeLabel', 'REPAIR TURRETS');
+                this.text('planetUpgradeLabel', 'REPAIR TURRET');
                 this.ui.planetUpgradeCost.hidden = false;
                 this.text('planetUpgradeCostValue', repair.cost);
-                this.text('upgradeName', seconds ? `REPAIR READY IN ${seconds}s` : `${repair.brokenCount} TURRETS`);
-                this.text('upgradeDescription', 'Repair all turrets before upgrading.');
+                this.text('upgradeName', seconds ? `REPAIR READY IN ${seconds}s` : `${repair.brokenCount} DESTROYED`);
+                this.text('upgradeDescription', 'Repairs one turret. Restore all turrets to unlock upgrades.');
                 this.ui.upgradeButton.disabled = !repair.affordable;
-                this.ui.upgradeButton.setAttribute('aria-label', `Repair ${repair.brokenCount} turrets for ${repair.cost} cargo`);
+                this.ui.upgradeButton.setAttribute('aria-label', `Repair one turret for ${repair.cost} cargo`);
             }
         }
     }

@@ -25,8 +25,9 @@ export class GameRoom {
         this.sessions = saved?.sessions || {};
         const upgradingLayout = this.world.galaxyExpanded === undefined;
         this.world.galaxyExpanded ??= false;
-        const upgradingCargo = Boolean(saved) && !this.world.separatePlanetCargo;
+        const upgradingCargo = Boolean(saved) && (!this.world.separatePlanetCargo || !this.world.separateStellarCargo);
         this.world.separatePlanetCargo = true;
+        this.world.separateStellarCargo = true;
         this.inputs = {};
         this.notices = [];
         if (!saved) {

@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadiusFor, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, planetFuelSource, blackHole
-} from './conquestPhysics.mjs?v=20261120-separate-cargo';
+} from './conquestPhysics.mjs?v=20261120-territory-gameplay';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -136,17 +136,17 @@ export class ConquestRenderer {
                     ctx.stroke();
                 }
             }
-            const planet = world.planets[hovered.id];
-            if (dockingStatus(world, hovered.id).distance <= planetInteractionDistance(hovered, planet)) {
-                const center = this.screen(hovered.x, hovered.y);
-                ctx.strokeStyle = '#f1f6f3';
-                ctx.globalAlpha = 0.9;
-                ctx.setLineDash([1, 3]);
-                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(center.x, center.y); ctx.stroke();
-            }
         } else {
             ctx.setLineDash([2, 4]);
             ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(x, y); ctx.stroke();
+        }
+        const nearby = world && this.planetInInteractionRange(world, hovered);
+        if (nearby) {
+            const center = this.screen(nearby.x, nearby.y);
+            ctx.strokeStyle = '#f1f6f3';
+            ctx.globalAlpha = 0.9;
+            ctx.setLineDash([1, 3]);
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(center.x, center.y); ctx.stroke();
         }
         ctx.setLineDash([]);
         const cooldown = Math.max(0, Math.min(1, ((player.gunOverheatedUntil || 0) - elapsed) / tuning.gunOverheatDuration));
@@ -902,6 +902,26 @@ export class ConquestRenderer {
             const center = this.screen(body.x, body.y);
             return Math.hypot(center.x - x, center.y - y) <= Math.max(10, body.radius * this.camera.zoom / 2);
         }) || null;
+    }
+
+    // Prefer the hovered planet when reachable and otherwise guide to the nearest reachable surface.
+    planetInInteractionRange(world, hovered) {
+        let nearest = null;
+        let nearestDistance = Infinity;
+        for (const body of territoryBodies) {
+            if (body.station) continue;
+            const dx = body.x - world.player.x, dy = body.y - world.player.y;
+            const reach = planetShield(body, world.planets[body.id]).radius;
+            const distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared > reach * reach) continue;
+            if (body === hovered) return body;
+            const distance = Math.sqrt(distanceSquared) - body.radius;
+            if (distance < nearestDistance) {
+                nearest = body;
+                nearestDistance = distance;
+            }
+        }
+        return nearest;
     }
 
     // Ease each code entry quickly without modifying authoritative capture progress.
