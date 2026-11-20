@@ -794,9 +794,7 @@ export class ConquestApp {
         this.ui.dockVelocity.classList.toggle('is-ready', speedReady);
         this.ui.interactButton.disabled = !shopOpen && !world.hack && !interactionReady;
         this.ui.interactButton.classList.toggle('is-ready', !shopOpen && interactionReady);
-        const outOfRange = !body.station && checks.distance > tuning.hackingDistance;
         this.text('interactLabel', world.hack ? 'to Cancel' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');
-        this.ui.captureRangeNotice.hidden = !outOfRange || shopOpen || Boolean(world.hack);
         if (world.hack) {
             const hack = world.hack;
             const progress = hack.progress ?? hack.count ?? 0;

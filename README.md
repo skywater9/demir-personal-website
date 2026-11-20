@@ -20,8 +20,8 @@ without an endpoint the game runs locally. The shared class-box service is live;
 - Captured planets produce orbiting cargo and offer defense upgrades through E.
   Return to the starter station for rocket upgrades. Planet ownership excludes stations.
 - Prototype saves use a separate local storage key. Existing multiplayer save files
-  require migration before running this version against production; no live server or
-  Firebase deployment is included in this prototype.
+  use the station-compatible server state format. The shared server runs this version,
+  and Firebase now serves its matching frontend.
 - Focused checks: `node --test tests/stationPrototype.test.mjs`. Legacy relay and
   initial-Earth UI tests still describe the previous design and need revision before release.
 
@@ -655,3 +655,5 @@ at an owned relay; T buys the attached planet's defense. Death removes one rocke
 tier and shows the loss during respawn. Saved multiplayer state and reconnect
 credentials are separate from old local conquest saves. Chat is broadcast within
 the room but not persisted or uploaded to analytics.
+
+The Firebase game frontend is aligned with the deployed starter-station/planet-service version. Hover prompts show their action without a persistent OUT OF RANGE caption; interaction distance checks still apply.

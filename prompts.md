@@ -1081,3 +1081,15 @@ have the brake button apply breaks in all directions and thre are four brake thr
 173.
 
 instead of 4 thrusters it should just be one where particles shoot out opposite to the velocity of the rocket, also currently the functionality of the brake is the same, it only affects velocity that the nose is facing, not all directions at once
+
+174.
+
+what link to use to acces the server
+
+175.
+
+[Image #1] pressing the link that says play the game there is still the old relays, so its very old version[Image #1] also remove the not in range text
+
+176.
+
+but the server directly link has new verison
