@@ -38,7 +38,7 @@ export const tuning = Object.freeze({
     hackPressInterval: 0.1, hackBasePresses: 8, hackExtraPresses: 2, captureDecayRate: .65,
     maxPlanetLevel: 10, maxRocketLevel: 10, turretRepairCooldown: 5,
     upgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
-    stationMinimumSeparation: 4400,
+    stationMinimumSeparation: 2000,
     starCaptureAltitude: 500, blackHoleCaptureAltitude: 1050,
     starCaptureMultiplier: 2, blackHoleCaptureMultiplier: 3,
     homeShieldAltitude: 150, smallShieldAltitude: 190, outerFieldAltitude: 1000,

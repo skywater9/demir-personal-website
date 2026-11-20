@@ -1461,3 +1461,15 @@ dont highlight other player home stations on map
 267.
 
 also make map even smaller, and have stations after first 3 also spawn a bit closer to the middle and push
+
+268.
+
+what is the station spacing 4.4k or more rule?
+
+269.
+
+it should be more lenient, like 2000m is fine
+
+270.
+
+okay deploy changes
