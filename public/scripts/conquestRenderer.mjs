@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, galaxyRadius, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-equal-star-gravity';
+} from './conquestPhysics.mjs?v=20261120-capture-upgrade-hint';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -1003,7 +1003,13 @@ export class ConquestRenderer {
         const text = `${target.body.name.toUpperCase()} ${target.body.station ? 'STATION' : 'PLANET'} / ${distanceText}`;
         const width = this.canvas.width;
         const height = this.canvas.height;
-        const visible = point.x >= 22 && point.x <= width - 22 && point.y >= 28 && point.y <= height - 28;
+        const size = relay ? 14 : 18;
+        const arrowHalfWidth = largeArrow ? 32 : 7;
+        const arrowHeight = arrowHalfWidth * 1.6;
+        const sideMargin = largeArrow ? arrowHalfWidth + 4 : 22;
+        const topMargin = largeArrow ? size + 18 + arrowHeight + 4 : 28;
+        const visible = point.x >= sideMargin && point.x <= width - sideMargin
+            && point.y >= topMargin && point.y <= height - 28;
         const color = firstPlanet ? '#ffd45c' : targetColor;
         const ctx = this.context;
         ctx.save();
@@ -1011,12 +1017,12 @@ export class ConquestRenderer {
         ctx.strokeStyle = color; ctx.lineWidth = 1;
         let captionX, captionY;
         if (visible) {
-            const size = relay ? 14 : 18;
             ctx.strokeRect(point.x - size, point.y - size, size * 2, size * 2);
             ctx.fillStyle = color; ctx.beginPath();
-            const arrowHalfWidth = largeArrow ? 22 : 7;
-            ctx.moveTo(point.x, point.y - size - 18); ctx.lineTo(point.x - arrowHalfWidth, point.y - size - 18 - arrowHalfWidth * 1.6);
-            ctx.lineTo(point.x + arrowHalfWidth, point.y - size - 18 - arrowHalfWidth * 1.6); ctx.fill();
+            const arrowTipY = point.y - size - 18;
+            ctx.moveTo(point.x, arrowTipY);
+            ctx.lineTo(point.x - arrowHalfWidth, arrowTipY - arrowHeight);
+            ctx.lineTo(point.x + arrowHalfWidth, arrowTipY - arrowHeight); ctx.fill();
             captionX = point.x; captionY = point.y + size + 20;
             this.label(text, point.x, point.y - size - 6, color, 'center', true);
             if (!relay && distance < 300) {
@@ -1027,11 +1033,14 @@ export class ConquestRenderer {
             const centerY = height / 2;
             const dx = point.x - centerX;
             const dy = point.y - centerY;
-            const factor = Math.max(0, Math.min((width / 2 - 22) / Math.max(1, Math.abs(dx)), (height / 2 - (explainCargo ? 65 : 30)) / Math.max(1, Math.abs(dy))));
+            const arrowSize = largeArrow ? Math.min(40, width / 5, height / 5) : 10;
+            const horizontalInset = largeArrow ? arrowSize + 6 : 22;
+            const verticalInset = explainCargo ? Math.max(65, arrowSize + 6) : 30;
+            const factor = Math.max(0, Math.min((width / 2 - horizontalInset) / Math.max(1, Math.abs(dx)),
+                (height / 2 - verticalInset) / Math.max(1, Math.abs(dy))));
             const x = centerX + dx * factor;
             const y = centerY + dy * factor;
             ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx));
-            const arrowSize = largeArrow ? 28 : 10;
             ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(arrowSize, 0); ctx.lineTo(-arrowSize * .6, -arrowSize * .6); ctx.lineTo(-arrowSize * .6, arrowSize * .6); ctx.fill(); ctx.restore();
             captionX = x; captionY = y + 28;
             this.label(text, x, y - 12, color, 'center', true);

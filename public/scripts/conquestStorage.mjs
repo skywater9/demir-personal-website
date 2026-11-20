@@ -1,4 +1,4 @@
-import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261119-equal-star-gravity';
+import { bodies, territoryBodies, celestialBodies, roguePlanets, createWorld, stepWorld, tuning, interact, removeRetiredPlanets, migrateUpgradeTracks } from './conquestPhysics.mjs?v=20261120-capture-upgrade-hint';
 
 export const conquestKey = 'orbital.conquest.stationPrototype.v1';
 export const reconnectWindow = 30000;

@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-equal-star-gravity';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261120-capture-upgrade-hint';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-equal-star-gravity';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-equal-star-gravity';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-equal-star-gravity';
+    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261120-capture-upgrade-hint';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261120-capture-upgrade-hint';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261120-capture-upgrade-hint';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -650,7 +650,7 @@ export class ConquestApp {
             }
             const body = territoryBodies.find(item => item.id === event.bodyId);
             if (event.type === 'captured') {
-                this.message(`${body?.name || 'Territory'} captured! Collect cargo and upgrade its defenses.`, 8);
+                this.message(`${body?.name || 'Territory'} captured! Aim at it and press E to upgrade.`, 8);
                 this.appendChat(body?.name || 'Planet', true);
                 this.renderer.beginCapture?.(event.bodyId, this.world.player.color, this.world.player.id);
             }
@@ -837,7 +837,7 @@ export class ConquestApp {
         this.ui.interactButton.hidden = Boolean(world.hack);
         this.ui.interactButton.disabled = !shopOpen && !world.hack && !interactionReady;
         this.ui.interactButton.classList.toggle('is-ready', !shopOpen && interactionReady);
-        this.text('interactLabel', world.hack ? 'Cancel capture' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : `to CAPTURE ${bodyKind}`);
+        this.text('interactLabel', world.hack ? 'Cancel capture' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'to upgrade' : `to CAPTURE ${bodyKind}`);
         if (world.hack) {
             const hack = world.hack;
             const progress = hack.progress ?? hack.count ?? 0;

@@ -694,3 +694,5 @@ The galaxy edge stops outward motion. Pilots can turn and fly back inward.
 Planet fuel zones are 192 m wide and reach 170 m above the pad. The drawn zone and refueling use the same bounds.
 
 The first flight entry shows a five-second intro at the top. That banner also shows private alerts when the last turret is destroyed or another pilot captures your territory.
+
+After a successful capture, the confirmation tells pilots to aim at the captured world and press E to upgrade. The first capture arrow is larger both on screen and at the edge of the flight view.

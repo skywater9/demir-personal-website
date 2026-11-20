@@ -1513,3 +1513,11 @@ reduce all stars gravity they should all be the same (10)
 280.
 
 and push this
+
+281.
+
+after you capture a planet, make it so there is a text called E to upgrade, also make the capture planet hint arrow in the beginning larger, push changes
+
+282.
+
+dont erase current server progress
