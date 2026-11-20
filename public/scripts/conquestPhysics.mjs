@@ -16,6 +16,7 @@ export function dockingPoint(body) {
 }
 
 const planetCaptureRange = 250;
+const paidUpgradeCosts = Object.freeze([2, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
 
 export const tuning = Object.freeze({
     ...motionTuning,
@@ -37,7 +38,7 @@ export const tuning = Object.freeze({
     recaptureCooldown: 5, blackHoleInfluenceAltitude: 3500,
     hackPressInterval: 0.1, hackBasePresses: 8, hackExtraPresses: 2, captureDecayRate: .65,
     maxPlanetLevel: 10, maxRocketLevel: 10, turretRepairCooldown: 5,
-    upgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
+    upgradeCosts: paidUpgradeCosts,
     stationMinimumSeparation: 2000,
     starCaptureAltitude: 500, blackHoleCaptureAltitude: 1050,
     starCaptureMultiplier: 2, blackHoleCaptureMultiplier: 3,
@@ -48,7 +49,7 @@ export const tuning = Object.freeze({
     bulletSpeed: 680, bulletRadius: 3, bulletLifetime: 5, fireCooldown: 0.24,
     turretRange: 1700, turretCooldown: 1.4, turretBulletSpeed: 190, turretHomingRate: .28,
     turretHealth: 1, turretRadius: 32,
-    rocketUpgradeCosts: Object.freeze(Array.from({ length: 10 }, (_, index) => (index + 1) * 5)),
+    rocketUpgradeCosts: paidUpgradeCosts,
     starCargoValue: 5,
     laserRange: 12000, laserFlashDuration: .14, blackHoleCargoCount: 6, blackHoleCargoValue: 10, blackHoleCargoInterval: 12,
     maxProjectiles: 256, maxEvents: 200
@@ -383,13 +384,14 @@ export function capturePress(world, { repeat = false, challengeId } = {}) {
     hack.progress += 1;
     hack.lastAcceptedAt = world.elapsed;
     if (hack.progress >= hack.required) {
+        const previousOwner = world.planets[hack.bodyId].owner;
         Object.assign(world.planets[hack.bodyId], { owner: world.player.id, level: 1,
             capturedAt: world.elapsed, recaptureAt: world.elapsed + tuning.recaptureCooldown,
             nextCargoAt: world.elapsed + tuning.cargoSpawnInterval });
         world.planets[hack.bodyId].turrets = [];
         prepareTurrets(world.planets[hack.bodyId]);
         world.stats.captures += 1;
-        emit(world, 'captured', { bodyId: hack.bodyId });
+        emit(world, 'captured', { bodyId: hack.bodyId, previousOwner });
         const winnerId = world.player.id;
         world.hack = null;
         for (const [id, actor] of Object.entries(world.players || {})) {
@@ -509,7 +511,7 @@ export function nextUpgrade(world) {
     const planet = world.planets[bodyId];
     const level = planet?.level ?? 0;
     const upgrade = upgrades[level];
-    const cost = tuning.upgradeCosts[level] ?? 0;
+    const cost = upgrade ? tuning.upgradeCosts[Math.max(0, level - 1)] : 0;
     let reason = '';
     if (world.player.deadUntil) reason = 'Respawning.';
     else if (!planet) reason = 'Open an owned planet shop.';

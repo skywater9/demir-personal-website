@@ -98,6 +98,12 @@ export async function createGameServer({ dataFile = resolve(projectRoot, 'server
             }
             if (event.type === 'captured' && actor) {
                 const planet = room.world.planets[event.bodyId];
+                const previousOwner = clients.get(event.previousOwner);
+                if (previousOwner && event.previousOwner !== event.playerId) {
+                    const name = territoryBodies.find(body => body.id === event.bodyId)?.name || 'Your territory';
+                    send(previousOwner.socket, { type: 'alert', kind: 'territoryLost', bodyId: event.bodyId,
+                        text: `${actor.player.label} captured ${name}.` });
+                }
                 for (const client of clients.values()) send(client.socket, { type: 'capture', bodyId: event.bodyId,
                     label: actor.player.label, color: actor.player.color, owner: planet.owner });
             }

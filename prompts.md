@@ -1481,3 +1481,15 @@ add 5 more planets sparsely
 272.
 
 and push these extra planets,
+
+273.
+
+first planet upgrade costs 10, but should cost 5, actually, first upgrades should cost 2, then five, then 10 and then increasing by 5 each time
+
+274.
+
+when you first load into the game on the top of the screen, say CAPTURE PLANETS \n COLLECT CARGO \n UPGRADE, which disappears after 5s. Any notifiaction about turrets being destroyed and planets/stars/holes owned by the player being captured is announced with a banner at the top
+
+275.
+
+and then publish

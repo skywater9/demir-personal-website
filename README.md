@@ -643,7 +643,7 @@ The station prompt stays anchored to the relay as the camera moves. Failed docki
 
 Owned relay shops show side-by-side planet and rocket previews. Press **T** or click the planet button to buy its next defense tier at the displayed cargo cost. **R** buys the next rocket upgrade at the displayed cargo cost. Holding T never repeats purchases.
 
-The shop places Rocket on the left and Planet on the right. Upgrade prices increase by 5 cargo per level and appear as a yellow number with a cargo-crate icon. During capture, the dock/detach action is hidden; leave the planet's interaction range to abandon the attempt. Multiplayer home stations are selected randomly from eight sites separated by at least 5,000 world units. Vega and Ember are moved 25% closer to Sol.
+The shop places Rocket on the left and Planet on the right. Paid upgrades cost 2, then 5, then 10 cargo, and rise by 5 each step after that. Prices appear as a yellow number with a cargo-crate icon. During capture, the dock/detach action is hidden; leave the planet's interaction range to abandon the attempt. Multiplayer home stations are selected randomly from eight sites separated by at least 5,000 world units. Vega and Ember are moved 25% closer to Sol.
 
 Owned relay shops display a large “BUY UPGRADE” heading below the relay name.
 
@@ -692,3 +692,5 @@ Sol, Vega, and Ember are spaced 120 degrees apart around the black hole.
 The galaxy edge stops outward motion. Pilots can turn and fly back inward.
 
 Planet fuel zones are 192 m wide and reach 170 m above the pad. The drawn zone and refueling use the same bounds.
+
+The first flight entry shows a five-second intro at the top. That banner also shows private alerts when the last turret is destroyed or another pilot captures your territory.

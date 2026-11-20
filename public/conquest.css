@@ -321,3 +321,7 @@ kbd { font:inherit; color:#bac8c7; font-size:8px; }
 #upgradePanel .upgrade-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 #upgradePanel.station-shop .upgrade-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .relay-card:has(#upgradePanel:not([hidden])) { width: 510px; max-width: calc(100% - 12px); max-height: calc(100% - 12px); overflow-y: auto; }
+
+.flight-banner { position:absolute; z-index:8; top:14px; left:50%; transform:translateX(-50%); width:max-content; max-width:82%; margin:0; padding:8px 14px; border:1px solid currentColor; background:#101921ed; color:#ffda89; text-align:center; white-space:pre-line; pointer-events:none; font-size:clamp(12px,2vw,19px); font-weight:bold; line-height:1.35; }
+.flight-banner.is-alert { color:#ff947b; }
+.flight-banner[hidden], #gameShell:not([data-screen="flight"]) .flight-banner { display:none; }

@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-five-sparse-worlds';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-flight-banners';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-five-sparse-worlds';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-five-sparse-worlds';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-five-sparse-worlds';
+    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-flight-banners';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-flight-banners';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-flight-banners';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -66,7 +66,7 @@ export class ConquestApp {
             onEvent: event => { this.world.events.push(event); this.drainEvents(); },
             onChat: message => this.appendChat(message.text, false, message),
             onAnnouncement: message => this.appendChat(message.text, false, { ...message, system: true }),
-            onAlert: message => { this.message(message.text, 8); this.appendChat(message.text, false, { system: true, color: '#ff947b' }); },
+            onAlert: message => { this.showBanner(message.text, 8000, true); this.appendChat(message.text, false, { system: true, color: '#ff947b' }); },
             onCapture: message => {
                 if (message.owner === this.world.player.id) return;
                 const body = territoryBodies.find(body => body.id === message.bodyId);
@@ -336,6 +336,7 @@ export class ConquestApp {
 
     // Present one menu while keeping the live galaxy running behind it after Play.
     showScreen(mode, focus = true) {
+        if (mode === 'flight') this.showFlightIntro();
         this.mode = mode;
         this.ui.gameShell.dataset.screen = mode;
         this.clearInput();
@@ -584,6 +585,24 @@ export class ConquestApp {
     // Count ownership from world state rather than relying on capture events that can be replayed.
     ownedCount() {
         return Object.values(this.world.planets).filter(planet => planet.owner === this.world.player.id && !planet.home).length;
+    }
+
+    // Show the intro once per page on the first entry into flight.
+    showFlightIntro() {
+        if (this.flightIntroShown) return;
+        this.flightIntroShown = true;
+        this.showBanner('CAPTURE PLANETS\nCOLLECT CARGO\nUPGRADE', 5000);
+    }
+
+    // Replace the current banner and restart its display timer.
+    showBanner(text, duration, alert = false) {
+        const banner = this.ui.flightBanner;
+        if (!banner) return;
+        this.browserWindow.clearTimeout(this.bannerTimer);
+        banner.textContent = text;
+        banner.classList.toggle('is-alert', alert);
+        banner.hidden = false;
+        this.bannerTimer = this.browserWindow.setTimeout(() => { banner.hidden = true; }, duration);
     }
 
     // Show temporary flight feedback without moving the camera or blocking the controls.
