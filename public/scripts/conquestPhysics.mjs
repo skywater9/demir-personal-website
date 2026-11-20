@@ -106,6 +106,11 @@ const systemPlanets = systems.flatMap((system, systemIndex) =>
 
 // Place neutral worlds in open space, clear of system clusters and starter stations.
 export const roguePlanets = Object.freeze([
+    ['Beacon', 6500, -1000, 175, 6.0, '#87a590'],
+    ['Lichen', 4250, -1750, 155, 4.2, '#9eac82'],
+    ['Sundial', -5000, -3750, 170, 5.4, '#bc9d78'],
+    ['Cinderwake', 6250, -3250, 160, 4.8, '#ac877f'],
+    ['Stillwater', 1250, -7500, 185, 6.4, '#879fb9'],
     ['Meridian', 2800, -3800, 165, 5.6, '#85a7ac'],
     ['Lantern', -2700, -3900, 150, 4.5, '#b69a7e'],
     ['Faros', 550, -10100, 175, 6.1, '#a898bb'],
@@ -200,7 +205,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 5, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 6, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -451,7 +456,7 @@ export function migrateUpgradeTracks(world) {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
     world.celestialTargetsVersion = 1;
-    world.roguePlanetsVersion = 5;
+    world.roguePlanetsVersion = 6;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {

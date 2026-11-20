@@ -681,7 +681,7 @@ the room but not persisted or uploaded to analytics.
 
 The Firebase game frontend is aligned with the deployed starter-station/planet-service version. Hover prompts show their action without a persistent OUT OF RANGE caption; interaction distance checks still apply.
 
-Thirteen neutral rogue planets sit outside the three star systems. They use the same capture, cargo, and upgrade rules as other planets. Cargo steers toward eligible pilots within 520 m at stars and 850 m at the black hole. Pods stay at least 65 m outside stellar turret rails.
+Eighteen neutral rogue planets sit outside the three star systems. They use the same capture, cargo, and upgrade rules as other planets. Cargo steers toward eligible pilots within 520 m at stars and 850 m at the black hole. Pods stay at least 65 m outside stellar turret rails.
 
 New pilots get the available starter station nearest the black hole at the map center, subject to the 2,000-unit separation rule. Three inner stations sit about 3,000 m from the black hole. Outer stations fill as inner sites become occupied.
 
