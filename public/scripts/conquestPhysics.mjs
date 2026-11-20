@@ -113,7 +113,27 @@ export const roguePlanets = Object.freeze([
     ['Vesper', 15000, 8200, 175, 6.0, '#a984a2'],
     ['Flintglass', 16200, -5600, 155, 4.7, '#889cab'],
     ['Nival', 11800, -15600, 150, 4.0, '#a6c0d0'],
-    ['Umber', -1800, -16200, 175, 5.9, '#a98a79']
+    ['Umber', -1800, -16200, 175, 5.9, '#a98a79'],
+    ['Asterfall', -19000, -13500, 145, 3.8, '#829bb2'],
+    ['Beryl', -18500, -4000, 155, 4.3, '#a98a79'],
+    ['Cresset', -19200, 5000, 165, 4.8, '#739a91'],
+    ['Dewpoint', -16800, 10400, 175, 5.3, '#a984a2'],
+    ['Eider', -11700, 13300, 185, 5.8, '#829bb2'],
+    ['Frostmere', -6700, 15700, 145, 6.3, '#a98a79'],
+    ['Glimmer', -1200, 15000, 155, 3.8, '#739a91'],
+    ['Hush', 4600, 14800, 165, 4.3, '#a984a2'],
+    ['Iolite', 9900, 13500, 175, 4.8, '#829bb2'],
+    ['Jasper', 15500, 15300, 185, 5.3, '#a98a79'],
+    ['Keel', 19600, 11100, 145, 5.8, '#739a91'],
+    ['Lark', 20200, 5100, 155, 6.3, '#a984a2'],
+    ['Mistral', 20400, -1000, 165, 3.8, '#829bb2'],
+    ['Nacreveil', 19900, -9300, 175, 4.3, '#a98a79'],
+    ['Oriole', 17000, -14000, 185, 4.8, '#739a91'],
+    ['Pumice', 16800, -19000, 145, 5.3, '#a984a2'],
+    ['Quartz', 6500, -19200, 155, 5.8, '#829bb2'],
+    ['Rill', 200, -20600, 165, 6.3, '#a98a79'],
+    ['Silt', -6600, -19500, 175, 3.8, '#739a91'],
+    ['Thistle', -12400, -18700, 185, 4.3, '#a984a2']
 ].map(([name, x, y, radius, gravity, color]) => Object.freeze({
     id: `rogue-${name.toLowerCase()}`, name, x, y, radius, gravity, color, land: '#687982'
 })));
@@ -168,7 +188,7 @@ function emit(world, type, details = {}) {
 export function createWorld(id = globalThis.crypto.randomUUID(), now = Date.now()) {
     const home = starterStations[0];
     const world = {
-        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 3, id, createdAt: now, updatedAt: now, elapsed: 0,
+        version: 2, upgradeTracksVersion: 2, celestialTargetsVersion: 1, roguePlanetsVersion: 4, id, createdAt: now, updatedAt: now, elapsed: 0,
         player: {
             id: 'pilot', color: '#8ac4a8', homeId: home.id, rocketTier: 0, weaponTier: 0,
             ...dockingPoint(home),
@@ -248,7 +268,7 @@ export function targetFor(world) {
 export function setTarget(world, bodyId, type = 'relay') {
     if (!bodyFor(bodyId) || !['relay', 'planet'].includes(type)) return false;
     if (isHome(world, bodyFor(bodyId))) type = 'planet';
-    world.target = { bodyId, type };
+    world.target = { bodyId, type, manual: true };
     return true;
 }
 
@@ -419,7 +439,7 @@ export function migrateUpgradeTracks(world) {
         owner: null, home: false, level: 0, stock: 0, nextCargoAt: world.elapsed + tuning.cargoSpawnInterval
     };
     world.celestialTargetsVersion = 1;
-    world.roguePlanetsVersion = 3;
+    world.roguePlanetsVersion = 4;
     if (world.upgradeTracksVersion === 2) return world;
     const actors = world.players ? Object.values(world.players) : [{ player: world.player, hack: world.hack }];
     for (const actor of actors) {

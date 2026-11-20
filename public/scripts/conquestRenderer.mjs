@@ -1,6 +1,6 @@
 import {
     bodies, territoryBodies, celestialBodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestCapturablePlanet, nearestBody, nearestRelay, dockingStatus, turretPositions, dysonFrameRadius, planetShield, planetInteractionDistance, weaponStats, canCollectCargo, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-expanded-worlds';
+} from './conquestPhysics.mjs?v=20261119-forty-outer-worlds';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -165,10 +165,18 @@ export class ConquestRenderer {
         return { x, y };
     }
 
-    // Keep the player at the map center and use the same zoom for drawing and map selection.
+    // Use the same projection for drawing and selecting destinations in either map view.
     mapLayout(world = this.lastMapWorld || { player: { x: 0, y: 0 } }) {
         const width = this.mapCanvas.width;
         const height = this.mapCanvas.height;
+        if (this.mapExpanded) {
+            const left = Math.min(...territoryBodies.map(body => body.x - body.radius));
+            const right = Math.max(...territoryBodies.map(body => body.x + body.radius));
+            const top = Math.min(...territoryBodies.map(body => body.y - body.radius));
+            const bottom = Math.max(...territoryBodies.map(body => body.y + body.radius));
+            const scale = Math.min(width / (right - left), height / (bottom - top)) * 0.86;
+            return { width, height, scale, centerX: (left + right) / 2, centerY: (top + bottom) / 2 };
+        }
         const center = this.mapCoordinates(world.player.x, world.player.y);
         const scale = Math.min(width, height) * 0.44 / 8000;
         return { width, height, scale, centerX: center.x, centerY: center.y };
@@ -987,15 +995,15 @@ export class ConquestRenderer {
     drawGuidance(world) {
         const player = world.player;
         const firstPlanet = world.stats.captures === 0 ? nearestCapturablePlanet(world) : null;
+        if (!firstPlanet && !world.target?.manual) return;
         const target = firstPlanet ? { body: firstPlanet, x: firstPlanet.x, y: firstPlanet.y, type: 'planet' } : targetFor(world);
         if (!target) return;
         const point = this.screen(target.x, target.y);
         const distance = Math.hypot(player.x - target.x, player.y - target.y);
         const distanceText = distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
         const relay = target.type === 'relay' || target.type === 'station';
-        const moonRelay = target.body.id === 'moon';
         const explainCargo = !target.body.station && world.stats.captures === 0;
-        const largeArrow = Boolean(firstPlanet) || moonRelay || explainCargo;
+        const largeArrow = Boolean(firstPlanet);
         const text = `${target.body.name.toUpperCase()} ${target.body.station ? 'STATION' : 'PLANET'} / ${distanceText}`;
         const width = this.canvas.width;
         const height = this.canvas.height;
@@ -1106,8 +1114,9 @@ export class ConquestRenderer {
             ctx.fillText(other.label || 'Pilot', x > width - 65 ? x - 7 : x + 7, Math.max(10, y - 7));
             ctx.textAlign = 'center';
         }
-        const x = width / 2;
-        const y = height / 2;
+        const position = this.mapPoint(world.player.x, world.player.y, layout);
+        const x = Math.max(12, Math.min(width - 12, position.x));
+        const y = Math.max(12, Math.min(height - 12, position.y));
         const playerColor = world.player.color || ownColor;
         ctx.save(); ctx.translate(x, y); ctx.rotate(world.player.angle);
         ctx.strokeStyle = '#f4fff9'; ctx.lineWidth = 2.5; ctx.fillStyle = playerColor;

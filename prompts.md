@@ -1357,3 +1357,15 @@ add even more planets
 241.
 
 and push changes online
+
+242.
+
+for some reason the first planet to capture, still has an arrow pointing to it after I already capture it. The hint should fully disappear after capturing first planet. Also capture ui for black hole and sun says capture planet, should say capture star and capture black hole
+
+243.
+
+clicking tab should not just make map larger but have it zoom out so you can see the whole map
+
+244.
+
+double the amount of sparse planets and deploy

@@ -1,9 +1,9 @@
-import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-expanded-worlds';
+import { MultiplayerClient, multiplayerUrl } from './multiplayerClient.mjs?v=20261119-forty-outer-worlds';
 import { bodies, territoryBodies, celestialBodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, capturePress, boosterStats, nextUpgrade, upgradePlanet, repairTurrets, turretRepairStatus,
-    killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-expanded-worlds';
-import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-expanded-worlds';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-expanded-worlds';
+    blackHole, killPlayer, stationFor, nextRocketUpgrade, upgradeRocket, nextWeaponUpgrade, upgradeWeapon } from './conquestPhysics.mjs?v=20261119-forty-outer-worlds';
+import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-forty-outer-worlds';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-forty-outer-worlds';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -233,6 +233,7 @@ export class ConquestApp {
             event.preventDefault();
             if (!event.repeat) {
                 const expanded = this.ui.galaxyMap.classList.toggle('is-expanded');
+                this.renderer.mapExpanded = expanded;
                 this.ui.galaxyMap.setAttribute('aria-label', expanded ? 'Expanded galaxy map' : 'Galaxy map');
             }
             return;
@@ -755,7 +756,7 @@ export class ConquestApp {
     updateDocking() {
         const world = this.world;
         const player = world.player;
-        const body = territoryBodies.find(body => body.id === (player.docked || player.shoppingOn || world.hack?.bodyId || this.captureBody())) || nearestRelay(player, world);
+        const body = territoryBodies.find(body => body.id === (world.hack?.bodyId || player.docked || player.shoppingOn || this.captureBody())) || nearestRelay(player, world);
         const checks = dockingStatus(world, body.id);
         const interactionReady = checks.ready && (body.station || this.captureBody() === body.id);
         const showError = this.world.elapsed < (this.dockErrorUntil || 0);
@@ -788,8 +789,8 @@ export class ConquestApp {
         this.ui.dockDialog.style.left = `${Math.max(6, Math.min(bounds.width - panelWidth - 6, stationX))}px`;
         this.ui.dockDialog.style.top = `${Math.max(6, Math.min(bounds.height - panelHeight - 6, stationY - panelHeight / 2))}px`;
         this.ui.dockDialog.classList.toggle('is-hacking', Boolean(world.hack));
-        const celestialTarget = celestialBodies.some(candidate => candidate.id === body.id);
-        this.text('dockTitle', world.hack ? celestialTarget ? `CAPTURE ${body.id === 'central-black-hole' ? 'BLACK HOLE' : 'STAR'}` : 'CAPTURE PLANET'
+        const bodyKind = body.id === blackHole.id ? 'BLACK HOLE' : celestialBodies.includes(body) ? 'STAR' : 'PLANET';
+        this.text('dockTitle', world.hack ? `CAPTURE ${bodyKind}`
             : body.station ? 'STARTER STATION' : body.name.toUpperCase());
         this.text('dockState', player.docked ? world.hack ? 'HACKING' : 'OWNED' : interactionReady ? 'READY' : 'ALIGNING');
         this.ui.dockChecks.hidden = true;
@@ -817,7 +818,7 @@ export class ConquestApp {
         this.ui.interactButton.hidden = Boolean(world.hack);
         this.ui.interactButton.disabled = !shopOpen && !world.hack && !interactionReady;
         this.ui.interactButton.classList.toggle('is-ready', !shopOpen && interactionReady);
-        this.text('interactLabel', world.hack ? 'Cancel capture' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');
+        this.text('interactLabel', world.hack ? 'Cancel capture' : shopOpen ? 'to Close' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : `to CAPTURE ${bodyKind}`);
         if (world.hack) {
             const hack = world.hack;
             const progress = hack.progress ?? hack.count ?? 0;
