@@ -142,10 +142,16 @@ test('hover arrowheads follow the actual cursor rather than snapping toward plan
     assert.ok(tip.args[0] > world.player.x, 'A right-of-center cursor must angle the guide to the right.');
 });
 
-test('black hole renders a warm disk and a dark core without changing its physical state', () => {
+test('black hole uses circular rings and orbiting particles around its dark core', () => {
     const { renderer, calls } = scene();
     renderer.label = () => {};
     renderer.drawBlackHole();
-    assert.ok(calls.filter(call => call.name === 'ellipse').length >= 7);
+    assert.equal(calls.filter(call => call.name === 'ellipse').length, 0);
+    assert.ok(calls.filter(call => call.name === 'arc').length >= 7);
+    const firstParticle = calls.find(call => call.name === 'fillRect');
+    calls.length = 0; renderer.visualTime = 1;
+    renderer.drawBlackHole();
+    const movedParticle = calls.find(call => call.name === 'fillRect');
+    assert.notDeepEqual(firstParticle.args, movedParticle.args);
     assert.ok(calls.some(call => call.name === 'fill' && call.fill === '#010103'));
 });

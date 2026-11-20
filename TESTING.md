@@ -201,3 +201,11 @@ Run `node --test tests/planetCaptureRace.test.mjs tests/planetDefenseCargo.test.
 - The base gun fires eight consecutive shots before overheating and remains blocked during the unchanged cooldown.
 - The larger black hole is above the system center, pulls from farther away, and remains lethal. Its game rendering and map marker show a warm disk around a dark core.
 - Hover arrowheads keep pointing to off-center cursor positions inside a planet, independently of planet highlighting.
+
+## Surface contacts and circular black-hole rings
+
+Run `node --test tests/landingContact.test.mjs tests/planetInteraction.test.mjs`.
+
+- Slowly bump the left, right or underside of an owned planet. The rocket rebounds near contact and does not acquire a landing flag or move to the pad. Check a genuine upright pad landing stays at its actual contact point and still refuels.
+- Repeat side contact in shared multiplayer and restore an older invalid side-contact save; neither should snap the rocket to the top pad.
+- Black-hole rings are circles in flight and on the map. Particles travel on circular orbits; reduced motion keeps their positions static. Gravity, core size and placement are unchanged in this visual revision.

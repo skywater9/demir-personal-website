@@ -1121,3 +1121,11 @@ actually make it a requirement to destry turrets, but make them one shot to dest
 183.
 
 also when the cursor is on the planet, the line that goes from the cursor becomes fixed on the planet center, but the arrow line should still follow the cursor
+
+184.
+
+for the black hole rings, they can just be circles around it, and we can have some particles that rotate around it, so dont make the rings oval.
+
+185.
+
+for some reason bumping on an owned planet teleports the player to the landing pad? fix that

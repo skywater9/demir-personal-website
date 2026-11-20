@@ -583,6 +583,25 @@ function bounce(player, nx, ny) {
     }
 }
 
+// Recognize physical contact with the top pad, not arbitrary points on a planet's surface.
+function onLandingPad(player, body) {
+    return !body.station && Math.abs(player.x - body.x) <= tuning.padHalfWidth && player.y < body.y
+        && Math.abs(Math.hypot(player.x - body.x, player.y - body.y) - body.radius - tuning.shipRadius) < .1
+        && Math.abs(normalizeAngle(player.angle)) <= tuning.safeLandingAngle;
+}
+
+// Station bays stay anchored; planet landings preserve their actual contact point and reject old side-contact flags.
+function maintainLandingContact(player) {
+    if (!player.landedOn) return;
+    const body = bodyFor(player.landedOn);
+    if (body?.station) {
+        const point = dockingPoint(body);
+        player.x = point.x; player.y = point.y;
+    } else if (!body || !onLandingPad(player, body) || Math.hypot(player.vx, player.vy) > .05) {
+        player.landedOn = null;
+    }
+}
+
 // Resolve the earliest swept collision, making only aligned slow pad landings eligible for service.
 function resolveMovement(world, start, end) {
     const player = world.player;
@@ -617,14 +636,11 @@ function resolveMovement(world, start, end) {
         player.x = hit.x;
         player.y = hit.y;
     }
-    if (hit.type === 'surface' && speed <= tuning.safeLandingSpeed) {
+    if (hit.type === 'surface' && speed <= tuning.safeLandingSpeed && onLandingPad(player, hit.body)) {
         player.vx = 0;
         player.vy = 0;
         player.landedOn = hit.body.id;
-        if (Math.abs(player.x - hit.body.x) <= tuning.padHalfWidth && ny < 0
-            && Math.abs(normalizeAngle(player.angle)) <= tuning.safeLandingAngle) {
-            emit(world, 'landed', { bodyId: hit.body.id });
-        }
+        emit(world, 'landed', { bodyId: hit.body.id });
         return;
     }
     player.x += nx * 0.01;
@@ -1135,12 +1151,7 @@ function movePlayer(world, input, dt) {
 export function stepWorld(world, input = {}, dt = tuning.fixedStep) {
     if (!Number.isFinite(dt) || dt <= 0) return world;
     input ??= {};
-    // Keep saved serviced rockets attached to pads and relays when galaxy positions change.
-    const landedBody = bodyFor(world.player.landedOn);
-    if (landedBody) {
-        const point = dockingPoint(landedBody);
-        world.player.x = point.x; world.player.y = point.y;
-    }
+    maintainLandingContact(world.player);
     if (world.player.docked && !bodyFor(world.player.docked)?.station) {
         world.player.shoppingOn = world.player.docked;
         world.player.docked = null;
@@ -1252,8 +1263,7 @@ export function stepGalaxy(world, inputs = {}, dt = tuning.fixedStep) {
         for (const id of ids) withPlayer(world, id, () => {
             const player = world.player;
             const input = inputs[id] || {};
-            const home = bodyFor(player.landedOn);
-            if (home) { const point = dockingPoint(home); player.x = point.x; player.y = point.y; }
+            maintainLandingContact(player);
             if (player.docked && !bodyFor(player.docked)?.station) {
                 player.shoppingOn = player.docked; player.docked = null;
             }

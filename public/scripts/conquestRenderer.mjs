@@ -1,6 +1,6 @@
 import {
     bodies, systems, tuning, stationFor, dockingPoint, stationGeometry, targetFor, nearestBody, nearestRelay, dockingStatus, turretPositions, fuelZone, blackHole
-} from './conquestPhysics.mjs?v=20261119-predictive-defense';
+} from './conquestPhysics.mjs?v=20261119-round-hole-landing';
 
 const fullCircle = Math.PI * 2;
 const neutralColor = '#87949f';
@@ -428,40 +428,34 @@ export class ConquestRenderer {
         this.label('FUEL ZONE', (topLeft.x + bottomRight.x) / 2, topLeft.y - 5, '#ffe283', 'center');
     }
 
-    // Layer a warm accretion disk and bent light ring around a dark event horizon.
+    // Keep the black-hole halo circular, with glowing pixels orbiting on matching round paths.
     drawBlackHole() {
         const point = this.screen(blackHole.x, blackHole.y);
         const radius = blackHole.radius * this.camera.zoom / 2;
         if (!this.inView(point, radius * 3)) return;
         const ctx = this.context;
-        ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(-0.12);
-        ctx.shadowColor = '#ff9a39'; ctx.shadowBlur = Math.min(35, radius * 0.7);
+        ctx.save(); ctx.translate(point.x, point.y);
+        ctx.shadowColor = '#ff9a39'; ctx.shadowBlur = Math.min(30, radius * .5);
         for (let layer = 4; layer >= 0; layer--) {
             ctx.strokeStyle = layer < 2 ? '#fff0c0' : '#ffac50';
-            ctx.globalAlpha = 0.2 + (4 - layer) * .12;
-            ctx.lineWidth = Math.max(1, radius * (.025 + layer * .012));
-            ctx.beginPath(); ctx.ellipse(0, 0, radius * (2.1 + layer * .11), radius * (.23 + layer * .045), 0, 0, fullCircle); ctx.stroke();
+            ctx.globalAlpha = .2 + (4 - layer) * .1;
+            ctx.lineWidth = Math.max(1, radius * (.015 + layer * .005));
+            ctx.beginPath(); ctx.arc(0, 0, radius * (1.3 + layer * .22), 0, fullCircle); ctx.stroke();
         }
-        ctx.globalAlpha = .75; ctx.strokeStyle = '#ffd286'; ctx.lineWidth = Math.max(2, radius * .065);
-        ctx.beginPath(); ctx.ellipse(0, 0, radius * 1.1, radius * 1.24, 0, Math.PI, fullCircle); ctx.stroke();
         ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.fillStyle = '#010103';
         ctx.beginPath(); ctx.arc(0, 0, radius, 0, fullCircle); ctx.fill();
         ctx.strokeStyle = '#ffe7b4'; ctx.lineWidth = Math.max(1, radius * .025);
         ctx.beginPath(); ctx.arc(0, 0, radius * 1.025, 0, fullCircle); ctx.stroke();
-        ctx.shadowColor = '#ffb34f'; ctx.shadowBlur = 16;
-        ctx.globalAlpha = .85; ctx.lineWidth = Math.max(2, radius * .06); ctx.strokeStyle = '#fff0c9';
-        ctx.beginPath(); ctx.ellipse(0, radius * .12, radius * 2.15, radius * .22, 0, 0, Math.PI); ctx.stroke();
-        ctx.globalAlpha = .5; ctx.lineWidth = Math.max(1, radius * .03); ctx.strokeStyle = '#ffa341';
-        ctx.beginPath(); ctx.ellipse(0, radius * .14, radius * 2.35, radius * .32, 0, 0, Math.PI); ctx.stroke();
-        if (!this.reducedMotion) {
-            ctx.fillStyle = '#fff0c9'; ctx.globalAlpha = .7;
-            for (let index = 0; index < 18; index++) {
-                const angle = this.visualTime * .35 + index * fullCircle / 18;
-                ctx.fillRect(Math.cos(angle) * radius * 2.15 - 1, Math.sin(angle) * radius * .34, 2, 1);
-            }
+        ctx.fillStyle = '#fff0c9'; ctx.globalAlpha = .8; ctx.shadowColor = '#ffac50'; ctx.shadowBlur = 6;
+        const time = this.reducedMotion ? 0 : this.visualTime;
+        for (let index = 0; index < 24; index++) {
+            const orbit = index % 3;
+            const orbitRadius = radius * (1.4 + orbit * .35);
+            const angle = time * (.25 + orbit * .06) + index * fullCircle / 24;
+            ctx.fillRect(Math.cos(angle) * orbitRadius - 1, Math.sin(angle) * orbitRadius - 1, 2, 2);
         }
         ctx.restore();
-        this.label('BLACK HOLE', point.x, point.y - radius * 1.35 - 10, '#ffd292', 'center');
+        this.label('BLACK HOLE', point.x, point.y - radius * 2.3 - 10, '#ffd292', 'center');
     }
 
     // Use the shared barrel angle and a bright silhouette so defenders see the same turret as attackers.
@@ -1012,7 +1006,7 @@ export class ConquestRenderer {
         const hole = this.mapPoint(blackHole.x, blackHole.y, layout);
         const holeRadius = Math.max(7, blackHole.radius * layout.scale);
         ctx.save(); ctx.strokeStyle = '#ffd18a'; ctx.shadowColor = '#ffac50'; ctx.shadowBlur = 8; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.ellipse(hole.x, hole.y, holeRadius * 1.8, holeRadius * .45, -.12, 0, fullCircle); ctx.stroke();
+        ctx.beginPath(); ctx.arc(hole.x, hole.y, holeRadius * 1.6, 0, fullCircle); ctx.stroke();
         ctx.shadowBlur = 0; ctx.fillStyle = '#010103';
         ctx.beginPath(); ctx.arc(hole.x, hole.y, holeRadius, 0, fullCircle); ctx.fill(); ctx.stroke(); ctx.restore();
         const player = this.mapPoint(world.player.x, world.player.y, layout);

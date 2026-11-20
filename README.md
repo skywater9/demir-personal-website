@@ -37,12 +37,14 @@ without an endpoint the game runs locally. The shared class-box service is live;
   begin beside that zone and distribute around the surface without overlapping it.
 - E docks anywhere inside the home station bubble, at any speed or orientation.
 - Dropped cargo uses swept planet collisions and bounces off surfaces.
-- A larger black hole sits above the three-system center, with a luminous accretion disk, a lethal core and strong gravity extending 3,500 m beyond its surface.
+- A larger black hole sits above the three-system center, with circular glowing rings and orbiting particles, a lethal core and strong gravity extending 3,500 m beyond its surface.
 - Pilots spawn and refuel at the starter station's left bay. Its home icon and label sit above a breathing double-ring shield.
 - Brake exhaust points along travel, with faster particles (170 m/s before power scaling); main engine particle speed remains unchanged.
 - UI checks: `node --test tests/planetInteraction.test.mjs tests/stationPrototype.test.mjs`.
 
 ## Combat and room activity
+
+- Gentle planet bumps rebound at contact. Only slow upright pad contact lands, and landed rockets stay at their actual contact point rather than snapping to the pad center.
 
 - Turrets lead moving rockets using current velocity and bullet travel time, with direct aim when no intercept is reachable before the bullet expires. The shared head angle matches the shot direction.
 - A planet's initial inner bubble matches its capture-range ring. While inside it, that planet's cargo gently steers toward you at up to 40 m/s and 20 m/s², routing around the surface when needed. Outside it, the normal nearby pickup attraction still applies.
