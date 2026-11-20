@@ -7,9 +7,9 @@
     <meta name="theme-color" content="#101921">
     <meta name="description" content="Orbital Freight: explore three star systems, hack relays, collect cargo, and build a planetary empire. A local pixel-art conquest game.">
     <title>Orbital Freight — Conquest</title>
-    <link rel="stylesheet" href="conquest.css?v=20261119-planet-ui">
+    <link rel="stylesheet" href="conquest.css?v=20261119-hack-cue-fast">
     <script type="module" src="scripts/visitLog.mjs?v=20261118-fuel-damage"></script>
-    <script type="module" src="scripts/conquestApp.mjs?v=20261119-planet-ui"></script>
+    <script type="module" src="scripts/conquestApp.mjs?v=20261119-release-brake"></script>
     <script type="module" src="scripts/siteAnalytics.js?v=20261118-fuel-damage"></script>
 </head>
 <body>
@@ -33,7 +33,7 @@
                 <div class="dock-check"><output id="dockAngleValue" class="dock-check-label">ALIGN UPRIGHT</output><div id="dockOrientation" class="dock-orientation"><svg id="dockOrientationGraph" viewBox="0 0 60 60" role="img" aria-label="Faint green rocket shows the upright target; red rocket shows your current heading when misaligned."><circle class="dock-angle-ring" cx="30" cy="30" r="28"></circle><g id="dockTargetRocket" class="dock-rocket dock-target-rocket"><path d="M30 6 L34 14 L34 36 L40 42 L40 48 L34 45 L34 52 L26 52 L26 45 L20 48 L20 42 L26 36 L26 14 Z"></path><rect x="28" y="17" width="4" height="8" rx="1"></rect></g><g id="dockCurrentRocket" class="dock-rocket dock-current-rocket"><path d="M30 6 L34 14 L34 36 L40 42 L40 48 L34 45 L34 52 L26 52 L26 45 L20 48 L20 42 L26 36 L26 14 Z"></path><rect x="28" y="17" width="4" height="8" rx="1"></rect></g></svg></div></div>
                 <div class="dock-check dock-speed"><output id="dockSpeedCheck" class="dock-check-label">SLOW DOWN</output><div id="dockVelocity" class="dock-speed-readout" role="img" aria-label="Current and target docking speeds."><div><span>CURRENT SPEED</span><output id="dockCurrentSpeed">0.0 m/s</output></div><div><span>TARGET SPEED</span><output id="dockTargetSpeed">20.0 m/s</output></div></div></div>
             </div>
-            <div id="hackPanel" hidden><p class="hack-instruction">Enter the displayed numbers · 1–4</p><button id="digitButton" class="digit-button" type="button" data-analytics-id="conquestDigit" aria-label="Capture countdown">1</button><div class="hack-track" role="progressbar" aria-label="Relay hack progress" id="hackGauge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="hackFill"></span></div></div>
+            <div id="hackPanel" hidden><p class="hack-instruction">Enter the displayed numbers · 1–4</p><button id="digitButton" class="digit-button" type="button" data-analytics-id="conquestDigit" aria-label="Capture countdown">1</button></div>
             <div id="upgradePanel" hidden>
                 <h2 class="shop-title">BUY UPGRADE</h2>
                 <div class="upgrade-options">

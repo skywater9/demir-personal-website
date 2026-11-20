@@ -26,12 +26,12 @@ function scene() {
     return { renderer, world, moon, cursor, calls };
 }
 
-test('neutral planets have no idle interaction rings; hover adds a gray outline', () => {
+test('neutral planets have no idle interaction rings; hover adds a white outline and dotted range ring', () => {
     const { renderer, world, cursor, calls } = scene();
     renderer.drawPlanetInteraction(world, null);
     assert.equal(calls.length, 0);
     renderer.drawPlanetInteraction(world, cursor);
-    assert.ok(calls.some(call => call.name === 'stroke' && call.color === '#a7afb5'));
+    assert.ok(calls.some(call => call.name === 'stroke' && call.color === '#f1f6f3'));
 });
 
 test('code progress eases between steps and defending owners see a red sector', () => {
@@ -43,20 +43,26 @@ test('code progress eases between steps and defending owners see a red sector', 
     calls.length = 0;
     renderer.drawPlanetInteraction(world, null);
     assert.ok(calls.some(call => call.name === 'stroke' && call.color === '#ff6268'));
-    assert.ok(calls.some(call => call.name === 'fill' && call.alpha === 0.22));
+    assert.ok(calls.some(call => call.name === 'fill' && call.alpha === 0.38));
     const arc = calls.filter(call => call.name === 'arc' && call.args.length === 5)[1];
     assert.ok(arc.args[4] > -Math.PI / 2 && arc.args[4] < 0, 'sector should be between zero and the quarter-circle target');
 });
 
-test('hover animates cursor dots and makes only the segment inside hacking range solid', () => {
+test('hover uses moving tiny arrowheads rather than a solid or dashed connecting line', () => {
     const { renderer, world, moon, cursor, calls } = scene();
     world.player.y = moon.y - 1000;
     renderer.visualTime = 1;
     renderer.drawAimGuide(world.player, cursor, 0, world);
-    assert.ok(calls.some(call => call.name === 'setLineDash' && call.args[0].length > 0));
-    assert.ok(calls.some(call => call.name === 'setLineDash' && call.args[0].length === 0));
+    assert.ok(!calls.some(call => call.name === 'setLineDash' && call.args[0].length > 0));
     const starts = calls.filter(call => call.name === 'moveTo');
-    assert.ok(starts[1].args[1] > world.player.y, 'solid portion begins partway along the guide');
+    const tips = calls.filter(call => call.name === 'lineTo');
+    assert.ok(starts.length > 5);
+    assert.ok(Math.hypot(starts[0].args[0] - tips[0].args[0], starts[0].args[1] - tips[0].args[1]) < 4);
+    calls.length = 0;
+    renderer.visualTime = 1.2;
+    renderer.drawAimGuide(world.player, cursor, 0, world);
+    const moved = calls.find(call => call.name === 'moveTo');
+    assert.notEqual(moved.args[1], starts[0].args[1]);
 });
 
 test('local and multiplayer pilots spawn at their station left bay', () => {

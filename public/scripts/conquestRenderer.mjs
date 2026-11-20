@@ -117,30 +117,28 @@ export class ConquestRenderer {
         ctx.lineWidth = 1;
         ctx.globalAlpha = 0.65;
         const hovered = world ? this.hoveredPlanet(world, cursor) : null;
-        ctx.setLineDash([2, 4]);
-        ctx.lineDashOffset = hovered && !this.reducedMotion ? -this.visualTime * 24 : 0;
-        ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(x, y); ctx.stroke();
         if (hovered) {
             const center = this.screen(hovered.x, hovered.y);
-            const radius = (hovered.radius + tuning.shipRadius + tuning.hackingDistance) * this.camera.zoom / 2;
-            const dx = x - point.x, dy = y - point.y;
-            const lengthSquared = dx * dx + dy * dy;
-            if (lengthSquared > 0) {
-                const offsetX = point.x - center.x, offsetY = point.y - center.y;
-                const projection = offsetX * dx + offsetY * dy;
-                const discriminant = projection * projection - lengthSquared * (offsetX * offsetX + offsetY * offsetY - radius * radius);
-                if (discriminant >= 0) {
-                    const root = Math.sqrt(discriminant);
-                    const start = Math.max(0, (-projection - root) / lengthSquared);
-                    const end = Math.min(1, (-projection + root) / lengthSquared);
-                    if (start <= end) {
-                        ctx.setLineDash([]);
-                        ctx.lineDashOffset = 0;
-                        ctx.beginPath(); ctx.moveTo(point.x + dx * start, point.y + dy * start);
-                        ctx.lineTo(point.x + dx * end, point.y + dy * end); ctx.stroke();
-                    }
+            const dx = center.x - point.x, dy = center.y - point.y;
+            const length = Math.hypot(dx, dy);
+            const surface = Math.max(0, length - hovered.radius * this.camera.zoom / 2 - 4);
+            if (length > 0) {
+                const directionX = dx / length, directionY = dy / length;
+                const phase = this.reducedMotion ? 0 : this.visualTime * 44 % 8;
+                ctx.setLineDash([]);
+                for (let distance = 9 + phase; distance < surface; distance += 8) {
+                    const tipX = point.x + directionX * distance;
+                    const tipY = point.y + directionY * distance;
+                    ctx.beginPath();
+                    ctx.moveTo(tipX - directionX * 2.5 - directionY * 1.5, tipY - directionY * 2.5 + directionX * 1.5);
+                    ctx.lineTo(tipX, tipY);
+                    ctx.lineTo(tipX - directionX * 2.5 + directionY * 1.5, tipY - directionY * 2.5 - directionX * 1.5);
+                    ctx.stroke();
                 }
             }
+        } else {
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(x, y); ctx.stroke();
         }
         ctx.setLineDash([]);
         const cooldown = Math.max(0, Math.min(1, ((player.gunOverheatedUntil || 0) - elapsed) / tuning.gunOverheatDuration));
@@ -323,6 +321,8 @@ export class ConquestRenderer {
         const scale = this.camera.zoom / 2;
         const home = world.player.homeId === body.id || Boolean(state.home);
         const smallRadius = body.radius + (home ? tuning.homeShieldAltitude : tuning.smallShieldAltitude);
+        // Breathe the station field visually while keeping its physical protection radius stable.
+        const fieldRadius = smallRadius * scale + (body.station && !this.reducedMotion ? Math.sin(this.visualTime * 2.2) * 1.5 : 0);
         const outerRadius = body.radius + tuning.outerFieldAltitude;
         const maxRadius = (state.level >= 3 ? outerRadius : smallRadius) * scale;
         if (!this.inView(center, maxRadius)) return;
@@ -331,15 +331,16 @@ export class ConquestRenderer {
         ctx.strokeStyle = color;
         ctx.fillStyle = color;
         ctx.globalAlpha = 0.045;
-        ctx.beginPath(); ctx.arc(center.x, center.y, smallRadius * scale, 0, fullCircle); ctx.fill();
+        ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius, 0, fullCircle); ctx.fill();
         ctx.globalAlpha = home ? 0.95 : state.level >= 1 ? 0.8 : 0.4;
         ctx.lineWidth = home ? 2 : 1;
         if (!home && state.level === 0) ctx.setLineDash([3, 4]);
-        ctx.beginPath(); ctx.arc(center.x, center.y, smallRadius * scale, 0, fullCircle); ctx.stroke();
+        ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius, 0, fullCircle); ctx.stroke();
         ctx.setLineDash([]);
-        if (home && !body.station) {
+        if (home || body.station) {
             ctx.globalAlpha = 0.4;
-            ctx.beginPath(); ctx.arc(center.x, center.y, smallRadius * scale + 3, 0, fullCircle); ctx.stroke();
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(center.x, center.y, fieldRadius + 3, 0, fullCircle); ctx.stroke();
         }
         if (state.level >= 3) {
             ctx.globalAlpha = 0.35;
@@ -467,18 +468,18 @@ export class ConquestRenderer {
         if (body.id === world.player.homeId) {
             const shieldRadius = (body.radius + tuning.homeShieldAltitude) * this.camera.zoom / 2;
             const iconY = point.y - shieldRadius - 15;
+            const iconX = point.x - 32;
             ctx.save();
             ctx.strokeStyle = this.ownerColor(world.player.id, world.player);
             ctx.fillStyle = '#10212a'; ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(point.x - 7, iconY); ctx.lineTo(point.x, iconY - 6); ctx.lineTo(point.x + 7, iconY);
-            ctx.lineTo(point.x + 5, iconY); ctx.lineTo(point.x + 5, iconY + 7);
-            ctx.lineTo(point.x - 5, iconY + 7); ctx.lineTo(point.x - 5, iconY); ctx.closePath();
+            ctx.moveTo(iconX - 7, iconY); ctx.lineTo(iconX, iconY - 6); ctx.lineTo(iconX + 7, iconY);
+            ctx.lineTo(iconX + 5, iconY); ctx.lineTo(iconX + 5, iconY + 7);
+            ctx.lineTo(iconX - 5, iconY + 7); ctx.lineTo(iconX - 5, iconY); ctx.closePath();
             ctx.fill(); ctx.stroke();
             ctx.restore();
+            this.label('HOME STATION', iconX + 13, iconY + 4, color);
         }
-        this.label('STARTER STATION · REFUEL · ROCKET SHOP', point.x, point.y - Math.max(12, 44 * this.camera.zoom), color, 'center');
-        this.label('SHIELDED · +1 CARGO / MIN', receiver.x, receiver.y + refugeRadius + 11, '#9dc4cd', 'center');
     }
 
     // Show cargo orbiting near planetary surfaces and swept-looking shot trails.
@@ -522,15 +523,15 @@ export class ConquestRenderer {
         const speed = Math.hypot(player.vx, player.vy);
         if (input.rcsY > 0 && speed > 0.001) {
             const cosine = Math.cos(player.angle), sine = Math.sin(player.angle);
-            const dx = -(player.vx * cosine + player.vy * sine) / speed;
-            const dy = -(-player.vx * sine + player.vy * cosine) / speed;
+            const dx = (player.vx * cosine + player.vy * sine) / speed;
+            const dy = (-player.vx * sine + player.vy * cosine) / speed;
             jets.push({ id: 'brake', x: dx * 9, y: dy * 9, dx, dy,
                 kind: 'brake', power: Math.min(6, speed / 50) });
         }
         return jets;
     }
 
-    // Main exhaust inherits momentum; the brake plume travels opposite world velocity as visual feedback.
+    // Main exhaust inherits momentum; counter-thruster exhaust points along the ship's current travel.
     emitJet(player, jet, count) {
         const cosine = Math.cos(player.angle);
         const sine = Math.sin(player.angle);
@@ -546,7 +547,7 @@ export class ConquestRenderer {
             const spreadRange = jet.kind === 'main' ? 12 : 18 + brakePower * 35;
             const spread = (this.random(seed * 7) - 0.5) * spreadRange;
             const speedVariation = jet.kind === 'main' ? 0.08 : Math.min(0.5, 0.12 + brakePower * 0.06);
-            const speed = (jet.kind === 'main' ? 220 : 85 * plumeScale)
+            const speed = (jet.kind === 'main' ? 220 : 170 * plumeScale)
                 * (1 + (this.random(seed * 13) - 0.5) * 2 * speedVariation);
             const lifetime = jet.kind === 'main' ? 0.45 + this.random(seed * 11) * 0.4
                 : (0.14 + this.random(seed * 11) * 0.22) * plumeScale;
@@ -797,12 +798,19 @@ export class ConquestRenderer {
             if (!hovering && !capture) continue;
             ctx.save();
             ctx.setLineDash([]);
+            if (hovering) {
+                const rangeRadius = (body.radius + tuning.shipRadius + tuning.hackingDistance) * this.camera.zoom / 2;
+                ctx.strokeStyle = '#9ba9ae'; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+                ctx.setLineDash([1, 4]);
+                ctx.beginPath(); ctx.arc(center.x, center.y, rangeRadius, 0, fullCircle); ctx.stroke();
+                ctx.setLineDash([]);
+            }
             if (hovering && !capture) {
                 const ready = dockingStatus(world, body.id).ready;
-                ctx.strokeStyle = '#a7afb5';
+                ctx.strokeStyle = '#f1f6f3';
                 ctx.globalAlpha = ready && !this.reducedMotion ? 0.5 + 0.4 * (0.5 + 0.5 * Math.sin(this.visualTime * 8)) : 0.65;
-                ctx.lineWidth = ready ? 2 : 1;
-                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, 0, fullCircle); ctx.stroke();
+                ctx.lineWidth = ready ? 2.5 : 2;
+                ctx.beginPath(); ctx.arc(center.x, center.y, radius + 7, 0, fullCircle); ctx.stroke();
             }
             if (capture) {
                 const defender = world.planets[body.id]?.owner === world.player.id && capture.playerId !== world.player.id;
@@ -814,7 +822,7 @@ export class ConquestRenderer {
                 ctx.beginPath(); ctx.arc(center.x, center.y, radius + 3, 0, fullCircle); ctx.stroke();
                 if (progress > 0) {
                     const end = -Math.PI / 2 + fullCircle * progress;
-                    ctx.globalAlpha = 0.22;
+                    ctx.globalAlpha = 0.38;
                     ctx.beginPath(); ctx.moveTo(center.x, center.y);
                     ctx.arc(center.x, center.y, radius, -Math.PI / 2, end); ctx.closePath(); ctx.fill();
                     ctx.globalAlpha = 0.9; ctx.lineWidth = 3;

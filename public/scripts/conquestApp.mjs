@@ -3,7 +3,7 @@ import { bodies, tuning, createWorld, stepWorld, targetFor,
     setTarget, dockingStatus, nearestRelay, interact, hackDigit, nextUpgrade, upgradePlanet,
     killPlayer, stationFor, nextRocketUpgrade, upgradeRocket } from './conquestPhysics.mjs?v=20261119-planet-ui';
 import { ConquestStore, reconnectWindow } from './conquestStorage.mjs?v=20261119-planet-ui';
-import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-planet-ui';
+import { ConquestRenderer } from './conquestRenderer.mjs?v=20261119-release-brake';
 
 const keyControls = { KeyW: 'burn', ArrowUp: 'burn', KeyS: 'rcsDown', Space: 'fire' };
 const eventActions = { damaged: 'damaged', landed: 'landed', started: 'spawned', undocked: 'detached', spawned: 'spawned', died: 'died', respawned: 'respawned', docked: 'docked',
@@ -494,7 +494,7 @@ export class ConquestApp {
         const color = correct ? '#8cdeb0' : '#ff6666';
         this.ui.digitButton.animate?.([
             { backgroundColor: color, borderColor: color, color: '#071018' },
-            { backgroundColor: '#22343e', borderColor: '#71878b', color: '#edb368' }
+            { backgroundColor: '#22343e', borderColor: '#71878b', color: '#f6fff9' }
         ], { duration: 220, easing: 'ease-out' });
         this.drainEvents();
         this.updateHud(this.activeInput || {});
@@ -793,15 +793,15 @@ export class ConquestApp {
         this.ui.dockVelocity.classList.toggle('is-ready', speedReady);
         this.ui.interactButton.disabled = !player.docked && !world.hack && !interactionReady;
         this.ui.interactButton.classList.toggle('is-ready', !player.docked && interactionReady);
-        this.text('interactLabel', world.hack ? 'to Cancel' : player.docked ? 'to Leave' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : 'to CAPTURE');
+        const outOfRange = !body.station && checks.distance > tuning.hackingDistance;
+        this.text('interactLabel', world.hack ? 'to Cancel' : player.docked ? 'to Leave' : body.station ? 'station / refuel / rocket shop' : world.planets[body.id]?.owner === player.id ? 'planet upgrades' : outOfRange ? 'to CAPTURE · OUT OF RANGE' : 'to CAPTURE');
         if (world.hack) {
             const hack = world.hack;
             const progress = hack.progress ?? hack.count ?? 0;
             const required = hack.required ?? hack.total ?? 1;
             this.text('digitButton', String(hack.digit));
             this.ui.digitButton.setAttribute('aria-label', 'Enter the displayed number, 1 through 4');
-            this.ui.hackFill.style.width = `${progress / required * 100}%`;
-            this.ui.hackGauge.setAttribute('aria-valuenow', Math.round(progress / required * 100));
+
         } else if (player.docked) {
             const upgrade = nextUpgrade(world);
             const rocket = nextRocketUpgrade(world);

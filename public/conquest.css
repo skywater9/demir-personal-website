@@ -306,3 +306,9 @@ kbd { font:inherit; color:#bac8c7; font-size:8px; }
 .relay-card.planet-capture:not(:has(#interactButton.is-ready)):not(.is-hacking) { border-color:#656e75; background:#162026ed; box-shadow:none; }
 .relay-card.planet-capture #interactButton:disabled { color:#9aa2a8; opacity:.6; }
 .relay-card.planet-capture.is-hacking { border-color:#8cdeb0; background:#142b22ed; }
+
+/* Let the planet carry progress; the white code key sends out a fading square pulse. */
+.relay-card.is-hacking .digit-button { position:relative; overflow:visible; color:#f6fff9; animation:none; }
+.relay-card.is-hacking .digit-button::after { content:''; position:absolute; inset:-2px; border:2px solid #d8ffe7; pointer-events:none; animation:hack-square-out 1s ease-out infinite; }
+@keyframes hack-square-out { from { transform:scale(1); opacity:.75; } to { transform:scale(1.3); opacity:0; } }
+@media(prefers-reduced-motion:reduce) { .relay-card.is-hacking .digit-button::after { animation:none; opacity:0; } }

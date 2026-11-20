@@ -157,7 +157,7 @@ test('camera zoom easing is independent of frame rate and retains close-up servi
 });
 
 
-test('one brake plume points opposite the full world velocity at every rocket heading', () => {
+test('one brake plume points along full world velocity at every rocket heading', () => {
     const { renderer } = makeRenderer();
     const player = createWorld().player;
     Object.assign(player, { landedOn: null });
@@ -172,12 +172,12 @@ test('one brake plume points opposite the full world velocity at every rocket he
             const dx = jet.dx * Math.cos(angle) - jet.dy * Math.sin(angle);
             const dy = jet.dx * Math.sin(angle) + jet.dy * Math.cos(angle);
             const speed = Math.hypot(player.vx, player.vy);
-            assert.ok(Math.abs(dx + player.vx / speed) < 1e-9);
-            assert.ok(Math.abs(dy + player.vy / speed) < 1e-9);
+            assert.ok(Math.abs(dx - player.vx / speed) < 1e-9);
+            assert.ok(Math.abs(dy - player.vy / speed) < 1e-9);
             assert.ok(Math.abs(jet.power - Math.min(6, speed / 50)) < 1e-9);
             renderer.particles = [];
             renderer.emitJet(player, jet, 12);
-            assert.ok(renderer.particles.every(particle => particle.vx * player.vx + particle.vy * player.vy < 0));
+            assert.ok(renderer.particles.every(particle => particle.vx * player.vx + particle.vy * player.vy > 0));
             const combined = renderer.exhaustJets(player, { rcsY: 1, burn: true }, false);
             assert.equal(combined.length, 2);
             assert.deepEqual(combined.filter(jet => jet.kind === 'brake'), jets);

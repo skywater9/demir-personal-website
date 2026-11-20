@@ -29,7 +29,7 @@ The conquest tests use the shipped page/controller and real simulation:
 - Renderer geometry for all systems/planet types/shield tiers, map hit tests,
   centered nozzle particles, death frames and reduced-motion dash cues. Rotation
   jets stop for sub-degree corrections and turn rates below 0.4 rad/s without suppressing
-  main-engine or brake exhaust. Braking emits one plume opposite world velocity; turning
+  main-engine or brake exhaust. Braking emits one plume along world velocity; turning
   uses one of the same two nozzles, without duplicates when controls overlap.
   Braking increases plume density, speed and particle size over ordinary turning.
 - Camera zoom changes continuously across former speed thresholds, eases during
@@ -179,5 +179,5 @@ proxy/service deployment have not been performed.
 ## Braking in all directions
 
 - At several headings, hold S while moving forward, backward, sideways, and diagonally. Both velocity components must fall to zero without reversing; release S to coast or fall again.
-- One brake plume points opposite full world velocity regardless of hull angle, with stronger emission at higher speed. Rotation alone emits none.
+- One brake plume points along full world velocity regardless of hull angle, with stronger emission at higher speed. Rotation alone emits none.
 - Check another pilot sees the same velocity-dependent brake plumes. Braking on a serviced ship must not launch or detach it, and an empty tank cannot provide braking.
